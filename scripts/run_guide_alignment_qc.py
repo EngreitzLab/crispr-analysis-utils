@@ -11,7 +11,10 @@ Steps:
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
+import logging
 from pathlib import Path
+import time
 
 import crispr_analysis_utils as cau
 
@@ -43,6 +46,24 @@ def main() -> None:
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
+    log_dir = outdir / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "pipeline.log"
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+        handlers=[
+            logging.FileHandler(log_path, mode="w"),
+            logging.StreamHandler(),
+        ],
+    )
+
+    started = time.time()
+    start_iso = datetime.now().isoformat(timespec="seconds")
+    logging.info("Pipeline start: %s", start_iso)
+    logging.info("Output directory: %s", outdir)
+    logging.info("Log file: %s", log_path)
 
     guides_fastq = outdir / "guides_input.fastq"
     gem_index_prefix = outdir / "genome_index"
@@ -51,6 +72,7 @@ def main() -> None:
     valid_unique_sam = outdir / "guides_valid_unique.sam"
     valid_multi_sam = outdir / "guides_valid_multi.sam"
 
+    logging.info("Step 1/4: Build guide FASTQ")
     cau.guide_qc.guides_to_fastq(
         args.guides_tsv,
         guides_fastq,
@@ -58,12 +80,14 @@ def main() -> None:
         add_leading_g=args.add_leading_g,
     )
 
+    logging.info("Step 2/4: Build GEM index")
     cau.gem_mapper.build_gem_index(
         args.reference_fasta,
         gem_index_prefix,
         threads=args.threads,
     )
 
+    logging.info("Step 3/4: Map guides with GEM")
     cau.gem_mapper.map_guides_with_gem(
         gem_index,
         guides_fastq,
@@ -73,6 +97,7 @@ def main() -> None:
         sam_compact=False,
     )
 
+    logging.info("Step 4/4: Filter alignments and compute QC outputs")
     summary = cau.guide_qc.filter_guide_alignments(
         mapped_sam,
         valid_unique_sam,
@@ -81,6 +106,11 @@ def main() -> None:
         chromsizes=args.chromsizes,
         allow_leading_g_softclip=args.allow_leading_g_softclip,
     )
+    finished = time.time()
+    finish_iso = datetime.now().isoformat(timespec="seconds")
+    logging.info("Pipeline finish: %s", finish_iso)
+    logging.info("Elapsed seconds: %.2f", finished - started)
+    logging.info("Summary: %s", summary)
     print(summary)
 
 
