@@ -20,6 +20,12 @@ plugins:
           options:
             docstring_style: numpy
             show_source: true
+            show_root_heading: true
+            show_symbol_type_heading: false
+            show_symbol_type_toc: true
+            show_signature_annotations: true
+            separate_signature: true
+            docstring_section_style: list
 
 markdown_extensions:
   - admonition
@@ -29,12 +35,18 @@ markdown_extensions:
 nav:
   - Home: index.md
   - Getting started: getting-started.md
-  - Python API:
-      - Overview: python/index.md
-      - Normalization: python/normalization.md
-      - Guide QC: python/guide-qc.md
-      - GEM Mapper: python/gem-mapper.md
-      - Utils: python/utils.md
+  - API reference:
+      - Overview: python/reference/index.md
+      - Preprocessing:
+          - guides_to_fastq: python/reference/guides-to-fastq.md
+          - filter_guide_alignments: python/reference/filter-guide-alignments.md
+      - Mapping:
+          - build_gem_index: python/reference/build-gem-index.md
+          - map_guides_with_gem: python/reference/map-guides-with-gem.md
+      - Utilities:
+          - run_shell_cmd: python/reference/run-shell-cmd.md
+      - Normalization:
+          - counts_per_million: python/reference/counts-per-million.md
   - Vignettes:
       - Guide Alignment QC: python/tutorial-guide-alignment-qc.md
   - R API: r-api.md
