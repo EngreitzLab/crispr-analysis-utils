@@ -35,5 +35,7 @@ nav:
       - Guide QC: python/guide-qc.md
       - GEM Mapper: python/gem-mapper.md
       - Utils: python/utils.md
+  - Vignettes:
+      - Guide Alignment QC: python/tutorial-guide-alignment-qc.md
   - R API: r-api.md
   - Contributing: contributing.md
