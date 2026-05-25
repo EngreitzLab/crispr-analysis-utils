@@ -32,5 +32,8 @@ nav:
   - Python API:
       - Overview: python/index.md
       - Normalization: python/normalization.md
+      - Guide QC: python/guide-qc.md
+      - GEM Mapper: python/gem-mapper.md
+      - Utils: python/utils.md
   - R API: r-api.md
   - Contributing: contributing.md
