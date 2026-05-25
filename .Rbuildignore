@@ -1,0 +1,14 @@
+^\.github$
+^\.git$
+^\.gitignore$
+^\.pytest_cache$
+^\.ruff_cache$
+^\.venv$
+^\.\.Rcheck$
+^LICENSE\.md$
+^docs$
+^mkdocs\.yml$
+^pyproject\.toml$
+^site$
+^src$
+^tests/test_.*\.py$

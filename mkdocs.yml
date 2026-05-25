@@ -1,0 +1,35 @@
+site_name: CRISPR Analysis Utils
+site_description: Reusable utilities for CRISPR screen analysis.
+site_url: https://engreitzlab.github.io/crispr-analysis-utils/
+repo_url: https://github.com/EngreitzLab/crispr-analysis-utils
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.top
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - src
+          options:
+            docstring_style: numpy
+            show_source: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Python API:
+      - Reference: python/reference.md
+  - R API: r.md
+  - Contributing: contributing.md

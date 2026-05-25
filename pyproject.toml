@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crispr-analysis-utils"
+version = "0.1.0"
+description = "Reusable Python utilities for CRISPR screen analysis."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE.md" }
+authors = [
+  { name = "Engreitz Lab" }
+]
+dependencies = [
+  "numpy>=1.23",
+  "pandas>=1.5"
+]
+
+[project.optional-dependencies]
+plots = [
+  "matplotlib>=3.7",
+  "seaborn>=0.13"
+]
+docs = [
+  "mkdocs>=1.6",
+  "mkdocs-material>=9.5",
+  "mkdocstrings[python]>=0.25"
+]
+dev = [
+  "pytest>=8",
+  "ruff>=0.4"
+]
+
+[project.urls]
+Homepage = "https://github.com/EngreitzLab/crispr-analysis-utils"
+Documentation = "https://engreitzlab.github.io/crispr-analysis-utils/"
+Repository = "https://github.com/EngreitzLab/crispr-analysis-utils"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crispr_analysis_utils"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["B", "E", "F", "I", "UP"]

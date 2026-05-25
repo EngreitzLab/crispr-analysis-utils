@@ -1,0 +1,12 @@
+url: https://engreitzlab.github.io/crispr-analysis-utils/r/
+template:
+  bootstrap: 5
+
+navbar:
+  structure:
+    left: [reference]
+
+reference:
+  - title: Normalization
+    contents:
+      - counts_per_million

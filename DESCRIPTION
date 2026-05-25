@@ -1,0 +1,17 @@
+Package: crisprAnalysisUtils
+Title: Utilities for CRISPR Screen Analysis
+Version: 0.1.0
+Authors@R: c(
+    person("Engreitz", "Lab", role = c("aut", "cre"), email = "crispr-analysis-utils@users.noreply.github.com")
+  )
+Author: Engreitz Lab
+Maintainer: Engreitz Lab <crispr-analysis-utils@users.noreply.github.com>
+Description: Reusable R utilities for CRISPR screen preprocessing, normalization,
+    plotting, and downstream analysis workflows.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
