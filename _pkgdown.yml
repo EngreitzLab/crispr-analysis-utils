@@ -4,7 +4,11 @@ template:
 
 navbar:
   structure:
-    left: [home, reference]
+    left: [home, reference, main_docs]
+  components:
+    main_docs:
+      text: Main docs
+      href: https://engreitzlab.github.io/crispr-analysis-utils/
 
 reference:
   - title: Normalization
