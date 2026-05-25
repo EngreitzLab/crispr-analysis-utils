@@ -2,7 +2,10 @@
 
 The full R reference is published under `/r/` via pkgdown.
 
-Reference index: `/r/reference/`
+Open the R docs:
+
+- [R site home](/crispr-analysis-utils/r/)
+- [R reference index](/crispr-analysis-utils/r/reference/)
 
 Build it locally after the MkDocs site:
 
