@@ -2,6 +2,8 @@
 
 The full R reference is published under `/r/` via pkgdown.
 
+Reference index: `/r/reference/`
+
 Build it locally after the MkDocs site:
 
 ```r

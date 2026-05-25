@@ -30,6 +30,7 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Python API:
-      - Reference: python/reference.md
+      - Overview: python/index.md
+      - Normalization: python/normalization.md
   - R API: r-api.md
   - Contributing: contributing.md

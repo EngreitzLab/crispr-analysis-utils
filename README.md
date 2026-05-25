@@ -90,6 +90,14 @@ tests/                     Python and R tests
 
 ## Development
 
+Install pre-commit hooks:
+
+```bash
+python -m pip install pre-commit
+pre-commit install
+pre-commit run --all-files
+```
+
 Run Python tests:
 
 ```bash
