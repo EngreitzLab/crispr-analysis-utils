@@ -1,5 +1,7 @@
 # CRISPR Analysis Utils
 
+Documentation: https://engreitzlab.github.io/crispr-analysis-utils/
+
 Utilities and reusable scripts for CRISPR screen analysis, preprocessing, plotting,
 and downstream workflows.
 
