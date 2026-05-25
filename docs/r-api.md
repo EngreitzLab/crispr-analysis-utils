@@ -1,7 +1,6 @@
 # R API
 
-The published GitHub Pages site replaces this placeholder with a pkgdown site
-for the R package.
+The full R reference is published under `/r/` via pkgdown.
 
 Build it locally after the MkDocs site:
 

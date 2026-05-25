@@ -31,5 +31,5 @@ nav:
   - Getting started: getting-started.md
   - Python API:
       - Reference: python/reference.md
-  - R API: r.md
+  - R API: r-api.md
   - Contributing: contributing.md
