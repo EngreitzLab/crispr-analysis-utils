@@ -319,7 +319,13 @@ def filter_guide_alignments(
                 if protospacer_bounds is not None:
                     q_start, q_end = protospacer_bounds
                     bed_span = _protospacer_bed_span(aln, q_start=q_start, q_end=q_end)
-                    protospacer_seq = guide_id[q_start:q_end]
+                    seq_start = 0
+                    if _leading_g_softclipped(
+                        aln, allow_leading_g_softclip=allow_leading_g_softclip
+                    ):
+                        seq_start = 1
+                    seq_end = len(guide_id) - len(pam)
+                    protospacer_seq = guide_id[seq_start:seq_end] if seq_start < seq_end else None
                 else:
                     bed_span = None
                     protospacer_seq = None
@@ -530,6 +536,18 @@ def _protospacer_query_bounds(
     if protospacer_start >= protospacer_end:
         return None
     return protospacer_start, protospacer_end
+
+
+def _leading_g_softclipped(aln, *, allow_leading_g_softclip: bool) -> bool:
+    """Whether the synthetic leading-G is softclipped in this alignment."""
+    if not allow_leading_g_softclip:
+        return False
+    cig = aln.cigartuples or []
+    if not cig:
+        return False
+    if aln.is_reverse:
+        return cig[-1][0] == _CIGAR_SOFT and cig[-1][1] >= 1
+    return cig[0][0] == _CIGAR_SOFT and cig[0][1] >= 1
 
 
 def _protospacer_bed_span(aln, *, q_start: int, q_end: int) -> tuple[int, int] | None:

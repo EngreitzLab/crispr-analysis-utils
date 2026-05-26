@@ -338,3 +338,33 @@ def test_filter_guide_alignments_reports_sequence_5prime_to_3prime(tmp_path):
     )
     bed = (tmp_path / "valid_alignments.bed").read_text(encoding="utf-8")
     assert seq_5to3 in bed
+
+
+def test_valid_bed_reports_protospacer_sequence_without_pam(tmp_path):
+    sam_path = tmp_path / "in_protospacer.sam"
+    header = {"HD": {"VN": "1.6"}, "SQ": [{"SN": "chr14", "LN": 120000000}]}
+    full_seq = "GCGGCCGCCGCACTGGTCCCANGG"
+    with pysam.AlignmentFile(str(sam_path), "w", header=header) as out:
+        a = pysam.AlignedSegment()
+        a.query_name = "alias_210704"
+        a.query_sequence = "CCNTGGGACCAGTGCGGCGGCCGC"  # reverse-strand SAM representation
+        a.flag = 16
+        a.reference_id = 0
+        a.reference_start = 29927423
+        a.mapping_quality = 0
+        a.cigarstring = "24M"
+        a.set_tag("MD", "2C21")
+        a.set_tag("NM", 1)
+        a.set_tag("AS", 19)
+        out.write(a)
+
+    filter_guide_alignments(
+        sam_path,
+        None,
+        None,
+        alias_by_guide_id={full_seq: "210704_ECpilotCRISPRi_797"},
+        output_valid_bed=tmp_path / "valid_alignments.bed",
+    )
+    fields = (tmp_path / "valid_alignments.bed").read_text(encoding="utf-8").strip().split("\t")
+    assert fields[3] == "GCGGCCGCCGCACTGGTCCCA"  # no NGG
+    assert fields[8] == "210704_ECpilotCRISPRi_797"
