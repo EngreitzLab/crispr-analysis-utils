@@ -14,6 +14,7 @@ def build_gem_index(
     *,
     threads: int | None = None,
     gem_indexer_bin: str = "gem-indexer",
+    log_path: str | Path | None = None,
 ) -> str:
     """Build a GEM index from a reference FASTA."""
     cmd = [
@@ -25,7 +26,10 @@ def build_gem_index(
     ]
     if threads is not None:
         cmd.extend(["-t", str(threads)])
-    return run_shell_cmd(" ".join(shlex.quote(token) for token in cmd))
+    cmd_str = " ".join(shlex.quote(token) for token in cmd)
+    if log_path is not None:
+        cmd_str = f"{cmd_str} > {shlex.quote(str(log_path))} 2>&1"
+    return run_shell_cmd(cmd_str)
 
 
 def map_guides_with_gem(

@@ -183,8 +183,8 @@ def _evaluate_alignment_layout(
 
 def filter_guide_alignments(
     input_sam: str | Path,
-    output_unique_sam: str | Path,
-    output_multi_sam: str | Path,
+    output_unique_sam: str | Path | None = None,
+    output_multi_sam: str | Path | None = None,
     *,
     output_invalid_tsv: str | Path = "auto",
     output_valid_bed: str | Path = "auto",
@@ -270,14 +270,20 @@ def filter_guide_alignments(
             if is_valid:
                 valid_by_guide.setdefault(guide_id, []).append(aln)
                 guide_stats[guide_id]["n_valid"] += 1
-                if aln.reference_end is not None:
-                    nm_tag = int(aln.get_tag("NM")) if aln.has_tag("NM") else -1
-                    as_tag = int(aln.get_tag("AS")) if aln.has_tag("AS") else -1
+                nm_tag = int(aln.get_tag("NM")) if aln.has_tag("NM") else -1
+                as_tag = int(aln.get_tag("AS")) if aln.has_tag("AS") else -1
+                bed_span = _protospacer_bed_span(
+                    aln,
+                    query_len=query_len,
+                    pam_len=len(pam),
+                    allow_leading_g_softclip=allow_leading_g_softclip,
+                )
+                if bed_span is not None:
                     valid_bed_rows.append(
                         (
                             contig,
-                            int(aln.reference_start),
-                            int(aln.reference_end),
+                            bed_span[0],
+                            bed_span[1],
                             guide_id,
                             int(aln.mapping_quality),
                             "-" if aln.is_reverse else "+",
@@ -312,22 +318,31 @@ def filter_guide_alignments(
                     )
                 )
 
-    unique_path = Path(output_unique_sam)
-    multi_path = Path(output_multi_sam)
-    unique_path.parent.mkdir(parents=True, exist_ok=True)
-    multi_path.parent.mkdir(parents=True, exist_ok=True)
+    base_output_dir = Path(".")
+    if output_unique_sam is not None:
+        unique_path = Path(output_unique_sam)
+        base_output_dir = unique_path.parent
+    elif output_multi_sam is not None:
+        multi_path = Path(output_multi_sam)
+        base_output_dir = multi_path.parent
 
-    with (
-        pysam.AlignmentFile(str(unique_path), "w", header=header) as unique_sam,
-        pysam.AlignmentFile(str(multi_path), "w", header=header) as multi_sam,
-    ):
-        for alignments in valid_by_guide.values():
-            target = unique_sam if len(alignments) == 1 else multi_sam
-            for aln in alignments:
-                target.write(aln)
+    if output_unique_sam is not None and output_multi_sam is not None:
+        unique_path = Path(output_unique_sam)
+        multi_path = Path(output_multi_sam)
+        unique_path.parent.mkdir(parents=True, exist_ok=True)
+        multi_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with (
+            pysam.AlignmentFile(str(unique_path), "w", header=header) as unique_sam,
+            pysam.AlignmentFile(str(multi_path), "w", header=header) as multi_sam,
+        ):
+            for alignments in valid_by_guide.values():
+                target = unique_sam if len(alignments) == 1 else multi_sam
+                for aln in alignments:
+                    target.write(aln)
 
     if output_invalid_tsv == "auto":
-        invalid_path = unique_path.with_name("invalid_alignments.tsv")
+        invalid_path = base_output_dir / "invalid_alignments.tsv"
     else:
         invalid_path = Path(output_invalid_tsv)
     invalid_path.parent.mkdir(parents=True, exist_ok=True)
@@ -337,7 +352,7 @@ def filter_guide_alignments(
             handle.write("\t".join(row) + "\n")
 
     if output_valid_bed == "auto":
-        valid_bed_path = unique_path.with_name("valid_alignments.bed")
+        valid_bed_path = base_output_dir / "valid_alignments.bed"
     else:
         valid_bed_path = Path(output_valid_bed)
     valid_bed_path.parent.mkdir(parents=True, exist_ok=True)
@@ -346,7 +361,7 @@ def filter_guide_alignments(
             handle.write("\t".join(map(str, row)) + "\n")
 
     if output_discarded_tsv == "auto":
-        discarded_path = unique_path.with_name("discarded_alignments.tsv")
+        discarded_path = base_output_dir / "discarded_alignments.tsv"
     else:
         discarded_path = Path(output_discarded_tsv)
     discarded_path.parent.mkdir(parents=True, exist_ok=True)
@@ -358,7 +373,7 @@ def filter_guide_alignments(
             handle.write("\t".join(map(str, row)) + "\n")
 
     if output_unmapped_tsv == "auto":
-        unmapped_path = unique_path.with_name("unmapped.tsv")
+        unmapped_path = base_output_dir / "unmapped.tsv"
     else:
         unmapped_path = Path(output_unmapped_tsv)
     unmapped_path.parent.mkdir(parents=True, exist_ok=True)
@@ -368,7 +383,7 @@ def filter_guide_alignments(
             handle.write("\t".join(map(str, row)) + "\n")
 
     if output_guide_log_tsv == "auto":
-        guide_log_path = unique_path.with_name("guide_alignment_log.tsv")
+        guide_log_path = base_output_dir / "guide_alignment_log.tsv"
     else:
         guide_log_path = Path(output_guide_log_tsv)
     guide_log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -402,7 +417,7 @@ def filter_guide_alignments(
             n_guides_multi_valid += 1
 
     if output_summary_tsv == "auto":
-        summary_path = unique_path.with_name("alignment_summary.tsv")
+        summary_path = base_output_dir / "alignment_summary.tsv"
     else:
         summary_path = Path(output_summary_tsv)
     summary_path.parent.mkdir(parents=True, exist_ok=True)
@@ -431,6 +446,40 @@ def filter_guide_alignments(
         "guides_unmapped": n_guides_unmapped,
         "guides_one_valid_plus_invalid": n_guides_one_valid_plus_invalid,
     }
+
+
+def _protospacer_bed_span(
+    aln,
+    *,
+    query_len: int,
+    pam_len: int,
+    allow_leading_g_softclip: bool,
+) -> tuple[int, int] | None:
+    """Map protospacer query region (no PAM) to genomic BED span."""
+    if query_len <= pam_len:
+        return None
+
+    query_ops = [None] * query_len
+    qpos = 0
+    for op, length in (aln.cigartuples or []):
+        if op in _CIGAR_MATCH | {_CIGAR_INS, _CIGAR_SOFT}:
+            for _ in range(length):
+                if qpos < query_len:
+                    query_ops[qpos] = op
+                qpos += 1
+
+    protospacer_start = 0
+    if allow_leading_g_softclip and query_ops and query_ops[0] == _CIGAR_SOFT:
+        protospacer_start = 1
+    protospacer_end = query_len - pam_len
+    if protospacer_start >= protospacer_end:
+        return None
+
+    q2r = {q: r for q, r in aln.get_aligned_pairs(matches_only=True)}
+    ref_positions = [q2r[i] for i in range(protospacer_start, protospacer_end) if i in q2r]
+    if not ref_positions:
+        return None
+    return min(ref_positions), max(ref_positions) + 1
 
 
 def _resolve_allowed_contigs(

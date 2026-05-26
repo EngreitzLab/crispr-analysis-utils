@@ -47,17 +47,29 @@ python scripts/run_guide_alignment_qc.py \
 
 In `results/guide_alignment_qc/`:
 
-- `guides_input.fastq`
+- `logs/pipeline.log`
+
+In `results/guide_alignment_qc/gem_index/`:
+
 - `genome_index.gem` (+ index sidecar files)
+- `gem_index.log`
+- `index_command.sh`
+- `index_inputs.txt`
+
+In `results/guide_alignment_qc/alignment_outputs/`:
+
+- `guides_input.fastq`
 - `guides_mapped.sam`
 - `guides_mapped.log`
-- `guides_valid_unique.sam`
-- `guides_valid_multi.sam`
-- `valid_alignments.bed`
+
+In `results/guide_alignment_qc/guide_alignments_outputs/`:
+
+- `valid_alignments.bed` (protospacer coordinates; excludes PAM)
 - `discarded_alignments.tsv`
 - `unmapped.tsv`
 - `guide_alignment_log.tsv`
 - `invalid_alignments.tsv`
+- `alignment_summary.tsv`
 
 ## 6. Run on SLURM (one Python script)
 
