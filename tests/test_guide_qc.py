@@ -90,6 +90,22 @@ def test_evaluate_alignment_layout_rejects_gg_pam_mismatch():
     assert reason == "pam_gg_mismatch"
 
 
+def test_evaluate_alignment_layout_reverse_allows_mismatch_on_ccn_n_position():
+    cigartuples = [(0, 23), (4, 1)]  # 23M1S
+    query_len = 24
+    # Reverse-strand PAM is CCN at query start; index 2 is N and should be tolerated.
+    ok, reason = _evaluate_alignment_layout(
+        cigartuples,
+        query_len,
+        {2},
+        pam="NGG",
+        is_reverse_strand=True,
+        allow_leading_g_softclip=True,
+    )
+    assert ok
+    assert reason == "valid"
+
+
 def test_evaluate_alignment_layout_rejects_spacer_indel():
     # insertion in spacer
     cigartuples = [(0, 10), (1, 1), (0, 13)]

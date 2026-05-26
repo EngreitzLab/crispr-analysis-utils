@@ -163,8 +163,10 @@ def _evaluate_alignment_layout(
     if not all(query_ops[i] in _CIGAR_MATCH for i in pam_indices):
         return False, "pam_not_fully_aligned"
 
-    mismatch_check_start = 1 if pam and pam[0].upper() == "N" else 0
-    for i in range(mismatch_check_start, len(pam)):
+    pam_query_pattern = _revcomp(pam.upper()) if is_reverse_strand else pam.upper()
+    for i in range(len(pam)):
+        if pam_query_pattern[i] == "N":
+            continue
         if (pam_start + i) in mismatch_positions:
             return False, "pam_gg_mismatch"
 
