@@ -11,6 +11,7 @@ import pandas as pd
 
 CIGAR_PATTERN = re.compile(r"(\d+)([MIDNSHP=X])")
 MD_PATTERN = re.compile(r"(\d+|\^[A-Za-z]+|[A-Za-z])")
+_DNA_COMPLEMENT = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 
 _CIGAR_MATCH = {0, 7, 8}  # M, =, X
 _CIGAR_INS = 1            # I
@@ -132,6 +133,7 @@ def _evaluate_alignment_layout(
     mismatch_positions: set[int],
     *,
     pam: str = "NGG",
+    is_reverse_strand: bool = False,
     allow_leading_g_softclip: bool = True,
 ) -> tuple[bool, str]:
     """Evaluate whether alignment satisfies guide QC layout rules."""
@@ -151,8 +153,12 @@ def _evaluate_alignment_layout(
         elif op == _CIGAR_DEL:
             deletion_query_positions.add(qpos)
 
-    pam_start = query_length - len(pam)
-    pam_indices = range(pam_start, query_length)
+    if is_reverse_strand:
+        pam_start = 0
+        pam_indices = range(0, len(pam))
+    else:
+        pam_start = query_length - len(pam)
+        pam_indices = range(pam_start, query_length)
 
     if not all(query_ops[i] in _CIGAR_MATCH for i in pam_indices):
         return False, "pam_not_fully_aligned"
@@ -162,8 +168,12 @@ def _evaluate_alignment_layout(
         if (pam_start + i) in mismatch_positions:
             return False, "pam_gg_mismatch"
 
-    spacer_start = 1 if allow_leading_g_softclip else 0
-    spacer_end = pam_start
+    if is_reverse_strand:
+        spacer_start = len(pam)
+        spacer_end = query_length - (1 if allow_leading_g_softclip else 0)
+    else:
+        spacer_start = 1 if allow_leading_g_softclip else 0
+        spacer_end = pam_start
 
     for i in range(spacer_start, spacer_end):
         if query_ops[i] == _CIGAR_INS:
@@ -175,10 +185,25 @@ def _evaluate_alignment_layout(
 
     for i, op in enumerate(query_ops):
         if op == _CIGAR_SOFT:
-            if not (allow_leading_g_softclip and i == 0):
+            allow_idx = 0 if not is_reverse_strand else (query_length - 1)
+            if not (allow_leading_g_softclip and i == allow_idx):
                 return False, "softclip_not_allowed"
 
     return True, "valid"
+
+
+def _query_length_from_cigartuples(cigartuples: list[tuple[int, int]]) -> int:
+    """Infer query length from CIGAR tuples.
+
+    Counts query-consuming operations: M, I, S, =, X.
+    """
+    query_consuming = {0, 1, 4, 7, 8}
+    return sum(length for op, length in cigartuples if op in query_consuming)
+
+
+def _revcomp(sequence: str) -> str:
+    """Reverse-complement DNA sequence."""
+    return sequence.translate(_DNA_COMPLEMENT)[::-1]
 
 
 def filter_guide_alignments(
@@ -192,6 +217,7 @@ def filter_guide_alignments(
     output_unmapped_tsv: str | Path = "auto",
     output_guide_log_tsv: str | Path = "auto",
     output_summary_tsv: str | Path = "auto",
+    alias_by_guide_id: dict[str, str] | None = None,
     pam: str = "NGG",
     allow_leading_g_softclip: bool = True,
     primary_contigs: set[str] | list[str] | tuple[str, ...] | None = None,
@@ -219,15 +245,23 @@ def filter_guide_alignments(
     invalid_rows: list[tuple[str, str, str]] = []
     discarded_rows: list[tuple[str, str, int, int, int, str, str, int, int, str, str]] = []
     unmapped_rows: list[tuple[str, int]] = []
-    valid_bed_rows: list[tuple[str, int, int, str, int, str, int, int]] = []
+    valid_bed_rows: list[tuple[str, int, int, str, int, str, int, int, str]] = []
     guide_stats = defaultdict(
         lambda: {"n_aligned": 0, "n_valid": 0, "n_discarded": 0, "n_not_mapped": 0}
     )
+    qname_to_sequence: dict[str, str] = {}
 
     with pysam.AlignmentFile(str(input_path), mode) as in_sam:
         header = in_sam.header
         for aln in in_sam.fetch(until_eof=True):
-            guide_id = aln.query_name
+            qname = aln.query_name
+            seq = aln.query_sequence
+            if seq is not None and seq != "*":
+                seq_u = seq.upper()
+                qname_to_sequence[qname] = _revcomp(seq_u) if aln.is_reverse else seq_u
+            recovered_seq = qname_to_sequence.get(qname)
+            guide_id = recovered_seq if recovered_seq is not None else qname
+
             if aln.is_unmapped:
                 invalid_rows.append((guide_id, ".", "unmapped"))
                 unmapped_rows.append((guide_id, aln.flag))
@@ -257,14 +291,15 @@ def filter_guide_alignments(
                 continue
 
             md_tag = aln.get_tag("MD") if aln.has_tag("MD") else ""
-            query_len = aln.query_length or 0
             cigartuples = aln.cigartuples or []
+            query_len = aln.query_length or _query_length_from_cigartuples(cigartuples)
             mismatch_positions = _mismatch_positions_from_md(md_tag, cigartuples)
             is_valid, reason = _evaluate_alignment_layout(
                 cigartuples,
                 query_len,
                 mismatch_positions,
                 pam=pam,
+                is_reverse_strand=aln.is_reverse,
                 allow_leading_g_softclip=allow_leading_g_softclip,
             )
             if is_valid:
@@ -289,6 +324,9 @@ def filter_guide_alignments(
                             "-" if aln.is_reverse else "+",
                             nm_tag,
                             as_tag,
+                            alias_by_guide_id.get(guide_id, guide_id)
+                            if alias_by_guide_id is not None
+                            else guide_id,
                         )
                     )
             else:
@@ -468,10 +506,16 @@ def _protospacer_bed_span(
                     query_ops[qpos] = op
                 qpos += 1
 
-    protospacer_start = 0
-    if allow_leading_g_softclip and query_ops and query_ops[0] == _CIGAR_SOFT:
-        protospacer_start = 1
-    protospacer_end = query_len - pam_len
+    if aln.is_reverse:
+        protospacer_start = pam_len
+        protospacer_end = query_len
+        if allow_leading_g_softclip and query_ops and query_ops[-1] == _CIGAR_SOFT:
+            protospacer_end -= 1
+    else:
+        protospacer_start = 0
+        if allow_leading_g_softclip and query_ops and query_ops[0] == _CIGAR_SOFT:
+            protospacer_start = 1
+        protospacer_end = query_len - pam_len
     if protospacer_start >= protospacer_end:
         return None
 

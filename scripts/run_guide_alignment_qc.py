@@ -18,6 +18,7 @@ import shlex
 import time
 
 import crispr_analysis_utils as cau
+import pandas as pd
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -79,12 +80,22 @@ def main() -> None:
     mapped_sam = alignment_dir / "guides_mapped.sam"
 
     logging.info("Step 1/4: Build guide FASTQ")
-    cau.guide_qc.guides_to_fastq(
-        args.guides_tsv,
-        guides_fastq,
-        pam=args.pam,
-        add_leading_g=args.add_leading_g,
-    )
+    guides_df = pd.read_csv(args.guides_tsv, sep="\t", header=None)
+    alias_by_sequence = {
+        str(row.iloc[1]).strip().upper(): str(row.iloc[0])
+        for _, row in guides_df.iterrows()
+    }
+    if guides_fastq.exists():
+        logging.info("FASTQ exists, skipping: %s", guides_fastq)
+    else:
+        cau.guide_qc.guides_to_fastq(
+            guides_df,
+            guides_fastq,
+            pam=args.pam,
+            add_leading_g=args.add_leading_g,
+            id_col=1,
+            sequence_col=1,
+        )
 
     logging.info("Step 2/4: Build GEM index")
     index_cmd_parts = [
@@ -102,39 +113,51 @@ def main() -> None:
         f"reference_fasta={Path(args.reference_fasta).resolve()}\n",
         encoding="utf-8",
     )
-    cau.gem_mapper.build_gem_index(
-        args.reference_fasta,
-        gem_index_prefix,
-        threads=args.threads,
-        log_path=gem_index_dir / "gem_index.log",
-    )
+    if gem_index.exists():
+        logging.info("GEM index exists, skipping re-index: %s", gem_index)
+    else:
+        cau.gem_mapper.build_gem_index(
+            args.reference_fasta,
+            gem_index_prefix,
+            threads=args.threads,
+            log_path=gem_index_dir / "gem_index.log",
+        )
 
     logging.info("Step 3/4: Map guides with GEM")
-    cau.gem_mapper.map_guides_with_gem(
-        gem_index,
-        guides_fastq,
-        mapped_sam,
-        threads=args.threads,
-        mapping_mode=args.mapping_mode,
-        sam_compact=False,
-        log_path=alignment_dir / "guides_mapped.log",
-    )
+    if mapped_sam.exists():
+        logging.info("Mapped SAM exists, skipping alignment: %s", mapped_sam)
+    else:
+        cau.gem_mapper.map_guides_with_gem(
+            gem_index,
+            guides_fastq,
+            mapped_sam,
+            threads=args.threads,
+            mapping_mode=args.mapping_mode,
+            sam_compact=False,
+            log_path=alignment_dir / "guides_mapped.log",
+        )
 
     logging.info("Step 4/4: Filter alignments and compute QC outputs")
-    summary = cau.guide_qc.filter_guide_alignments(
-        mapped_sam,
-        None,
-        None,
-        pam=args.pam,
-        chromsizes=args.chromsizes,
-        allow_leading_g_softclip=args.allow_leading_g_softclip,
-        output_valid_bed=filtering_dir / "valid_alignments.bed",
-        output_discarded_tsv=filtering_dir / "discarded_alignments.tsv",
-        output_unmapped_tsv=filtering_dir / "unmapped.tsv",
-        output_guide_log_tsv=filtering_dir / "guide_alignment_log.tsv",
-        output_invalid_tsv=filtering_dir / "invalid_alignments.tsv",
-        output_summary_tsv=filtering_dir / "alignment_summary.tsv",
-    )
+    summary_tsv = filtering_dir / "alignment_summary.tsv"
+    if summary_tsv.exists():
+        logging.info("Filtering summary exists, skipping filtering: %s", summary_tsv)
+        summary = {"status": "skipped_filtering", "alignment_summary_tsv": str(summary_tsv)}
+    else:
+        summary = cau.guide_qc.filter_guide_alignments(
+            mapped_sam,
+            None,
+            None,
+            pam=args.pam,
+            chromsizes=args.chromsizes,
+            allow_leading_g_softclip=args.allow_leading_g_softclip,
+            alias_by_guide_id=alias_by_sequence,
+            output_valid_bed=filtering_dir / "valid_alignments.bed",
+            output_discarded_tsv=filtering_dir / "discarded_alignments.tsv",
+            output_unmapped_tsv=filtering_dir / "unmapped.tsv",
+            output_guide_log_tsv=filtering_dir / "guide_alignment_log.tsv",
+            output_invalid_tsv=filtering_dir / "invalid_alignments.tsv",
+            output_summary_tsv=summary_tsv,
+        )
     finished = time.time()
     finish_iso = datetime.now().isoformat(timespec="seconds")
     logging.info("Pipeline finish: %s", finish_iso)

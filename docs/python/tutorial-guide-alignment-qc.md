@@ -25,7 +25,7 @@ gunzip -c data/IGVFFI0653VCGH.fasta.gz > data/IGVFFI0653VCGH.fasta
 
 ## 3. Prepare input files
 
-- `data/guides.tsv`: two columns (guide id, guide sequence), tab-separated
+- `data/guides.tsv`: two columns (guide alias/name, guide sequence), tab-separated
 - `data/hg38.chrom.sizes`: tab-separated chrom sizes used as allowed contig list
 
 ## 4. Run the pipeline

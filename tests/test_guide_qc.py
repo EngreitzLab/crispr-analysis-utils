@@ -161,6 +161,8 @@ def test_filter_guide_alignments_uses_chromsizes_file(tmp_path):
     assert (tmp_path / "discarded_alignments.tsv").exists()
     assert (tmp_path / "unmapped.tsv").exists()
     assert (tmp_path / "guide_alignment_log.tsv").exists()
+    bed_line = (tmp_path / "valid_alignments.bed").read_text(encoding="utf-8").strip().splitlines()[0]
+    assert len(bed_line.split("\t")) == 9
 
 
 def test_filter_guide_alignments_guide_log_counts(tmp_path):
@@ -217,3 +219,106 @@ def test_filter_guide_alignments_guide_log_counts(tmp_path):
     summary_lines = (tmp_path / "alignment_summary.tsv").read_text(encoding="utf-8").strip().splitlines()
     assert summary_lines[0] == "metric\tcount"
     assert "guides_one_valid_plus_invalid\t1" in summary_lines
+
+
+def test_filter_guide_alignments_writes_alias_column(tmp_path):
+    sam_path = tmp_path / "in_alias.sam"
+    header = {"HD": {"VN": "1.6"}, "SQ": [{"SN": "chr1", "LN": 1000}]}
+    seq = "G" + "A" * 20 + "TGG"
+    with pysam.AlignmentFile(str(sam_path), "w", header=header) as out:
+        a = pysam.AlignedSegment()
+        a.query_name = seq
+        a.query_sequence = seq
+        a.flag = 0
+        a.reference_id = 0
+        a.reference_start = 100
+        a.mapping_quality = 60
+        a.cigarstring = "24M"
+        a.set_tag("MD", "24")
+        a.set_tag("NM", 0)
+        a.set_tag("AS", 24)
+        out.write(a)
+
+    filter_guide_alignments(
+        sam_path,
+        None,
+        None,
+        alias_by_guide_id={seq: "my_alias"},
+        output_valid_bed=tmp_path / "valid_alignments.bed",
+    )
+    line = (tmp_path / "valid_alignments.bed").read_text(encoding="utf-8").strip()
+    assert line.endswith("\tmy_alias")
+
+
+def test_filter_guide_alignments_reuses_sequence_for_seq_star_records(tmp_path):
+    sam_path = tmp_path / "in_seq_star.sam"
+    header = {"HD": {"VN": "1.6"}, "SQ": [{"SN": "chr7", "LN": 200000000}]}
+    seq = "CCNCTCTTCATTCATGTTTATTGC"
+    with pysam.AlignmentFile(str(sam_path), "w", header=header) as out:
+        # First alignment has sequence
+        a = pysam.AlignedSegment()
+        a.query_name = "guide_alias_1"
+        a.query_sequence = seq
+        a.flag = 16
+        a.reference_id = 0
+        a.reference_start = 45069710
+        a.mapping_quality = 0
+        a.cigarstring = "23M1S"
+        a.set_tag("MD", "2A20")
+        a.set_tag("NM", 1)
+        a.set_tag("AS", 18)
+        out.write(a)
+
+        # Second alignment for same QNAME has SEQ=*
+        b = pysam.AlignedSegment()
+        b.query_name = "guide_alias_1"
+        b.query_sequence = None
+        b.flag = 256
+        b.reference_id = 0
+        b.reference_start = 153279377
+        b.mapping_quality = 0
+        b.cigarstring = "2S22M"
+        b.set_tag("MD", "19G2")
+        b.set_tag("NM", 1)
+        b.set_tag("AS", 17)
+        out.write(b)
+
+    filter_guide_alignments(
+        sam_path,
+        None,
+        None,
+        output_discarded_tsv=tmp_path / "discarded_alignments.tsv",
+    )
+    discarded = (tmp_path / "discarded_alignments.tsv").read_text(encoding="utf-8")
+    # Sequence should be used as guide_id/read_name even on SEQ=* line
+    assert "CCNCTCTTCATTCATGTTTATTGC" in discarded
+
+
+def test_filter_guide_alignments_reports_sequence_5prime_to_3prime(tmp_path):
+    sam_path = tmp_path / "in_orientation.sam"
+    header = {"HD": {"VN": "1.6"}, "SQ": [{"SN": "chr7", "LN": 200000000}]}
+    seq_5to3 = "CCNCTCTTCATTCATGTTTATTGC"
+    # What SAM stores for reverse-strand records is reverse-complemented SEQ.
+    seq_stored_in_sam = "GCAATAAACATGAATGAAGAGNGG"
+    with pysam.AlignmentFile(str(sam_path), "w", header=header) as out:
+        a = pysam.AlignedSegment()
+        a.query_name = "alias_orientation"
+        a.query_sequence = seq_stored_in_sam
+        a.flag = 16
+        a.reference_id = 0
+        a.reference_start = 45069710
+        a.mapping_quality = 0
+        a.cigarstring = "24M"
+        a.set_tag("MD", "24")
+        a.set_tag("NM", 0)
+        a.set_tag("AS", 20)
+        out.write(a)
+
+    filter_guide_alignments(
+        sam_path,
+        None,
+        None,
+        output_valid_bed=tmp_path / "valid_alignments.bed",
+    )
+    bed = (tmp_path / "valid_alignments.bed").read_text(encoding="utf-8")
+    assert seq_5to3 in bed

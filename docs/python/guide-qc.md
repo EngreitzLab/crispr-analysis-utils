@@ -70,6 +70,7 @@ Contains valid alignments in BED format with additional columns:
 | 6. strand | Strand (`+` or `-`) |
 | 7. NM | Number of mismatches (`NM` tag, `-1` if missing) |
 | 8. AS | Alignment score (`AS` tag, `-1` if missing) |
+| 9. alias | Guide alias/name (defaults to `guide_id` if no alias mapping provided) |
 
 ### `discarded_alignments.tsv`
 
