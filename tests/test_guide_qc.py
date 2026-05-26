@@ -306,8 +306,8 @@ def test_filter_guide_alignments_reuses_sequence_for_seq_star_records(tmp_path):
         output_discarded_tsv=tmp_path / "discarded_alignments.tsv",
     )
     discarded = (tmp_path / "discarded_alignments.tsv").read_text(encoding="utf-8")
-    # Sequence should be used as guide_id/read_name even on SEQ=* line
-    assert "CCNCTCTTCATTCATGTTTATTGC" in discarded
+    # Logs should use read_name (QNAME), including SEQ=* line for same read.
+    assert "guide_alias_1" in discarded
 
 
 def test_filter_guide_alignments_reports_sequence_5prime_to_3prime(tmp_path):

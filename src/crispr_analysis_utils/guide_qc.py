@@ -263,21 +263,22 @@ def filter_guide_alignments(
                 qname_to_sequence[qname] = _revcomp(seq_u) if aln.is_reverse else seq_u
             recovered_seq = qname_to_sequence.get(qname)
             guide_id = recovered_seq if recovered_seq is not None else qname
+            read_name = qname
 
             if aln.is_unmapped:
-                invalid_rows.append((guide_id, ".", "unmapped"))
-                unmapped_rows.append((guide_id, aln.flag))
-                guide_stats[guide_id]["n_not_mapped"] = 1
+                invalid_rows.append((read_name, ".", "unmapped"))
+                unmapped_rows.append((read_name, aln.flag))
+                guide_stats[read_name]["n_not_mapped"] = 1
                 continue
 
             contig = aln.reference_name
-            guide_stats[guide_id]["n_aligned"] += 1
+            guide_stats[read_name]["n_aligned"] += 1
             if primary is not None and contig not in primary:
-                invalid_rows.append((guide_id, contig, "non_primary_contig"))
-                guide_stats[guide_id]["n_discarded"] += 1
+                invalid_rows.append((read_name, contig, "non_primary_contig"))
+                guide_stats[read_name]["n_discarded"] += 1
                 discarded_rows.append(
                     (
-                        guide_id,
+                        read_name,
                         contig,
                         int(aln.reference_start) + 1,
                         int(aln.flag),
@@ -305,30 +306,38 @@ def filter_guide_alignments(
                 allow_leading_g_softclip=allow_leading_g_softclip,
             )
             if is_valid:
-                valid_by_guide.setdefault(guide_id, []).append(aln)
-                guide_stats[guide_id]["n_valid"] += 1
+                valid_by_guide.setdefault(read_name, []).append(aln)
+                guide_stats[read_name]["n_valid"] += 1
                 nm_tag = int(aln.get_tag("NM")) if aln.has_tag("NM") else -1
                 as_tag = int(aln.get_tag("AS")) if aln.has_tag("AS") else -1
-                bed_span = _protospacer_bed_span(
+                protospacer_bounds = _protospacer_query_bounds(
                     aln,
                     query_len=query_len,
                     pam_len=len(pam),
                     allow_leading_g_softclip=allow_leading_g_softclip,
                 )
-                if bed_span is not None:
+                if protospacer_bounds is not None:
+                    q_start, q_end = protospacer_bounds
+                    bed_span = _protospacer_bed_span(aln, q_start=q_start, q_end=q_end)
+                    protospacer_seq = guide_id[q_start:q_end]
+                else:
+                    bed_span = None
+                    protospacer_seq = None
+
+                if bed_span is not None and protospacer_seq is not None:
                     valid_bed_rows.append(
                         (
                             contig,
                             bed_span[0],
                             bed_span[1],
-                            guide_id,
+                            protospacer_seq,
                             int(aln.mapping_quality),
                             "-" if aln.is_reverse else "+",
                             nm_tag,
                             as_tag,
-                            alias_by_guide_id.get(guide_id, guide_id)
+                            alias_by_guide_id.get(guide_id, read_name)
                             if alias_by_guide_id is not None
-                            else guide_id,
+                            else read_name,
                         )
                     )
             else:
@@ -340,11 +349,11 @@ def filter_guide_alignments(
                     normalized_reason = "discarded_protospacer_indel"
                 else:
                     normalized_reason = reason
-                invalid_rows.append((guide_id, contig, reason))
-                guide_stats[guide_id]["n_discarded"] += 1
+                invalid_rows.append((read_name, contig, reason))
+                guide_stats[read_name]["n_discarded"] += 1
                 discarded_rows.append(
                     (
-                        guide_id,
+                        read_name,
                         contig,
                         int(aln.reference_start) + 1,
                         int(aln.flag),
@@ -488,14 +497,14 @@ def filter_guide_alignments(
     }
 
 
-def _protospacer_bed_span(
+def _protospacer_query_bounds(
     aln,
     *,
     query_len: int,
     pam_len: int,
     allow_leading_g_softclip: bool,
 ) -> tuple[int, int] | None:
-    """Map protospacer query region (no PAM) to genomic BED span."""
+    """Return protospacer query bounds as [start, end) on guide sequence."""
     if query_len <= pam_len:
         return None
 
@@ -520,9 +529,14 @@ def _protospacer_bed_span(
         protospacer_end = query_len - pam_len
     if protospacer_start >= protospacer_end:
         return None
+    return protospacer_start, protospacer_end
+
+
+def _protospacer_bed_span(aln, *, q_start: int, q_end: int) -> tuple[int, int] | None:
+    """Map protospacer query bounds to genomic BED span."""
 
     q2r = {q: r for q, r in aln.get_aligned_pairs(matches_only=True)}
-    ref_positions = [q2r[i] for i in range(protospacer_start, protospacer_end) if i in q2r]
+    ref_positions = [q2r[i] for i in range(q_start, q_end) if i in q2r]
     if not ref_positions:
         return None
     return min(ref_positions), max(ref_positions) + 1

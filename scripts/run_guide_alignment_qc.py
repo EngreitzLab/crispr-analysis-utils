@@ -88,14 +88,14 @@ def main() -> None:
     if guides_fastq.exists():
         logging.info("FASTQ exists, skipping: %s", guides_fastq)
     else:
-        cau.guide_qc.guides_to_fastq(
-            guides_df,
-            guides_fastq,
-            pam=args.pam,
-            add_leading_g=args.add_leading_g,
-            id_col=1,
-            sequence_col=1,
-        )
+    cau.guide_qc.guides_to_fastq(
+        guides_df,
+        guides_fastq,
+        pam=args.pam,
+        add_leading_g=args.add_leading_g,
+        id_col=0,
+        sequence_col=1,
+    )
 
     logging.info("Step 2/4: Build GEM index")
     index_cmd_parts = [
