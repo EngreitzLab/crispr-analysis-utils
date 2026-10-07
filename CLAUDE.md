@@ -206,9 +206,10 @@ use 3.13.
     - gem-indexer's `--tmp-folder` needs a trailing separator: it joins the
       folder and a file name with nothing between them. gem-mapper silently
       ignores `--clipping` and `--sam-compact` given without `=`.
-- **pysam is optional** (the `alignment` extra) and imported inside
-  `filter_guide_alignments`. Keep it out of module-level imports. The dev group
-  installs it for the tests.
+- **pysam is a core dependency, imported inside functions.** The modules that
+  read SAM, BAM and FASTA import it where they open a file, never at module
+  level, so `import crispr_analysis_utils` and `cau --help` do not load it.
+  Keep it that way.
 - **Tool versions are pinned in one place each.** uv: `[tool.uv]
   required-version` (setup-uv reads it in CI). pixi: `requires-pixi`, plus
   `PIXI_VERSION` in `.github/workflows/ci.yml`, where setup-pixi needs the

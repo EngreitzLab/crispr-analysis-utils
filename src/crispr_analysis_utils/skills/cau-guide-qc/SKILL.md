@@ -22,9 +22,7 @@ Two steps of the guide alignment QC workflow:
    alignments that look like real target sites, and writes tables describing
    every guide.
 
-The filter needs pysam, from the package's `alignment` extra (the README has
-the install line) or directly with `pip install "pysam>=0.22"`. The
-repository's default and dev pixi environments include it.
+The filter reads SAM and BAM with pysam, which installs with the package.
 
 ## Ask before running
 

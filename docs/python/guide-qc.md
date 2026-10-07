@@ -8,7 +8,7 @@
    keeps the alignments that look like real target sites and writes tables
    describing every guide.
 
-The filter needs pysam, from the `alignment` extra.
+The filter reads SAM and BAM with pysam, which installs with the package.
 
 ## Usage
 

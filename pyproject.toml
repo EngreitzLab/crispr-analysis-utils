@@ -36,11 +36,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.23",
     "pandas>=1.5",
-]
-
-[project.optional-dependencies]
-# SAM/BAM filtering in guide_qc. Imported lazily, so the rest of the package works without it.
-alignment = [
     "pysam>=0.22",
 ]
 
@@ -58,7 +53,6 @@ Issues = "https://github.com/EngreitzLab/crispr-analysis-utils/issues"
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "pysam>=0.22",
     "pyyaml>=6",
     "pre-commit>=4",
 ]
@@ -113,11 +107,11 @@ gem3-mapper = ">=3.6.1"
 [tool.pixi.pypi-dependencies]
 crispr-analysis-utils = { path = ".", editable = true }
 
-# The `alignment` extra and the `dev` and `docs` groups become features of the same name;
-# `gem` is defined above. docs has no GEM, so it stays native on all three platforms.
+# The `dev` and `docs` groups become features of the same name; `gem` is defined above.
+# docs has no GEM, so it stays native on all three platforms.
 [tool.pixi.environments]
-default = { features = ["alignment", "gem"], solve-group = "default" }
-dev = { features = ["alignment", "dev", "gem"], solve-group = "default" }
+default = { features = ["gem"], solve-group = "default" }
+dev = { features = ["dev", "gem"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
 [tool.pixi.feature.dev.tasks]

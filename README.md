@@ -8,20 +8,16 @@ Documentation: <https://engreitzlab.github.io/crispr-analysis-utils/>
 <!-- --8<-- [start:install] -->
 ## Install
 
-The package is not on PyPI yet. Install it from GitHub:
+The package is not on PyPI yet. Install it from GitHub; pip brings numpy,
+pandas and pysam along:
 
 ```bash
 pip install "crispr-analysis-utils @ git+https://github.com/EngreitzLab/crispr-analysis-utils"
 ```
 
-Filtering guide alignments (SAM/BAM) needs pysam, from the `alignment` extra:
-
-```bash
-pip install "crispr-analysis-utils[alignment] @ git+https://github.com/EngreitzLab/crispr-analysis-utils"
-```
-
-To get the GEM3 aligner as well, or to work on the package, clone the
-repository and use [pixi](https://pixi.sh): one environment holds the package,
+Aligning guides also needs the GEM3 aligner, which pip cannot install. To get
+it, or to work on the package, clone the repository and use
+[pixi](https://pixi.sh): one environment holds the package,
 pysam and GEM3, on Linux (x86-64) and macOS. bioconda builds GEM3 for x86-64
 only, so on Apple silicon pixi installs that environment as an Intel macOS
 (osx-64) one, which runs under Rosetta 2 (`softwareupdate --install-rosetta`
