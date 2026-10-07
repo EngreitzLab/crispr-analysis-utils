@@ -14,6 +14,10 @@ get around:
 - with an added 5' G, every site whose G position is outside the index, which
   `planted_genome.g_position_indexed` decides.
 
+A second, small genome puts a protospacer at each end of the index with its
+PAM running off it: no site, so the pipeline must report none there, and
+none anywhere else.
+
 The run is marked ``gem`` and skipped without gem-mapper on the PATH; the
 project's pixi environments have it.
 """
@@ -145,6 +149,14 @@ def found_sites(result):
     }
 
 
+def every_site(result):
+    """The keys of every reported site, whatever its PAM class."""
+    return {
+        site_key(site.guide_id, site.chr, site.start, site.strand)
+        for site in fan_out_sites(result.guides, result.sites.sites)
+    }
+
+
 def difference(found, expected):
     """A message naming the missed and the extra sites."""
     missed = sorted(set(expected) - set(found))
@@ -182,13 +194,25 @@ def planted(tmp_path_factory):
     }
 
 
-def align(planted, tmp_path, guides, **kwargs):
+@pytest.fixture(scope="module")
+def index_ends(tmp_path_factory):
+    """The genome whose PAMs run off both ends of the index, and its index."""
+    folder = tmp_path_factory.mktemp("index_ends")
+    genome = P.build_index_ends_genome()
+    fasta = folder / "genome.fa"
+    P.write_fasta(genome, fasta)
+    index = build_index(fasta, folder / "index" / "genome", threads=1)
+    return {"genome": genome, "fasta": fasta, "index": index}
+
+
+def align(built, tmp_path, guides, *, outdir="out", **kwargs):
+    """Run the pipeline on a fixture's reference and index, into `outdir`."""
     table = write_guides(tmp_path / "guides.tsv", guides)
     return run(
         table,
-        planted["fasta"],
-        planted["index"],
-        tmp_path / "out",
+        built["fasta"],
+        built["index"],
+        tmp_path / outdir,
         threads=1,
         **kwargs,
     )
@@ -284,21 +308,78 @@ def test_every_reachable_site_is_found_with_the_added_g(planted, tmp_path):
 
 
 def test_a_leading_g_at_the_start_of_the_index_fails_the_run(planted, tmp_path):
-    """GEM crashes on a read whose G would sit before the index's first base."""
+    """A read whose G would sit before the index's first base never yields a site.
+
+    GEM 3.6 crashes on it on macOS ("Signal raised"): the run must fail with
+    a GemError naming the FASTQ, the read and its guide, and leave no SAM. On
+    Linux GEM may write a bogus out-of-range record instead: the run must
+    then complete without the site, and without any other. Either passes.
+    """
     genome = planted["genome"]
     guides = [g for g in genome.guides if g.name in CRASHES]
     assert guides, "the planted genome must keep a guide at the first contig's start"
-    with pytest.raises(GemError) as error:
-        align(planted, tmp_path, guides, add_leading_g=True, orientation_check="off")
-    message = str(error.value)
-    assert "Signal raised" in message
-    assert "sites_leading_g.fastq" in message
-    assert f"guide {guides[0].name!r}, with the added G" in message
-    assert "first contig" in message
-    assert not (tmp_path / "out" / "alignments" / "sites_leading_g.sam.gz").exists()
+    # Its only window of <= 3 mismatches before a complete PAM, whatever the PAM.
+    first = next(iter(genome.contigs))
+    assert [
+        (s.chrom, s.start, s.strand)
+        for s in P.scan_sites(genome.contigs, guides, pams=("NNN",))
+    ] == [(first, 0, "+")]
+    try:
+        result = align(
+            planted, tmp_path, guides, add_leading_g=True, orientation_check="off"
+        )
+    except GemError as error:
+        message = str(error)
+        assert "Signal raised" in message
+        assert "sites_leading_g.fastq" in message
+        assert f"guide {guides[0].name!r}, with the added G" in message
+        assert "first contig" in message
+        assert not (tmp_path / "out" / "alignments" / "sites_leading_g.sam.gz").exists()
+    else:
+        assert result.passes["sites_leading_g"]["n_reads"] == len(P.PAMS)
+        assert every_site(result) == set()
     # Without the G the same guide maps, and its site is found.
-    result = align(planted, tmp_path, guides, orientation_check="off")
+    result = align(
+        planted, tmp_path, guides, outdir="out_without_g", orientation_check="off"
+    )
     assert found_sites(result) == expected_sites(genome, leading_g=False, guides=guides)
+
+
+@pytest.mark.parametrize("add_leading_g", [False, True])
+def test_a_pam_off_either_end_of_the_index_is_no_site(
+    index_ends, tmp_path, add_leading_g
+):
+    """A PAM running off either end of the index makes no site and no crash.
+
+    The first contig starts with a - strand protospacer whose PAM would sit
+    before the index's first base, and the last contig ends with a + strand
+    one whose PAM would run past its last base. Neither is a site, so the
+    pipeline must report each guide's control site and nothing else, of any
+    PAM class, with or without the added G.
+    """
+    genome = index_ends["genome"]
+    first, last = next(iter(genome.contigs)), next(reversed(genome.contigs))
+    edges = {
+        site_key(p.guide, p.chrom, p.start, p.strand)
+        for p in genome.planted
+        if not p.pam
+    }
+    assert {key[1:] for key in edges} == {
+        (first, 0, "-"),
+        (last, len(genome.contigs[last]) - P.SPACER_LENGTH, "+"),
+    }
+    result = align(index_ends, tmp_path, genome.guides, add_leading_g=add_leading_g)
+    expected = expected_sites(genome, leading_g=add_leading_g)
+    assert {guide for guide, *_ in expected} == {g.name for g in genome.guides}
+    assert not edges & set(expected)
+    found = found_sites(result)
+    assert found == expected, difference(found, expected)
+    assert every_site(result) == set(expected)
+    name = "sites_leading_g" if add_leading_g else "sites"
+    assert result.passes[name]["n_reads"] == len(genome.guides) * len(P.PAMS)
+    # Pass 1's bare spacers fit inside the index: both copies of each are found.
+    hits = sum(len(hits) for hits in result.orientation.hits.values())
+    assert hits == len(P.scan_exact(genome.contigs, genome.guides)) == 4
 
 
 @pytest.mark.parametrize("mode", ["fast", "sensitive"])

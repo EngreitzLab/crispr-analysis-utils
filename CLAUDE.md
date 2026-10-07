@@ -46,7 +46,7 @@ fine (`pixi install` does it).
 - `tests/`              -- pytest. `conftest.py` runs every test inside its
                            own `tmp_path`. `fake_gem.py` stands in for the GEM
                            binaries, and `planted_genome.py` builds the
-                           synthetic genome of the GEM integration test;
+                           synthetic genomes of the GEM integration test;
                            pytest collects neither.
 - `docs/`               -- the MkDocs-Material site, published to GitHub Pages
                            by `.github/workflows/docs.yml`.
@@ -215,10 +215,17 @@ use 3.13.
       reference whose first contig starts with N, or no added G: `--contigs`
       cannot help, since it filters hits after GEM has run.
     - The planted-site test leaves that one site out of its comparison
-      (`planted_genome.GEM_CRASHES_WITH_LEADING_G`) and asserts the failure in
-      a test of its own. It also leaves out the sites GEM cannot reach
-      (`GEM_MISSES`): a genomic N in the protospacer plus other mismatches,
-      and protospacers in the N runs of 50 or more that gem-indexer strips.
+      (`planted_genome.GEM_CRASHES_WITH_LEADING_G`) and checks it in a test of
+      its own, which accepts either outcome: the crash's `GemError`, or a
+      completed run with no site for it and none anywhere else. It also leaves
+      out the sites GEM cannot reach (`GEM_MISSES`): a genomic N in the
+      protospacer plus other mismatches, and protospacers in the N runs of 50
+      or more that gem-indexer strips.
+    - A PAM running off either end of the index (a protospacer at the first
+      base on `-`, or ending at the last base on `+`) crashes nothing: a test
+      on a second planted genome (`build_index_ends_genome`) checks that the
+      run reports no site there and none anywhere else, with or without the
+      added G.
     - gem-indexer's `--tmp-folder` needs a trailing separator: it joins the
       folder and a file name with nothing between them. gem-mapper silently
       ignores `--clipping` and `--sam-compact` given without `=`.

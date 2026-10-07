@@ -1,7 +1,9 @@
-"""A synthetic genome with planted guide sites, and a brute-force scan of it.
+"""Synthetic genomes with planted guide sites, and a brute-force scan of them.
 
-The genome, its guides and the planted sites are fixed by the seed. The scan
-is the truth the GEM integration test compares the pipeline with:
+`build_genome` builds the main genome; `build_index_ends_genome` a small one
+whose PAMs would run off both ends of the index. Genomes, guides and planted
+sites are fixed by the seed. The scan is the truth the GEM integration test
+compares the pipeline with:
 
 - `scan_sites`: every site, on both strands, whose spacer has at most ``k``
   mismatches and whose complete 3' PAM matches one of the PAM patterns.
@@ -38,8 +40,9 @@ GEM_MISSES = {
     "genomicN_3": "genomic N in the protospacer plus 2 mismatches",
     "near_plus_nrun": "protospacer starts inside a stripped N run",
 }
-# Guides whose read with a leading G makes gem-mapper crash ("Signal raised"): the G
-# would sit before the first base of the first contig, the start of the index.
+# Guides whose read with a leading G makes gem-mapper crash ("Signal raised") on
+# macOS, or write a bogus record instead: the G would sit before the first base of
+# the first contig, the start of the index.
 GEM_CRASHES_WITH_LEADING_G = {"edge_first_plus0"}
 
 # Pattern base -> genomic bases it accepts. A genomic N passes only at a pattern N.
@@ -637,6 +640,33 @@ def build_genome(seed: int = SEED) -> Genome:
     g = b.guide("near_plus_nrun", "near_edge")
     b.put("chr3", 23_100, g.spacer[1:] + "TGG")
 
+    return b.finish()
+
+
+def build_index_ends_genome(seed: int = SEED) -> Genome:
+    """A small genome whose PAMs would run off both ends of the index.
+
+    The first contig starts with a - strand protospacer, whose PAM would sit
+    before the index's first base; the last contig ends with a + strand
+    protospacer, whose PAM would run past its last base. Neither is a site.
+    Both have a G at the leading-G position, so a read with the added G
+    matches all but its PAM. Each guide also has a perfect NGG site in the
+    middle contig, which shows that its reads map.
+
+    `build_genome` cannot hold these two: its first contig starts with the
+    + strand site of `GEM_CRASHES_WITH_LEADING_G`, and its last contig ends
+    with a - strand site whose added G would run past the index.
+    """
+    b = _Builder(seed)
+    b.add_contig("indexStart", 200)
+    b.add_contig("controls", 1_000)
+    b.add_contig("indexEnd", 200)
+    g = b.guide("pam_before_index", "index_end")
+    b.plant(g, "indexStart", 0, "-", note="PAM before the index")
+    b.plant(g, "controls", 300, "+")
+    g = b.guide("pam_after_index", "index_end")
+    b.plant(g, "indexEnd", 200 - SPACER_LENGTH, "+", note="PAM past the index")
+    b.plant(g, "controls", 600, "-")
     return b.finish()
 
 
