@@ -24,6 +24,7 @@ from .iupac import validate_pams
 logger = logging.getLogger(__name__)
 
 _ACGT = frozenset("ACGT")
+_TABLE_BREAKS = frozenset("\t\r\n")
 _QUALITY = "I"
 _MAX_LISTED = 5
 
@@ -100,9 +101,9 @@ def read_guides(
     ------
     ValueError
         If the table has no rows; a column is missing; an id or a sequence is
-        missing or an id is empty; ids repeat; a sequence, once stripped and
-        uppercased, holds a character other than A, C, G and T; or a sequence
-        is shorter than `spacer_length`.
+        missing; an id is empty or holds a tab or a line break; ids repeat; a
+        sequence, once stripped and uppercased, holds a character other than
+        A, C, G and T; or a sequence is shorter than `spacer_length`.
     """
     if (
         isinstance(spacer_length, bool)
@@ -142,6 +143,13 @@ def read_guides(
         raise ValueError(
             f"Guide ids must not be empty in {origin}: data rows "
             f"{_listing(empty)} (counted from 1)."
+        )
+
+    unsafe = [repr(guide_id) for guide_id in ids if _TABLE_BREAKS & set(guide_id)]
+    if unsafe:
+        raise ValueError(
+            f"Guide ids must not hold tabs or line breaks in {origin}: "
+            f"{_listing(unsafe)}."
         )
 
     repeated = [

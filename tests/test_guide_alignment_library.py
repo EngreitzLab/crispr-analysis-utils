@@ -272,3 +272,11 @@ def test_reads_are_gzipped_reproducibly(tmp_path):
         "+",
         "I" * 20,
     )
+
+
+@pytest.mark.parametrize("guide_id", ["a\tb", "a\nb", "a\rb"])
+def test_read_guides_rejects_ids_that_would_break_the_tables(guide_id):
+    frame = pd.DataFrame([(guide_id, SPACER_A)])
+
+    with pytest.raises(ValueError, match="tabs or line breaks"):
+        read_guides(frame)
