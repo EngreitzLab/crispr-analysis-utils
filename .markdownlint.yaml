@@ -1,0 +1,7 @@
+# Line length is left to the writer.
+MD013: false
+# MkDocs (Python-Markdown) needs 4-space indentation for nested lists.
+MD007:
+  indent: 4
+# MkDocs admonition bodies are indented, so they read as indented code blocks.
+MD046: false

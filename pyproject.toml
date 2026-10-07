@@ -87,7 +87,14 @@ required-version = ">=0.12,<0.13"
 
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+indent-width = 4
 
 [tool.ruff.lint]
-select = ["B", "E", "F", "I", "UP"]
+# Explicit on purpose: ruff 0.16 grew its default rule set from 59 to 413 rules,
+# and `select` replaces that set. W brings W191 (tab indentation).
+select = ["E", "W", "F", "I", "UP", "B"]
+# The formatter owns line length.
+ignore = ["E501"]
+
+[tool.ruff.format]
+indent-style = "space"

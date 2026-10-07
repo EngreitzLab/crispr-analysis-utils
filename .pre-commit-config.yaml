@@ -1,6 +1,11 @@
+# Install once per clone (commit and push hooks):  pixi run -e dev install-hooks
+# Run on every tracked file:                       pixi run -e dev lint
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -9,22 +14,40 @@ repos:
       - id: check-yaml
       - id: check-toml
       - id: check-json
+      - id: pretty-format-json
+        args: [--autofix, --indent=4, --no-sort-keys]
       - id: check-merge-conflict
       - id: detect-private-key
+      # 512 KB = 524,288 bytes, checked at commit and again at push.
+      # --enforce-all also checks modified files; without it the CI run checks
+      # nothing. The lockfiles are generated and may outgrow the limit.
       - id: check-added-large-files
+        args: [--maxkb=512, --enforce-all]
+        exclude: ^(uv|pixi)\.lock$
+        stages: [pre-commit, pre-push]
+      # main only changes through pull requests.
       - id: no-commit-to-branch
         args: [--branch, main]
 
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    # The only ruff pin in the repository.
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
+
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.43.0
+    rev: v0.49.1
     hooks:
       - id: markdownlint
-        args: [--disable, MD013]
 
   - repo: local
     hooks:
       - id: forbid-tabs
-        name: forbid-tabs
+        name: forbid tab characters
         entry: '\t'
         language: pygrep
         types: [text]
+        # Tab-separated data fixtures are allowed.
+        exclude: \.(tsv|bed|sam|vcf|fastq|fq)$
