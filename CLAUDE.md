@@ -191,6 +191,21 @@ use 3.13.
   pysam then fails to import ("incompatible architecture"): run
   `pixi clean -e dev` and `pixi clean -e default`, then reinstall. The unit
   tests mock the binaries; CI's `test` job checks that they run.
+- **GEM 3.6 misbehaves at the start of its index and at contig ends.**
+    - A read that aligns across the first base of the reference's first contig
+      (on +) makes gem-mapper crash ("Signal raised", exit status 1, a partial
+      SAM) or, on another genome, report garbage. With `--add-leading-g` a
+      site at that base is enough. hg38's first contig starts with N, so hg38
+      is safe.
+    - A read that overhangs any other contig end comes back past that contig,
+      or at POS 2^64-22 on the next one, which pysam cannot parse
+      (`OSError: truncated file`).
+    - So `guide_alignment.gem.map_reads` fails the run on a non-zero exit
+      status or "Signal raised", and drops every record whose span leaves its
+      contig before anything reads the SAM.
+    - gem-indexer's `--tmp-folder` needs a trailing separator: it joins the
+      folder and a file name with nothing between them. gem-mapper silently
+      ignores `--clipping` and `--sam-compact` given without `=`.
 - **pysam is optional** (the `alignment` extra) and imported inside
   `filter_guide_alignments`. Keep it out of module-level imports. The dev group
   installs it for the tests.
