@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # setup-pixi wants the leading v. uv's version comes from [tool.uv] required-version.
+  PIXI_VERSION: v0.81.0
+
+jobs:
+  lockfiles:
+    name: lockfiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: prefix-dev/setup-pixi@v0.11.0
+        with:
+          pixi-version: ${{ env.PIXI_VERSION }}
+          manifest-path: pyproject.toml
+          run-install: false
+      # Fails if pyproject.toml changed without `pixi lock`. On a mismatch it also
+      # rewrites pixi.lock in this throwaway checkout before failing.
+      - run: pixi lock --check
+      # setup-uv has published no floating major tags since v8, so pin a full version.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: false
+      - run: uv lock --check
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The pull-request history check below needs the base branch.
+          fetch-depth: 0
+      - uses: prefix-dev/setup-pixi@v0.11.0
+        with:
+          pixi-version: ${{ env.PIXI_VERSION }}
+          manifest-path: pyproject.toml
+          environments: dev
+          locked: true
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      # Every hook on every tracked file: ruff, the 512 KB limit, tabs, markdownlint.
+      - run: pixi run -e dev lint
+      # The hooks see only the final tree. A file over 512 KB added and then deleted
+      # inside a pull request would still reach main's history, so check every blob
+      # the pull request adds. The lockfiles are exempt, as in the hook.
+      - name: No blob over 512 KB in the pull request's history
+        if: github.event_name == 'pull_request'
+        run: |
+          git rev-list --objects "origin/${{ github.base_ref }}..HEAD" \
+              | git cat-file --batch-check='%(objecttype) %(objectsize) %(rest)' \
+              | awk '$1 == "blob" && $2 > 524288 && $3 !~ /^(uv|pixi)\.lock$/ { print; found = 1 } END { exit found }'
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: prefix-dev/setup-pixi@v0.11.0
+        with:
+          pixi-version: ${{ env.PIXI_VERSION }}
+          manifest-path: pyproject.toml
+          environments: dev
+          locked: true
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
+      - run: pixi run -e dev test
+      # The unit tests mock the GEM binaries. This checks that the bioconda build runs
+      # here, with the same probes as its recipe.
+      - name: GEM binaries run
+        run: |
+          pixi run -e dev bash -c 'gem-mapper 2>&1 | grep -q -- "-I <index_file.gem>"'
+          pixi run -e dev bash -c 'gem-indexer -h 2>&1 | grep -q -- "-i <input_file>"'
+      - name: Tests left the working tree clean
+        run: test -z "$(git status --porcelain)" || { git status --porcelain; exit 1; }
+
+  test-pip:
+    name: test-pip (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      # Since setup-uv v6, python-version alone no longer creates a virtual
+      # environment, and `uv pip install` refuses to run without one.
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          activate-environment: true
+      # Unlocked on purpose: resolve against pyproject.toml as a pip user would, so
+      # an upstream release that breaks us shows up here. `lockfiles` checks uv.lock.
+      - run: uv pip install -e . --group dev
+      - run: uv run --no-sync pytest -q
+      - name: Tests left the working tree clean
+        run: test -z "$(git status --porcelain)" || { git status --porcelain; exit 1; }
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.2.0
+      - run: uv build
+      - run: uvx twine check --strict dist/*
+      - name: The wheel holds the package and nothing else
+        run: |
+          listing="$(python3 -m zipfile -l dist/*.whl)"
+          echo "$listing"
+          if grep -E '(^|/)(tests|scripts)/|01_filter' <<<"$listing"; then
+              echo "::error::unexpected files in the wheel"
+              exit 1
+          fi
+          grep -q 'crispr_analysis_utils/cli/__init__.py' <<<"$listing"
