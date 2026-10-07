@@ -1,5 +1,6 @@
 # `filter_guide_alignments` outputs
 
+<!-- --8<-- [start:tables] -->
 All tables are tab-separated. "Read name" is the SAM QNAME, which is the guide
 id when the FASTQ came from `guides_to_fastq`.
 
@@ -93,3 +94,5 @@ A dict with the five metrics of `alignment_summary.tsv`, plus:
 | `multi_guides` | guides with more than one valid alignment |
 | `valid_alignments` | valid alignments |
 | `invalid_alignments` | rows of `invalid_alignments.tsv`, unmapped records included |
+
+<!-- --8<-- [end:tables] -->

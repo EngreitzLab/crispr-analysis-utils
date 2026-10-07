@@ -56,5 +56,3 @@ gem-mapper \
     --mapping-mode sensitive \
     --threads 8
 ```
-
-::: crispr_analysis_utils.gem_mapper

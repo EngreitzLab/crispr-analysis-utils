@@ -1,17 +1,13 @@
-# CRISPR Analysis Utils
+# crispr-analysis-utils
 
-Reusable Python utilities for CRISPR screen analysis, preprocessing,
-plotting, and downstream workflows.
+Python utilities and command-line tools for analysing CRISPR perturbation
+screens, imported as `import crispr_analysis_utils as cau`.
 
-This repository is designed for shared lab utilities:
-
-- installable functions for collaborators
-- docstrings close to the code
-- rendered GitHub Pages documentation with examples and parameters
-- lightweight tests for every helper
-
-## First utilities
-
-The initial package includes `counts_per_million()`. Use it as a template for
-future functions: include a compact example, clear parameter
-descriptions, and a focused test.
+- [Getting started](getting-started.md): install, then a first example.
+- Guides: [guide alignment QC](python/guide-qc.md),
+  [GEM mapping](python/gem-mapper.md), and an end-to-end
+  [tutorial](python/tutorial-guide-alignment-qc.md).
+- [Agents and skills](agents-and-skills.md): use the package from Claude Code.
+- [API reference](python/reference/index.md): every public function, from its
+  docstring.
+- [Contributing](contributing.md): set up, conventions, and adding a module.
