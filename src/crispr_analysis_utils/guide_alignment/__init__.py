@@ -6,11 +6,11 @@ one ``[G] + spacer + PAM`` read per guide and PAM for the site search
 (`write_site_reads`). GEM3 maps them (`build_index`, `map_reads`, in `gem`).
 The alignments come back through `check_orientation` and `read_sites`, which
 verify every hit against the reference, and `summarize` classifies each guide
-for the output tables (the ``write_*`` functions). The IUPAC helpers live in
-`iupac`.
+for the output tables (the ``write_*`` functions). `run` chains it all into
+one folder of outputs. The IUPAC helpers live in `iupac`.
 """
 
-from . import gem, iupac
+from . import gem, iupac, pipeline
 from .gem import GemError, MappingResult, build_index, map_reads
 from .library import Guide, read_guides, write_site_reads, write_spacer_reads
 from .orientation import (
@@ -19,6 +19,7 @@ from .orientation import (
     check_orientation,
     library_reversed,
 )
+from .pipeline import OrientationError, RunResult, run
 from .sites import Site, SiteResult, read_sites
 from .summary import (
     GuideSummary,
@@ -38,8 +39,10 @@ __all__ = [
     "Guide",
     "GuideSummary",
     "MappingResult",
+    "OrientationError",
     "OrientationResult",
     "PerfectHit",
+    "RunResult",
     "Site",
     "SiteResult",
     "build_index",
@@ -50,8 +53,10 @@ __all__ = [
     "iupac",
     "library_reversed",
     "map_reads",
+    "pipeline",
     "read_guides",
     "read_sites",
+    "run",
     "summarize",
     "write_cut_sites_bed",
     "write_guides_bed",
