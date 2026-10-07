@@ -85,6 +85,40 @@ addopts = "-ra --strict-markers"
 # The single uv pin: setup-uv in CI reads it, and the lockfile format is stable within a minor.
 required-version = ">=0.12,<0.13"
 
+# pixi reads this same file. Conda-only tools come from conda-forge and bioconda;
+# Python packages still resolve from PyPI. pixi locks to pixi.lock, uv to uv.lock.
+[tool.pixi.workspace]
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "osx-arm64"]
+requires-pixi = ">=0.81"
+
+[tool.pixi.dependencies]
+python = "3.13.*"
+
+# bioconda builds gem3-mapper for linux-64 and osx-64 only.
+[tool.pixi.target.linux-64.dependencies]
+gem3-mapper = ">=3.6.1"
+
+# pixi does not install the project by itself.
+[tool.pixi.pypi-dependencies]
+crispr-analysis-utils = { path = ".", editable = true }
+
+# The `alignment` extra and the `dev` and `docs` groups become features of the same name.
+[tool.pixi.environments]
+default = { features = ["alignment"], solve-group = "default" }
+dev = { features = ["alignment", "dev"], solve-group = "default" }
+docs = { features = ["docs"], solve-group = "default" }
+
+[tool.pixi.feature.dev.tasks]
+test = { cmd = "pytest", description = "Run the test suite" }
+# no-commit-to-branch always runs, and would fail whenever HEAD is main.
+lint = { cmd = "pre-commit run --all-files", env = { SKIP = "no-commit-to-branch" }, description = "Run every pre-commit hook on every tracked file" }
+install-hooks = { cmd = "pre-commit install", description = "Install the commit and push hooks in this clone" }
+
+[tool.pixi.feature.docs.tasks]
+docs = { cmd = "mkdocs serve", description = "Serve the docs locally with live reload" }
+docs-build = { cmd = "mkdocs build --strict", description = "Build the docs as CI does" }
+
 [tool.ruff]
 line-length = 88
 indent-width = 4
