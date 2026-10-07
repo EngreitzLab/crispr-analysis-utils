@@ -201,6 +201,10 @@ def test_every_site_is_found_without_the_added_g(planted, tmp_path):
     found = found_sites(result)
     assert found == expected, difference(found, expected)
     assert len(expected) > 350
+    # GEM's NM matches the recompute except where GEM reports a hit inside an N
+    # run gem-indexer stripped: there the reference reads N, every base counts as
+    # a mismatch and the hit is dropped. No kept site disagrees.
+    assert result.sites.n_nm_disagreements <= result.sites.n_over_max_mismatches
 
     classes, unique = expected_classes(expected)
     summaries = {s.guide_id: s for s in result.summaries}
@@ -256,6 +260,7 @@ def test_every_reachable_site_is_found_with_the_added_g(planted, tmp_path):
     expected = expected_sites(genome, leading_g=True, guides=guides)
     found = found_sites(result)
     assert found == expected, difference(found, expected)
+    assert result.sites.n_nm_disagreements <= result.sites.n_over_max_mismatches
 
     # Both FASTQs were mapped: the four guides whose spacer starts with G keep
     # their reads in the one without the added G.
