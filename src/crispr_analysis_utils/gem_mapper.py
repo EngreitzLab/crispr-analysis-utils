@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import shlex
+from pathlib import Path
 
 from .utils import run_shell_cmd
 

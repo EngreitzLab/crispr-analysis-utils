@@ -11,22 +11,27 @@ Steps:
 from __future__ import annotations
 
 import argparse
-from datetime import datetime
 import logging
-from pathlib import Path
 import shlex
 import time
+from datetime import datetime
+from pathlib import Path
+
+import pandas as pd
 
 import crispr_analysis_utils as cau
-import pandas as pd
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Run guide alignment QC pipeline.")
 
-    p.add_argument("--guides-tsv", required=True, help="Input guide TSV (id, sequence).")
+    p.add_argument(
+        "--guides-tsv", required=True, help="Input guide TSV (id, sequence)."
+    )
     p.add_argument("--reference-fasta", required=True, help="Reference FASTA path.")
-    p.add_argument("--chromsizes", default=None, help="Chromsizes path for allowed contigs.")
+    p.add_argument(
+        "--chromsizes", default=None, help="Chromsizes path for allowed contigs."
+    )
     p.add_argument("--outdir", required=True, help="Output directory.")
 
     p.add_argument("--threads", type=int, default=8, help="Threads for GEM steps.")
@@ -141,7 +146,10 @@ def main() -> None:
     summary_tsv = filtering_dir / "alignment_summary.tsv"
     if summary_tsv.exists():
         logging.info("Filtering summary exists, skipping filtering: %s", summary_tsv)
-        summary = {"status": "skipped_filtering", "alignment_summary_tsv": str(summary_tsv)}
+        summary = {
+            "status": "skipped_filtering",
+            "alignment_summary_tsv": str(summary_tsv),
+        }
     else:
         summary = cau.guide_qc.filter_guide_alignments(
             mapped_sam,

@@ -16,10 +16,10 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate gem3-map
 
 python scripts/run_guide_alignment_qc.py \
-  --guides-tsv data/guides.tsv \
-  --reference-fasta data/IGVFFI0653VCGH.fasta \
-  --chromsizes data/hg38.chrom.sizes \
-  --outdir results/guide_alignment_qc \
-  --threads 8 \
-  --pam NGG \
-  --add-leading-g
+    --guides-tsv data/guides.tsv \
+    --reference-fasta data/IGVFFI0653VCGH.fasta \
+    --chromsizes data/hg38.chrom.sizes \
+    --outdir results/guide_alignment_qc \
+    --threads 8 \
+    --pam NGG \
+    --add-leading-g

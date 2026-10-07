@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import gzip
 import re
 from collections import defaultdict
+from pathlib import Path
 
 import pandas as pd
 
@@ -14,9 +14,9 @@ MD_PATTERN = re.compile(r"(\d+|\^[A-Za-z]+|[A-Za-z])")
 _DNA_COMPLEMENT = str.maketrans("ACGTNacgtn", "TGCANtgcan")
 
 _CIGAR_MATCH = {0, 7, 8}  # M, =, X
-_CIGAR_INS = 1            # I
-_CIGAR_DEL = 2            # D
-_CIGAR_SOFT = 4           # S
+_CIGAR_INS = 1  # I
+_CIGAR_DEL = 2  # D
+_CIGAR_SOFT = 4  # S
 
 DEFAULT_PRIMARY_CONTIGS = None
 
@@ -89,7 +89,9 @@ def guides_to_fastq(
     return path
 
 
-def _mismatch_positions_from_md(md_tag: str, cigartuples: list[tuple[int, int]]) -> set[int]:
+def _mismatch_positions_from_md(
+    md_tag: str, cigartuples: list[tuple[int, int]]
+) -> set[int]:
     """Infer mismatch query positions from MD + CIGAR."""
     mismatches: set[int] = set()
     tokens = MD_PATTERN.findall(md_tag)
@@ -239,13 +241,17 @@ def filter_guide_alignments(
     except ImportError as exc:
         raise ImportError("pysam is required for SAM/BAM filtering.") from exc
 
-    primary = _resolve_allowed_contigs(primary_contigs=primary_contigs, chromsizes=chromsizes)
+    primary = _resolve_allowed_contigs(
+        primary_contigs=primary_contigs, chromsizes=chromsizes
+    )
     input_path = Path(input_sam)
     mode = "rb" if input_path.suffix == ".bam" else "r"
 
     valid_by_guide: dict[str, list] = {}
     invalid_rows: list[tuple[str, str, str]] = []
-    discarded_rows: list[tuple[str, str, int, int, int, str, str, int, int, str, str]] = []
+    discarded_rows: list[
+        tuple[str, str, int, int, int, str, str, int, int, str, str]
+    ] = []
     unmapped_rows: list[tuple[str, int]] = []
     valid_bed_rows: list[tuple[str, int, int, str, int, str, int, int, str]] = []
     guide_stats = defaultdict(
@@ -325,7 +331,9 @@ def filter_guide_alignments(
                     ):
                         seq_start = 1
                     seq_end = len(guide_id) - len(pam)
-                    protospacer_seq = guide_id[seq_start:seq_end] if seq_start < seq_end else None
+                    protospacer_seq = (
+                        guide_id[seq_start:seq_end] if seq_start < seq_end else None
+                    )
                 else:
                     bed_span = None
                     protospacer_seq = None
@@ -347,7 +355,11 @@ def filter_guide_alignments(
                         )
                     )
             else:
-                if reason in {"pam_not_fully_aligned", "query_too_short_for_pam", "softclip_not_allowed"}:
+                if reason in {
+                    "pam_not_fully_aligned",
+                    "query_too_short_for_pam",
+                    "softclip_not_allowed",
+                }:
                     normalized_reason = "discarded_tail_unaligned"
                 elif reason == "pam_gg_mismatch":
                     normalized_reason = "discarded_tail_mismatch"
@@ -482,7 +494,9 @@ def filter_guide_alignments(
         handle.write(f"guides_multi_valid\t{n_guides_multi_valid}\n")
         handle.write(f"guides_aligned_none_valid\t{n_guides_aligned_none_valid}\n")
         handle.write(f"guides_unmapped\t{n_guides_unmapped}\n")
-        handle.write(f"guides_one_valid_plus_invalid\t{n_guides_one_valid_plus_invalid}\n")
+        handle.write(
+            f"guides_one_valid_plus_invalid\t{n_guides_one_valid_plus_invalid}\n"
+        )
 
     n_valid_guides = len(valid_by_guide)
     n_unique_guides = sum(1 for v in valid_by_guide.values() if len(v) == 1)
@@ -516,7 +530,7 @@ def _protospacer_query_bounds(
 
     query_ops = [None] * query_len
     qpos = 0
-    for op, length in (aln.cigartuples or []):
+    for op, length in aln.cigartuples or []:
         if op in _CIGAR_MATCH | {_CIGAR_INS, _CIGAR_SOFT}:
             for _ in range(length):
                 if qpos < query_len:

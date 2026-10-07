@@ -34,16 +34,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="cau",
         description="Command-line tools from crispr-analysis-utils.",
     )
-    parser.add_argument(
-        "--version", action="version", version=f"cau {__version__}"
-    )
-    subparsers = parser.add_subparsers(
-        dest="command", metavar="COMMAND", required=True
-    )
+    parser.add_argument("--version", action="version", version=f"cau {__version__}")
+    subparsers = parser.add_subparsers(dest="command", metavar="COMMAND", required=True)
     for name, (module_name, help_text) in COMMANDS.items():
-        subparser = subparsers.add_parser(
-            name, help=help_text, description=help_text
-        )
+        subparser = subparsers.add_parser(name, help=help_text, description=help_text)
         _command_module(module_name).add_arguments(subparser)
     return parser
 
