@@ -131,3 +131,10 @@ jobs:
               exit 1
           fi
           grep -q 'crispr_analysis_utils/cli/__init__.py' <<<"$listing"
+          # Every tracked skill and agent file ships, so `cau install-skills` has them.
+          for file in $(git ls-files src/crispr_analysis_utils/skills src/crispr_analysis_utils/agents); do
+              if ! grep -qF "${file#src/}" <<<"$listing"; then
+                  echo "::error::$file is missing from the wheel"
+                  exit 1
+              fi
+          done

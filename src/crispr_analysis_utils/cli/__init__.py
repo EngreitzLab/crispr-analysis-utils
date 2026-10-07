@@ -21,7 +21,12 @@ from types import ModuleType
 from .. import __version__
 
 # Subcommand name -> (module under crispr_analysis_utils.cli, one-line help).
-COMMANDS: dict[str, tuple[str, str]] = {}
+COMMANDS: dict[str, tuple[str, str]] = {
+    "install-skills": (
+        "install_skills",
+        "Install the bundled Claude Code skills and agents.",
+    ),
+}
 
 
 class CommandError(Exception):
