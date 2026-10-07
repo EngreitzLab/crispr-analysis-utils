@@ -34,8 +34,8 @@ fine (`pixi install` and `uv sync` both do it).
                              no skill.
     - `skills/<name>/`    -- one skill per analysis module: `SKILL.md`, plus
                              `references/` for detail. Data, not packages.
-    - `agents/<name>.md`  -- subagents. The directory does not exist until the
-                             first agent.
+    - `agents/<name>.md`  -- subagents, each preloading the skill of the
+                             module it runs.
 - `tests/`              -- pytest. `conftest.py` runs every test inside its
                            own `tmp_path`.
 - `docs/`               -- the MkDocs-Material site, published to GitHub Pages

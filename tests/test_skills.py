@@ -18,22 +18,20 @@ from crispr_analysis_utils.cli.install_skills import read_frontmatter
 
 PACKAGE = Path(crispr_analysis_utils.__file__).parent
 SKILLS = PACKAGE / "skills"
-AGENTS = PACKAGE / "agents"  # absent until the first agent exists
+AGENTS = PACKAGE / "agents"
 REPO = Path(__file__).resolve().parent.parent
 
 # Which analysis modules each skill or agent covers.
 COVERAGE = {
     "cau-normalization": ("normalization",),
+    "cau-guide-alignment": ("guide_alignment",),
+    "cau-guide-alignment-runner": ("guide_alignment",),
     "cau-guide-qc": ("guide_qc",),
     "cau-gem-mapper": ("gem_mapper",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.
 INFRASTRUCTURE = ("cli", "utils")
-
-# Analysis modules whose skill is still being written on this branch. Temporary:
-# the cau-guide-alignment skill replaces this exemption before the branch merges.
-SKILL_PENDING = ("guide_alignment",)
 
 # The package directory is also the Claude Code plugin root, where these names
 # would be read as plugin components.
@@ -69,9 +67,7 @@ def analysis_modules():
     return sorted(
         info.name
         for info in pkgutil.iter_modules([str(PACKAGE)])
-        if not info.name.startswith("_")
-        and info.name not in INFRASTRUCTURE
-        and info.name not in SKILL_PENDING
+        if not info.name.startswith("_") and info.name not in INFRASTRUCTURE
     )
 
 
