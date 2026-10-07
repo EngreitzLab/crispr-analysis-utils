@@ -366,8 +366,12 @@ def mapper_argv(
         The index file, ``<prefix>.gem``.
     fastq
         The reads.
-    max_mismatches, n_ambiguous, leading_g
-        The search budget (see `mapper_options`).
+    max_mismatches
+        The spacer mismatches to find, k (see `mapper_options`).
+    n_ambiguous
+        The highest number of non-ACGT codes among the PAMs of the reads, n.
+    leading_g
+        Whether the reads carry an added 5' G, g.
     threads
         gem-mapper threads.
     gem_mapper
@@ -432,8 +436,12 @@ def map_reads(
     log
         gem-mapper's log: the command, then everything it prints to standard
         error. Missing folders are created.
-    max_mismatches, n_ambiguous, leading_g
-        The search budget (see `mapper_options`).
+    max_mismatches
+        The spacer mismatches to find, k (see `mapper_options`).
+    n_ambiguous
+        The highest number of non-ACGT codes among the PAMs of the reads, n.
+    leading_g
+        Whether the reads carry an added 5' G, g.
     threads
         gem-mapper threads.
     gem_mapper

@@ -113,7 +113,9 @@ use 3.13.
   one-line pointer in the source.
 - **The docs include, they don't copy.** `docs/` pages pull `README.md`
   sections through `pymdownx.snippets` markers (`<!-- --8<-- [start:name] -->`),
-  and `docs/python/guide-qc.md` pulls its output tables from the
+  `docs/guide-alignment.md` pulls its output tables and its migration note
+  from the `cau-guide-alignment` skill's `references/outputs.md` and
+  `references/migration.md`, and `docs/guide-qc.md` its tables from the
   `cau-guide-qc` skill's `references/outputs.md`. Don't delete a marker. Links
   inside a marked section must be absolute URLs: a relative one resolves
   differently on GitHub and in the site, and `mkdocs build --strict` fails.

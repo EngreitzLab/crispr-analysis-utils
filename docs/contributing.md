@@ -46,7 +46,7 @@ Start with an UPPERCASE verb: `ADD`, `FIX`, `UPDATE`, `REWRITE`, `RELEASE` or
    [Agents and skills](agents-and-skills.md).
 4. Map the new skill or agent to the module in `COVERAGE`, in
    `tests/test_skills.py`.
-5. Add an API reference page under `docs/python/reference/`, and its entry in
+5. Add an API reference page under `docs/reference/`, and its entry in
    the `mkdocs.yml` nav and on the [Agents and skills](agents-and-skills.md)
    page.
 6. Add focused tests under `tests/`. Tests must not write outside `tmp_path`.
