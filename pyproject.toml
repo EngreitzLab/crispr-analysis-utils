@@ -80,7 +80,11 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# No -m here: it would deselect the gem marker by default.
 addopts = "-ra --strict-markers"
+markers = [
+    "gem: needs the GEM3 binaries on the PATH (the pixi environments have them)",
+]
 
 [tool.uv]
 # The single uv pin: setup-uv in CI reads it, and the lockfile format is stable within a minor.
