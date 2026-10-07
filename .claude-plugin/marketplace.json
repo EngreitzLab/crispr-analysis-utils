@@ -1,0 +1,20 @@
+{
+    "name": "crispr-analysis-utils",
+    "owner": {
+        "name": "Engreitz Lab"
+    },
+    "description": "Claude Code skills and agents for crispr-analysis-utils, a Python toolkit for CRISPR perturbation screens.",
+    "plugins": [
+        {
+            "name": "crispr-analysis-utils",
+            "source": "./src/crispr_analysis_utils",
+            "description": "A skill for every analysis module of crispr-analysis-utils (import crispr_analysis_utils as cau), plus agents where a task needs one.",
+            "author": {
+                "name": "Engreitz Lab"
+            },
+            "homepage": "https://engreitzlab.github.io/crispr-analysis-utils/",
+            "repository": "https://github.com/EngreitzLab/crispr-analysis-utils",
+            "license": "MIT"
+        }
+    ]
+}

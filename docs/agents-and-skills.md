@@ -1,0 +1,34 @@
+# Agents and skills
+
+--8<-- "README.md:skills"
+
+## What ships
+
+| Skill | Covers |
+| --- | --- |
+| `cau-normalization` | `cau.counts_per_million` |
+| `cau-guide-qc` | `cau.guide_qc`: guide FASTQs and filtering guide alignments |
+| `cau-gem-mapper` | `cau.gem_mapper`: GEM3 indexing and mapping |
+
+`cau install-skills --list` prints the same list from the installed package.
+No module needs an agent yet.
+
+## Skill or agent
+
+Every analysis module has a skill. A skill loads into your conversation, so
+you see and steer each step: it suits a module whose use is a matter of
+knowing the functions and choosing the parameters.
+
+An agent is added when using a module means a long multi-step job (run a
+pipeline, read its logs, summarize the outcome) whose intermediate output
+would flood the conversation. The agent works in its own context and returns
+a summary. It preloads the module's skill rather than repeating it, so the
+module still has exactly one description of how it works.
+
+## Where they live
+
+The skills ship inside the Python package, under
+`crispr_analysis_utils/skills/<name>/SKILL.md`, and agents under
+`crispr_analysis_utils/agents/`. `cau install-skills` copies them from the
+installed package. The plugin serves the same directory straight from the
+repository's `main` branch.

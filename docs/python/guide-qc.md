@@ -1,132 +1,74 @@
 # Guide QC
 
-Example usage:
+`cau.guide_qc` prepares guides for alignment and filters the alignments:
+
+1. `guides_to_fastq` writes each guide as a synthetic FASTQ read: the spacer,
+   an optional leading G, then the PAM.
+2. After mapping (see [GEM mapper](gem-mapper.md)), `filter_guide_alignments`
+   keeps the alignments that look like real target sites and writes tables
+   describing every guide.
+
+The filter needs pysam, from the `alignment` extra.
+
+## Usage
 
 ```python
 import pandas as pd
+
 import crispr_analysis_utils as cau
 
 cau.guide_qc.guides_to_fastq(
-  "guides.tsv",
-  "guides.fastq",
-  pam="NGG",
-  add_leading_g=True
+    "guides.tsv", "guides.fastq", pam="NGG", add_leading_g=True
 )
 
 # DataFrame input with column overrides
 guides = pd.DataFrame({"id": ["g1"], "seq": ["ACGT"]})
-cau.guide_qc.guides_to_fastq(
-  guides,
-  "guides.fastq",
-  id_col="id",
-  sequence_col="seq"
-)
+cau.guide_qc.guides_to_fastq(guides, "guides.fastq", id_col="id", sequence_col="seq")
 
 # Filter GEM SAM/BAM alignments into valid unique vs valid multi-mapping
 summary = cau.guide_qc.filter_guide_alignments(
-  "guides_mapped_hg38.sam",
-  "guides_valid_unique.sam",
-  "guides_valid_multi.sam",
-  pam="NGG",
-  allow_leading_g_softclip=True  # default
-  # Choose one for contig filtering:
-  # chromsizes="hg38.chrom.sizes"
-  # chromsizes=chromsizes_df
-  # primary_contigs=["chr1", "chr2", "chrX", "chrY", "chrM"]
+    "guides_mapped_hg38.sam",
+    "guides_valid_unique.sam",
+    "guides_valid_multi.sam",
+    pam="NGG",
+    allow_leading_g_softclip=True,  # default
+    # Choose one for contig filtering:
+    # chromsizes="hg38.chrom.sizes"
+    # chromsizes=chromsizes_df
+    # primary_contigs=["chr1", "chr2", "chrX", "chrY", "chrM"]
 )
 print(summary)
 ```
 
-Filtering logic:
+Pass the same `pam` to both functions: `guides_to_fastq` defaults to `pam=""`
+and then appends no PAM, while the filter treats the last `len(pam)` bases of
+each read as the PAM. `add_leading_g=True` prepends `G` only when the guide
+does not already start with `G`.
 
-- Primary assembly contigs only
-- PAM must be fully aligned
-- Mismatches in PAM are not allowed except the first PAM base when using `N..` PAM (for `NGG`, `N` mismatch is accepted)
-- Spacer cannot contain insertions/deletions
-- Leading `G` soft-clipping is allowed by default
+## What makes an alignment valid
 
-Output notes:
+- It is on an allowed contig: one listed in `chromsizes` or `primary_contigs`.
+  With neither, every contig is allowed.
+- The PAM is fully aligned, with no mismatch except at its `N` positions (for
+  `NGG`, the first base).
+- No insertion or deletion inside the spacer.
+- No soft clip, except the leading `G` base, which may be soft-clipped by
+  default (`allow_leading_g_softclip=True`).
+- On the reverse strand the rules are mirrored, with the PAM at the start of
+  the read as SAM stores it, except for a deletion at either end of the
+  spacer: one between spacer and PAM is accepted on `+` but rejected on `-`,
+  and one right after the read's first base is rejected on `+` but accepted on
+  `-` (with the leading-G soft clip allowed).
 
-- Invalid alignments are always written to TSV
-- Default invalid TSV path: `invalid_alignments.tsv` in the same folder as `guides_valid_unique.sam`
-- You can override with `output_invalid_tsv="your_path.tsv"`
-- Additional default outputs are written in the same folder as `guides_valid_unique.sam`
+Mismatches inside the spacer are not filtered: read the `NM` and `AS` columns
+of the BED.
 
-FASTQ generation note:
+## Where the outputs go
 
-- `add_leading_g=True` prepends `G` only when the guide sequence does not already start with `G`
+The SAM files are written only when both `output_unique_sam` and
+`output_multi_sam` are given. Each table can be given its own path; one left
+at `"auto"` goes to the folder of `output_unique_sam`, else of
+`output_multi_sam`, and to the current working directory when neither is
+given. The tables, one by one:
 
-### `valid_alignments.bed`
-
-Contains valid alignments in BED format with additional columns:
-
-| Column | Description |
-|--------|-------------|
-| 1. chrom | Chromosome name |
-| 2. chromStart | Start position (0-based) |
-| 3. chromEnd | End position (0-based, exclusive) |
-| 4. name | Guide read name |
-| 5. score | Mapping quality (0-255) |
-| 6. strand | Strand (`+` or `-`) |
-| 7. NM | Number of mismatches (`NM` tag, `-1` if missing) |
-| 8. AS | Alignment score (`AS` tag, `-1` if missing) |
-| 9. alias | Guide alias/name (defaults to `guide_id` if no alias mapping provided) |
-
-### `discarded_alignments.tsv`
-
-Contains mapped alignments that failed filtering:
-
-| Column | Description |
-|--------|-------------|
-| read_name | Guide read name |
-| chromosome | Chromosome name |
-| pos1 | Start position (1-based) |
-| flag | SAM flag |
-| mapq | Mapping quality |
-| strand | Strand (`+` or `-`) |
-| cigar | CIGAR string |
-| NM | Number of mismatches |
-| AS | Alignment score |
-| MD | MD tag (mismatch/deletion string) |
-| reason | Discard reason |
-
-**Discard reasons:**
-
-- `discarded_tail_unaligned`: PAM region not properly aligned
-- `discarded_tail_mismatch`: PAM region contains mismatches
-- `discarded_protospacer_indel`: Protospacer region contains insertions or deletions
-
-### `unmapped.tsv`
-
-Contains unmapped records:
-
-| Column | Description |
-|--------|-------------|
-| read_name | Guide read name |
-| flag | SAM flag |
-
-### `guide_alignment_log.tsv`
-
-Per-guide summary counts:
-
-| Column | Description |
-|--------|-------------|
-| guide_id | Guide/read name |
-| n_aligned | Number of mapped alignments observed |
-| n_valid | Number of mapped alignments that passed filters |
-| n_discarded | Number of mapped alignments that failed filters |
-| n_not_mapped | Unmapped indicator count (0 or 1) |
-
-### `alignment_summary.tsv`
-
-Run-level guide summary:
-
-| Metric | Description |
-|--------|-------------|
-| guides_unique_valid | Number of guides with exactly one valid alignment |
-| guides_multi_valid | Number of guides with multiple valid alignments |
-| guides_aligned_none_valid | Number of guides with mapped alignments but zero valid alignments |
-| guides_unmapped | Number of guides with no mapped alignments (`n_not_mapped = 1`) |
-| guides_one_valid_plus_invalid | Number of guides with exactly one valid alignment and at least one discarded mapped alignment |
-
-::: crispr_analysis_utils.guide_qc
+--8<-- "src/crispr_analysis_utils/skills/cau-guide-qc/references/outputs.md:tables"

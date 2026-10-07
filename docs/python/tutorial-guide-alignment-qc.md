@@ -7,7 +7,7 @@ alignment against hg38.
 
 ```bash
 conda create -n gem3-map -c conda-forge -c bioconda --strict-channel-priority \
-  python=3.11 gem3-mapper pysam pandas -y
+    python=3.11 gem3-mapper pysam pandas -y
 conda activate gem3-map
 python -m pip install -e .
 ```
@@ -19,7 +19,7 @@ Accession: `IGVFFI0653VCGH`
 ```bash
 mkdir -p data
 curl -L "https://api.data.igvf.org/reference-files/IGVFFI0653VCGH/@@download/IGVFFI0653VCGH.fasta.gz" \
-  -o data/IGVFFI0653VCGH.fasta.gz
+    -o data/IGVFFI0653VCGH.fasta.gz
 gunzip -c data/IGVFFI0653VCGH.fasta.gz > data/IGVFFI0653VCGH.fasta
 ```
 
@@ -34,13 +34,13 @@ Use the single entry script:
 
 ```bash
 python scripts/run_guide_alignment_qc.py \
-  --guides-tsv data/guides.tsv \
-  --reference-fasta data/IGVFFI0653VCGH.fasta \
-  --chromsizes data/hg38.chrom.sizes \
-  --outdir results/guide_alignment_qc \
-  --threads 8 \
-  --pam NGG \
-  --add-leading-g
+    --guides-tsv data/guides.tsv \
+    --reference-fasta data/IGVFFI0653VCGH.fasta \
+    --chromsizes data/hg38.chrom.sizes \
+    --outdir results/guide_alignment_qc \
+    --threads 8 \
+    --pam NGG \
+    --add-leading-g
 ```
 
 ## 5. Final outputs

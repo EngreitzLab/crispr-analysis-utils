@@ -6,8 +6,13 @@ __pycache__/
 .venv/
 site/
 
-.Rhistory
-.RData
-.Rproj.user/
-*.Rproj
-*.Rcheck/
+# Data and run outputs never belong in git (the 512 KB rule, see CLAUDE.md).
+data/
+results/
+logs/
+*.fa
+*.fa.gz
+*.fasta
+*.fasta.gz
+*.gem
+*.bam
