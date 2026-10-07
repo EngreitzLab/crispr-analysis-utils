@@ -22,6 +22,10 @@ from .. import __version__
 
 # Subcommand name -> (module under crispr_analysis_utils.cli, one-line help).
 COMMANDS: dict[str, tuple[str, str]] = {
+    "guide-alignment": (
+        "guide_alignment",
+        "Align a CRISPR guide library to a reference with GEM3.",
+    ),
     "install-skills": (
         "install_skills",
         "Install the bundled Claude Code skills and agents.",
