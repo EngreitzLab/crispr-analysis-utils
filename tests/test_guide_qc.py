@@ -330,7 +330,7 @@ def test_filter_guide_alignments_reuses_sequence_for_seq_star_records(tmp_path):
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "Stale since 81c6db4: BED column 4 is now the protospacer, not the whole "
+        "Stale since f3ba75e: BED column 4 is now the protospacer, not the whole "
         "read, and this input stores the PAM-first orientation as SAM SEQ. "
         "Revisit with the guide-alignment redesign."
     ),

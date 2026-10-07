@@ -22,9 +22,12 @@ Reference accession: `IGVFFI0653VCGH`
 Run from Python:
 
 ```python
+from pathlib import Path
+
 import crispr_analysis_utils as cau
 
-# Build index
+# Build index (neither wrapper creates folders)
+Path("../../annotations/ENCODE/hg38/gem_index").mkdir(parents=True, exist_ok=True)
 cau.gem_mapper.build_gem_index(
     "../../annotations/ENCODE/hg38/IGVFFI0653VCGH.fasta",
     "../../annotations/ENCODE/hg38/gem_index/IGVFFI0653VCGH",

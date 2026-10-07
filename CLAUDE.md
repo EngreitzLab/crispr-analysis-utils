@@ -96,9 +96,9 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   `REWRITE`, `RELEASE`, `REMOVE`.
 - **Docs accuracy is a hard rule.** Every concrete detail (defaults, column
   meanings, versions, flags) must be confirmable from source. If you can't
-  verify it, omit it. The guide-QC output tables in the docs were wrong from
-  81c6db4 until the Python-only setup, because that code change left the docs
-  alone.
+  verify it, omit it. The guide-QC output tables in the docs drifted from the
+  code from their first version until the Python-only setup, because the code
+  changes that followed left the docs alone.
 - **Docstrings: NumPy style** (`docstring_style: numpy` in `mkdocs.yml`). A
   docstring says what a function does, takes, returns and raises. Design
   rationale and measurements belong in the docs pages; leave at most a
@@ -166,10 +166,12 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   runtime dependency. `tests/test_skills.py` checks the reader against PyYAML
   on every bundled file. Write frontmatter in the shapes it handles:
   `key: value`, folded `key: >-` blocks, and `[a, b]` or `- item` lists.
-- **Hatchling ships every file under `src/crispr_analysis_utils/` that git
-  does not ignore, tracked or not.** Keep scratch files out of the package. CI
-  checks that the wheel holds no `tests/`, `scripts/` or stray scripts, and
-  that it holds every skill file.
+- **Hatchling ships every file under `src/crispr_analysis_utils/` that the
+  root `.gitignore` does not exclude, tracked or not.** It ignores
+  `.git/info/exclude`, nested `.gitignore` files and global excludes, so keep
+  scratch files out of the package directory. CI builds from a clean checkout
+  and checks that the wheel holds no `tests/`, `scripts/` or stray scripts, and
+  that it holds every skill file; a local `uv build` has no such guard.
 - **gem3-mapper is linux-64 only here.** bioconda builds it for linux-64 and
   osx-64, not Apple silicon, so the pixi environments include it only on
   linux-64. The unit tests mock the binaries; CI's `test` job checks that they
@@ -200,13 +202,16 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
       same QNAME;
     - BED column 4 is the protospacer (the read minus the PAM and any
       soft-clipped leading base) since 81c6db4;
-    - on the reverse strand the PAM is at the start of the read as SAM stores it;
+    - on the reverse strand the PAM is at the start of the read as SAM stores
+      it, and the rules are mirrored except at the spacer's two ends: a deletion
+      between spacer and PAM passes on `+` but fails on `-`, and one right after
+      the read's first base fails on `+` but passes on `-`;
     - the "auto" outputs go next to the unique SAM, else the multi SAM, else the
       working directory, and the SAM outputs are written only when both are
       given;
     - `alias_by_guide_id` is looked up by that full read sequence, PAM included,
       not by the spacer.
 - **`test_filter_guide_alignments_reports_sequence_5prime_to_3prime` is a
-  strict xfail.** It has been stale since 81c6db4, and its input stores the
+  strict xfail.** It has been stale since f3ba75e, and its input stores the
   PAM-first orientation as SAM SEQ. Fix or replace it in the guide-alignment
   redesign; being strict, it fails loudly if it starts passing.

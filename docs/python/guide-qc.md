@@ -54,8 +54,11 @@ does not already start with `G`.
 - No insertion or deletion inside the spacer.
 - No soft clip, except the leading `G` base, which may be soft-clipped by
   default (`allow_leading_g_softclip=True`).
-- On the reverse strand the same rules apply mirrored: the PAM is at the start
-  of the read as SAM stores it.
+- On the reverse strand the rules are mirrored, with the PAM at the start of
+  the read as SAM stores it, except for a deletion at either end of the
+  spacer: one between spacer and PAM is accepted on `+` but rejected on `-`,
+  and one right after the read's first base is rejected on `+` but accepted on
+  `-` (with the leading-G soft clip allowed).
 
 Mismatches inside the spacer are not filtered: read the `NM` and `AS` columns
 of the BED.

@@ -13,8 +13,11 @@ description: >-
 # GEM mapping (`cau.gem_mapper`)
 
 Thin wrappers that run the GEM3 binaries through bash with `pipefail`. A
-failing command raises `RuntimeError` carrying its exit status, stdout and
-stderr.
+failing command raises `RuntimeError` with its exit status (`RC=`). GEM's own
+output goes to the log file, always for `map_guides_with_gem` and for
+`build_gem_index` when `log_path` is given, so in those cases the exception's
+`STDOUT` and `STDERR` are empty: **read the log**. A missing binary shows there
+as `command not found` with `RC=127`.
 
 ## Getting GEM3
 
@@ -36,8 +39,11 @@ with no arguments prints its usage, a quick check that it is installed.
 ## Usage
 
 ```python
+from pathlib import Path
+
 import crispr_analysis_utils as cau
 
+Path("gem_index").mkdir(parents=True, exist_ok=True)  # neither wrapper creates folders
 cau.gem_mapper.build_gem_index(
     "hg38.fa",
     "gem_index/hg38",  # GEM writes gem_index/hg38.gem
@@ -64,5 +70,9 @@ cau.gem_mapper.map_guides_with_gem(
 - Logs: without `log_path`, `map_guides_with_gem` sends GEM's output to the SAM
   path with a `.log` suffix. `build_gem_index` writes a log only when
   `log_path` is given, and otherwise returns GEM's stdout.
+- Neither wrapper creates folders. The folder of the log (by default, the SAM's
+  folder) must exist, or bash fails the redirect before GEM starts: a
+  `RuntimeError` whose `STDERR` says `No such file or directory`. Create the
+  index folder up front as well.
 - The binaries are looked up on PATH; `gem_indexer_bin` and `gem_mapper_bin`
   override them.

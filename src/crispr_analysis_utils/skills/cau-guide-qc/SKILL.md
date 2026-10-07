@@ -22,8 +22,9 @@ Two steps of the guide alignment QC workflow:
    alignments that look like real target sites, and writes tables describing
    every guide.
 
-The filter needs pysam: `pip install "crispr-analysis-utils[alignment]"`. The
-repository's pixi environments already include it.
+The filter needs pysam, from the package's `alignment` extra (the README has
+the install line) or directly with `pip install "pysam>=0.22"`. The
+repository's default and dev pixi environments include it.
 
 ## Ask before running
 
@@ -47,8 +48,11 @@ repository's pixi environments already include it.
   except at `N` positions of the PAM.
 - No insertion or deletion inside the spacer.
 - No soft clip, except the single leading-G base when allowed.
-- The same rules hold mirrored on the reverse strand, where the PAM is at the
-  start of the read as SAM stores it.
+- The rules are mirrored on the reverse strand, where the PAM is at the start
+  of the read as SAM stores it, except for a deletion at either end of the
+  spacer. A deletion between spacer and PAM is accepted on `+` but rejected on
+  `-`, and (with the leading-G soft clip allowed) a deletion right after the
+  read's first base is rejected on `+` but accepted on `-`.
 - Mismatches inside the spacer are **not** filtered: read `NM` and `AS` in the
   BED. PAM mismatches are found through the `MD` tag (and `X` CIGAR
   operations), so an aligner that omits `MD` makes every PAM look clean.
