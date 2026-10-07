@@ -11,9 +11,11 @@ on:
 permissions:
   contents: read
 
+# Builds queue per branch (a newer push to a pull request cancels the older
+# build); only the deploy job shares the repository-wide `pages` group.
 concurrency:
-  group: pages
-  cancel-in-progress: false
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Runs on every pull request: --strict turns a broken link or reference into a failure.
@@ -34,6 +36,9 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: docs-build
     runs-on: ubuntu-latest
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

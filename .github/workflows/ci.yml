@@ -64,7 +64,12 @@ jobs:
       # the pull request adds. The lockfiles are exempt, as in the hook.
       - name: No blob over 512 KB in the pull request's history
         if: github.event_name == 'pull_request'
+        # An explicit `shell: bash` adds pipefail, so a failing git command fails
+        # the step instead of handing awk an empty list.
+        shell: bash
         run: |
+          git rev-parse --verify --quiet "origin/${{ github.base_ref }}" > /dev/null \
+              || { echo "::error::base branch origin/${{ github.base_ref }} was not fetched"; exit 1; }
           git rev-list --objects "origin/${{ github.base_ref }}..HEAD" \
               | git cat-file --batch-check='%(objecttype) %(objectsize) %(rest)' \
               | awk '$1 == "blob" && $2 > 524288 && $3 !~ /^(uv|pixi)\.lock$/ { print; found = 1 } END { exit found }'

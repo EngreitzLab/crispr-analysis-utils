@@ -8,7 +8,9 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        stages: [pre-commit]  # its manifest also lists pre-push
       - id: end-of-file-fixer
+        stages: [pre-commit]  # its manifest also lists pre-push
       - id: mixed-line-ending
         args: [--fix=lf]
       - id: check-yaml
