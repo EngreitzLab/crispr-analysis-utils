@@ -49,5 +49,4 @@ nav:
           - counts_per_million: python/reference/counts-per-million.md
   - Vignettes:
       - Guide Alignment QC: python/tutorial-guide-alignment-qc.md
-  - R API: r-api.md
   - Contributing: contributing.md

@@ -4,7 +4,7 @@ Keep reusable analysis helpers small, documented, and tested.
 
 ## Documentation Style
 
-Python functions should use NumPy-style docstrings:
+Functions use NumPy-style docstrings:
 
 ```python
 def my_function(x: float) -> float:
@@ -22,19 +22,6 @@ def my_function(x: float) -> float:
     """
 ```
 
-R functions should use roxygen comments:
-
-```r
-#' Short summary
-#'
-#' @param x Description of the input.
-#' @return Description of the output.
-#' @export
-my_function <- function(x) {
-  x
-}
-```
-
 ## Checks
 
 Run these before opening a pull request:
@@ -42,5 +29,4 @@ Run these before opening a pull request:
 ```bash
 uv sync
 uv run pytest
-Rscript -e 'testthat::test_local(load_package = "source")'
 ```

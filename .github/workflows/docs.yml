@@ -33,25 +33,8 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install --group docs
 
-      - name: Build Python documentation
+      - name: Build documentation
         run: mkdocs build --strict --site-dir site
-
-      - uses: r-lib/actions/setup-r@v2
-        with:
-          r-version: release
-
-      - uses: r-lib/actions/setup-r-dependencies@v2
-        with:
-          packages: |
-            any::pkgdown
-            any::roxygen2
-            any::testthat
-
-      - name: Build R documentation
-        run: Rscript -e 'roxygen2::roxygenise(); pkgdown::build_site(new_process = FALSE, override = list(destination = "site/r"))'
-
-      - name: Verify R site output exists
-        run: test -f site/r/index.html
 
       - uses: actions/upload-pages-artifact@v3
         if: github.event_name != 'pull_request'

@@ -5,9 +5,3 @@ __pycache__/
 .mypy_cache/
 .venv/
 site/
-
-.Rhistory
-.RData
-.Rproj.user/
-*.Rproj
-*.Rcheck/
