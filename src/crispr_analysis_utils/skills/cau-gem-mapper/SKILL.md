@@ -23,10 +23,13 @@ as `command not found` with `RC=127`.
 
 `gem-indexer` and `gem-mapper` come from the bioconda package `gem3-mapper`,
 which is built for linux-64 and osx-64 only, not for Apple silicon. In this
-repository the pixi environments include it on linux-64 (`pixi shell`, or
-prefix commands with `pixi run`). Elsewhere:
-`conda install -c conda-forge -c bioconda gem3-mapper`. Running `gem-mapper`
-with no arguments prints its usage, a quick check that it is installed.
+repository the pixi `default` and `dev` environments include it on both. On
+Apple silicon pixi installs those environments as osx-64, which runs under
+Rosetta 2, Python and pysam included (`pixi shell -e dev`, or prefix commands
+with `pixi run -e dev`). Elsewhere:
+`conda install -c conda-forge -c bioconda gem3-mapper`, which on Apple silicon
+works only in an osx-64 environment. Running `gem-mapper` with no arguments
+prints its usage, a quick check that it is installed.
 
 ## Ask before running
 

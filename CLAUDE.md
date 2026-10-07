@@ -20,7 +20,7 @@ duplicate the README here, point at it.
 ## Layout
 
 src layout: the package is importable only once installed, and editable is
-fine (`uv sync` and `pixi install` both do it).
+fine (`pixi install` and `uv sync` both do it).
 
 - `src/crispr_analysis_utils/` -- the package, **and the Claude Code plugin
   root**: `.claude-plugin/marketplace.json` points its one plugin here.
@@ -48,15 +48,16 @@ fine (`uv sync` and `pixi install` both do it).
 ## Commands
 
 ```bash
-uv sync                          # .venv with the dev group, editable install
-uv run pytest
-
-pixi install -e dev              # conda + PyPI; gem3-mapper on linux-64
+pixi install -e dev              # conda + PyPI: the package, dev tools and GEM3
 pixi run -e dev test
 pixi run -e dev lint             # every pre-commit hook on every tracked file
 pixi run -e dev install-hooks    # once per clone: commit and push hooks
+pixi run -e dev gem-mapper       # GEM3's usage: the binaries are on the PATH
 pixi run -e docs docs            # serve the site locally
 pixi run -e docs docs-build      # mkdocs build --strict, as CI runs it
+
+uv sync                          # Python only, no GEM3: .venv with the dev group
+uv run pytest
 
 uv build && uvx twine check --strict dist/*
 uv lock && pixi lock             # after any dependency change; commit both
@@ -65,7 +66,14 @@ cau install-skills --list
 claude plugin validate --strict . && claude plugin validate --strict src/crispr_analysis_utils
 ```
 
-Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
+pixi is the main tool, and its `dev` environment is the one environment for
+everything, GEM3 included. `default` and `dev` carry GEM3 on linux-64 and
+osx-64; on Apple silicon pixi installs them as osx-64, which runs under
+Rosetta. `docs` has no GEM3 and stays native. uv stays for the CI jobs that
+need no conda: the `test-pip` matrix, `build` and `docs-build`.
+
+Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14; the pixi environments
+use 3.13.
 
 ## Conventions
 
@@ -172,10 +180,17 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   scratch files out of the package directory. CI builds from a clean checkout
   and checks that the wheel holds no `tests/`, `scripts/` or stray scripts, and
   that it holds every skill file; a local `uv build` has no such guard.
-- **gem3-mapper is linux-64 only here.** bioconda builds it for linux-64 and
-  osx-64, not Apple silicon, so the pixi environments include it only on
-  linux-64. The unit tests mock the binaries; CI's `test` job checks that they
-  run.
+- **On Apple silicon, `default` and `dev` are osx-64 environments.** bioconda
+  builds gem3-mapper for linux-64 and osx-64 only, so the `gem` feature limits
+  the environments that include it to those two platforms, and pixi falls back
+  to osx-64 there. Everything in them runs under Rosetta, Python included:
+  `platform.machine()` returns `x86_64`. pixi warns about the fallback once per
+  clone and about archspec once per environment; both are expected. A clone
+  whose `default` or `dev` was installed as osx-arm64 (before GEM came to
+  macOS) keeps the arm64 PyPI wheels when pixi switches it to osx-64, and
+  pysam then fails to import ("incompatible architecture"): run
+  `pixi clean -e dev` and `pixi clean -e default`, then reinstall. The unit
+  tests mock the binaries; CI's `test` job checks that they run.
 - **pysam is optional** (the `alignment` extra) and imported inside
   `filter_guide_alignments`. Keep it out of module-level imports. The dev group
   installs it for the tests.

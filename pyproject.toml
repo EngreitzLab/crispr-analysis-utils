@@ -90,24 +90,30 @@ required-version = ">=0.12,<0.13"
 # Python packages still resolve from PyPI. pixi locks to pixi.lock, uv to uv.lock.
 [tool.pixi.workspace]
 channels = ["conda-forge", "bioconda"]
-platforms = ["linux-64", "osx-arm64"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
 requires-pixi = ">=0.81"
 
 [tool.pixi.dependencies]
 python = "3.13.*"
 
-# bioconda builds gem3-mapper for linux-64 and osx-64 only.
-[tool.pixi.target.linux-64.dependencies]
+# bioconda builds gem3-mapper for linux-64 and osx-64, not osx-arm64. An environment
+# with this feature has only those two platforms; on Apple silicon pixi installs it as
+# osx-64, which runs under Rosetta.
+[tool.pixi.feature.gem]
+platforms = ["linux-64", "osx-64"]
+
+[tool.pixi.feature.gem.dependencies]
 gem3-mapper = ">=3.6.1"
 
 # pixi does not install the project by itself.
 [tool.pixi.pypi-dependencies]
 crispr-analysis-utils = { path = ".", editable = true }
 
-# The `alignment` extra and the `dev` and `docs` groups become features of the same name.
+# The `alignment` extra and the `dev` and `docs` groups become features of the same name;
+# `gem` is defined above. docs has no GEM, so it stays native on all three platforms.
 [tool.pixi.environments]
-default = { features = ["alignment"], solve-group = "default" }
-dev = { features = ["alignment", "dev"], solve-group = "default" }
+default = { features = ["alignment", "gem"], solve-group = "default" }
+dev = { features = ["alignment", "dev", "gem"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
 [tool.pixi.feature.dev.tasks]

@@ -20,15 +20,20 @@ Filtering guide alignments (SAM/BAM) needs pysam, from the `alignment` extra:
 pip install "crispr-analysis-utils[alignment] @ git+https://github.com/EngreitzLab/crispr-analysis-utils"
 ```
 
-To work on the package, or to get the GEM3 aligner as well (linux-64 only),
-clone the repository and use [pixi](https://pixi.sh) or
-[uv](https://docs.astral.sh/uv/):
+To get the GEM3 aligner as well, or to work on the package, clone the
+repository and use [pixi](https://pixi.sh): one environment holds the package,
+pysam and GEM3, on Linux (x86-64) and macOS. bioconda builds GEM3 for x86-64
+only, so on Apple silicon pixi installs that environment as an Intel macOS
+(osx-64) one, which runs under Rosetta 2 (`softwareupdate --install-rosetta`
+installs it). [uv](https://docs.astral.sh/uv/) works too, for the Python side
+only:
 
 ```bash
 git clone https://github.com/EngreitzLab/crispr-analysis-utils.git
 cd crispr-analysis-utils
-pixi install  # conda + PyPI environment; includes gem3-mapper on linux-64
-uv sync       # or a uv virtual environment, with the development tools
+pixi install         # the package, pysam and GEM3
+pixi install -e dev  # the same, plus the development tools
+uv sync              # or a uv virtual environment: Python only, no GEM3
 ```
 <!-- --8<-- [end:install] -->
 
@@ -100,7 +105,8 @@ pixi run -e dev lint           # every hook on every tracked file
 pixi run -e docs docs          # the documentation site, served locally
 ```
 
-With uv instead: `uv sync`, `uv run pytest`, `uv run pre-commit install`.
+With uv instead (no GEM3): `uv sync`, `uv run pytest`,
+`uv run pre-commit install`.
 
 `main` changes only through pull requests whose CI checks pass. The
 conventions (4-space indentation, `ruff check`, no file over 512 KB, UPPERCASE
