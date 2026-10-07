@@ -86,7 +86,12 @@ def run(args: argparse.Namespace) -> int:
         )
 
     for item, destination in plan:
-        _install(item, destination, symlink=args.symlink)
+        try:
+            _install(item, destination, symlink=args.symlink)
+        except OSError as error:
+            raise CommandError(
+                f"could not install {item.name} to {destination}: {error}"
+            ) from error
         print(f"Installed {item.kind} {item.name}: {destination}")
     print(
         "New Claude Code sessions pick these up. Install either this way or as the "
@@ -149,12 +154,12 @@ def read_frontmatter(path: Path) -> dict[str, str | list[str]]:
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
             continue
+        if stripped.startswith("- ") and isinstance(fields.get(key), list):
+            fields[key].append(_unquote(stripped[2:]))
+            continue
         if line[0] in " \t" and key is not None:
             value = fields[key]
-            if isinstance(value, list):
-                if stripped.startswith("- "):
-                    value.append(_unquote(stripped[2:]))
-            else:
+            if not isinstance(value, list):
                 fields[key] = f"{value} {stripped}".strip()
             continue
         key, _, raw = line.partition(":")
@@ -213,6 +218,8 @@ def _resolve_target(target: Path | None) -> Path:
     if target is None:
         target = Path(os.environ.get("CLAUDE_CONFIG_DIR") or "~/.claude")
     target = target.expanduser()
+    if target.exists() and not target.is_dir():
+        raise CommandError(f"--target {target} is not a directory")
     if target.name in ("skills", "agents"):
         raise CommandError(
             f"--target is the Claude Code configuration directory, not its "
@@ -231,9 +238,15 @@ def _check_destinations(plan: list[tuple[Bundled, Path]], *, force: bool) -> Non
     """Refuse the whole install before anything is written."""
     existing = []
     for item, destination in plan:
-        # Resolve the parent, not the destination itself: an earlier --symlink
-        # install is a link to the bundled copy, and replacing it is fine.
-        if destination.parent.resolve() / destination.name == item.source.resolve():
+        # Compare file identity, not path strings: on a case-insensitive
+        # filesystem (macOS) or through a linked parent, a different-looking path
+        # can still be the bundled copy, which --force would delete. An earlier
+        # --symlink install is a link to the bundled copy and may be replaced.
+        if (
+            os.path.lexists(destination)
+            and not destination.is_symlink()
+            and destination.samefile(item.source)
+        ):
             raise CommandError(
                 f"{destination} is the bundled copy itself; choose another --target."
             )

@@ -183,3 +183,56 @@ def test_symlink_warns_when_not_an_editable_install(
     monkeypatch.setattr(install_skills, "_is_editable_install", lambda: False)
     assert run_cau("--target", str(target), "--symlink") == 0
     assert "not an editable install" in capsys.readouterr().err
+
+
+def test_refuses_a_case_variant_of_the_bundle(bundle):
+    """On a case-insensitive filesystem (the macOS default) PACKAGE is package."""
+    variant = bundle.with_name(bundle.name.upper())
+    if not variant.exists():
+        pytest.skip("case-sensitive filesystem")
+    assert run_cau("--target", str(variant), "--force") == 1
+    assert (bundle / "skills" / "cau-alpha" / "SKILL.md").is_file()
+
+
+def test_refuses_a_target_whose_skills_folder_links_to_the_bundle(bundle, target):
+    target.mkdir()
+    (target / "skills").symlink_to(bundle / "skills", target_is_directory=True)
+    assert run_cau("--target", str(target), "--force") == 1
+    assert (bundle / "skills" / "cau-alpha" / "SKILL.md").is_file()
+
+
+def test_a_dangling_link_counts_as_installed(bundle, target, tmp_path):
+    """What --symlink leaves behind once its environment is rebuilt."""
+    (target / "skills").mkdir(parents=True)
+    link = target / "skills" / "cau-alpha"
+    link.symlink_to(tmp_path / "gone", target_is_directory=True)
+    assert run_cau("--target", str(target)) == 1
+    assert link.is_symlink() and not link.exists()
+    assert not (target / "skills" / "cau-beta").exists()
+    assert not (target / "agents").exists()
+
+
+def test_target_that_is_a_file_is_an_error(bundle, tmp_path, capsys):
+    not_a_dir = tmp_path / "file"
+    not_a_dir.write_text("x")
+    assert run_cau("--target", str(not_a_dir)) == 1
+    assert "is not a directory" in capsys.readouterr().err
+
+
+def test_filesystem_errors_are_reported_without_traceback(bundle, target, capsys):
+    agents = target / "agents"
+    agents.mkdir(parents=True)
+    agents.chmod(0o500)
+    try:
+        assert run_cau("--target", str(target)) == 1
+    finally:
+        agents.chmod(0o700)
+    assert "cau: error: could not install cau-alpha-runner" in capsys.readouterr().err
+
+
+def test_reads_a_block_list_written_at_column_zero(bundle, target):
+    agent = bundle / "agents" / "cau-alpha-runner.md"
+    agent.write_text(AGENT.replace("skills: [cau-alpha]", "skills:\n- cau-alpha"))
+    assert install_skills.bundled_items()["cau-alpha-runner"].preloads == ("cau-alpha",)
+    assert run_cau("cau-alpha-runner", "--target", str(target)) == 0
+    assert (target / "skills" / "cau-alpha" / "SKILL.md").is_file()
