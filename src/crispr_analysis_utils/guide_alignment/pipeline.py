@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .. import __version__
+from .._version import __version__
 from ._alignment import check_contigs, check_max_mismatches, open_reference
 from ._files import check_plain_fasta, file_md5, write_json
 from .gem import (

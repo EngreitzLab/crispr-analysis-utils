@@ -1,10 +1,11 @@
 # Coming from `guide_qc` and `gem_mapper`
 
 <!-- --8<-- [start:migration] -->
-`cau guide-alignment` replaces the earlier three-step workflow:
-`guide_qc.guides_to_fastq`, `gem_mapper.build_gem_index` and
-`gem_mapper.map_guides_with_gem`, then `guide_qc.filter_guide_alignments`,
-chained by `scripts/run_guide_alignment_qc.py`.
+`cau guide-alignment` replaced an earlier three-step workflow, since removed
+from the package: `guide_qc.guides_to_fastq`, `gem_mapper.build_gem_index`
+and `gem_mapper.map_guides_with_gem`, then
+`guide_qc.filter_guide_alignments`, chained by the repository's
+`scripts/run_guide_alignment_qc.py`.
 
 ## Why the numbers change
 

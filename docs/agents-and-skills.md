@@ -7,9 +7,7 @@
 | Skill | Covers |
 | --- | --- |
 | `cau-normalization` | `cau.counts_per_million` |
-| `cau-guide-alignment` | `crispr_analysis_utils.guide_alignment` and `cau guide-alignment`: aligning a guide library to a genome, and reading its outputs |
-| `cau-guide-qc` | `cau.guide_qc`: guide FASTQs and filtering guide alignments |
-| `cau-gem-mapper` | `cau.gem_mapper`: GEM3 indexing and mapping |
+| `cau-guide-alignment` | `cau.guide_alignment` and the `cau guide-alignment` command: aligning a guide library to a genome, and reading its outputs |
 
 | Agent | Does | Preloads |
 | --- | --- | --- |

@@ -51,8 +51,7 @@ cpm = cau.counts_per_million(counts)
 | Module | What it does |
 | --- | --- |
 | `cau.counts_per_million` | Counts-per-million normalization of count matrices |
-| `cau.guide_qc` | Guide FASTQs for alignment, and QC filtering of guide alignments |
-| `cau.gem_mapper` | GEM3 genome indexing and guide mapping |
+| `cau.guide_alignment` | Guide library alignment with GEM3: each guide's sites, class, coordinates and cut site (also the `cau guide-alignment` command) |
 
 The `cau` command line tool comes with the package:
 

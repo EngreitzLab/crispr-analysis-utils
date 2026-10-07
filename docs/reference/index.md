@@ -21,13 +21,6 @@ the main names, such as `guide_alignment.run` and
 - [`summary`](guide-alignment-summary.md): the classes, and the output tables.
 - [`iupac`](guide-alignment-iupac.md): IUPAC codes and PAM patterns.
 
-## Earlier guide QC
-
-`guide_qc` ([`guides_to_fastq`](guides-to-fastq.md),
-[`filter_guide_alignments`](filter-guide-alignments.md)) and `gem_mapper`
-([`build_gem_index`](build-gem-index.md),
-[`map_guides_with_gem`](map-guides-with-gem.md)).
-
 ## Normalization
 
 - [`counts_per_million`](counts-per-million.md)
