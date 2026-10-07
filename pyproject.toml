@@ -1,48 +1,89 @@
 [build-system]
-requires = ["hatchling>=1.24"]
+# 1.27 is the first hatchling that writes the PEP 639 license expression by default.
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "crispr-analysis-utils"
 version = "0.1.0"
-description = "Reusable Python utilities for CRISPR screen analysis."
+description = "Python utilities and command-line tools for analysing CRISPR perturbation screens."
 readme = "README.md"
-requires-python = ">=3.9"
-license = { file = "LICENSE.md" }
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
-  { name = "Engreitz Lab" }
+    { name = "Engreitz Lab" },
+]
+keywords = [
+    "crispr",
+    "perturbation-screens",
+    "guide-rna",
+    "bioinformatics",
+]
+# No `License ::` classifier: PEP 639 forbids one next to a license expression.
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-  "numpy>=1.23",
-  "pandas>=1.5"
+    "numpy>=1.23",
+    "pandas>=1.5",
 ]
 
 [project.optional-dependencies]
-plots = [
-  "matplotlib>=3.7",
-  "seaborn>=0.13"
+# SAM/BAM filtering in guide_qc. Imported lazily, so the rest of the package works without it.
+alignment = [
+    "pysam>=0.22",
 ]
-docs = [
-  "mkdocs>=1.6",
-  "mkdocs-material>=9.5",
-  "mkdocstrings[python]>=0.25"
-]
-dev = [
-  "pytest>=8",
-  "ruff>=0.4"
-]
+
+[project.scripts]
+cau = "crispr_analysis_utils.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/EngreitzLab/crispr-analysis-utils"
 Documentation = "https://engreitzlab.github.io/crispr-analysis-utils/"
 Repository = "https://github.com/EngreitzLab/crispr-analysis-utils"
+Issues = "https://github.com/EngreitzLab/crispr-analysis-utils/issues"
+
+# PEP 735 groups: development-only, never part of the published metadata.
+# `uv sync` installs `dev` by default; pixi turns each group into a feature.
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pysam>=0.22",
+    "pyyaml>=6",
+    "pre-commit>=4",
+]
+# mkdocs-material 9.7.5+ itself caps mkdocs<2 (2.0 is a plugin-less rewrite).
+docs = [
+    "mkdocs-material>=9.7.5,<10",
+    "mkdocstrings[python]>=1.0",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/crispr_analysis_utils"]
 
+# Hatchling otherwise puts the whole tree in the sdist, untracked files included.
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+]
+
 [tool.pytest.ini_options]
-pythonpath = ["src"]
 testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+
+[tool.uv]
+# The single uv pin: setup-uv in CI reads it, and the lockfile format is stable within a minor.
+required-version = ">=0.12,<0.13"
 
 [tool.ruff]
 line-length = 88

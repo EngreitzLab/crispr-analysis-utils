@@ -28,10 +28,10 @@ install.packages("remotes")
 remotes::install_github("EngreitzLab/crispr-analysis-utils")
 ```
 
-For Python plotting helpers, install the optional plotting dependencies:
+For SAM/BAM guide filtering, install the `alignment` extra (pysam):
 
 ```bash
-python -m pip install -e ".[plots]"
+python -m pip install -e ".[alignment]"
 ```
 
 ## Use
@@ -72,8 +72,7 @@ R functions are documented from roxygen comments with pkgdown.
 Build the combined documentation site locally with:
 
 ```bash
-python -m pip install -e ".[docs]"
-mkdocs build --strict --site-dir site
+uv run --only-group docs mkdocs build --strict --site-dir site
 Rscript -e 'roxygen2::roxygenise(); pkgdown::build_site(new_process = FALSE, override = list(destination = "site/r"))'
 ```
 
@@ -103,8 +102,8 @@ pre-commit run --all-files
 Run Python tests:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m pytest
+uv sync
+uv run pytest
 ```
 
 Run R tests:

@@ -40,7 +40,7 @@ my_function <- function(x) {
 Run these before opening a pull request:
 
 ```bash
-python -m pip install -e ".[dev]"
-python -m pytest
+uv sync
+uv run pytest
 Rscript -e 'testthat::test_local(load_package = "source")'
 ```
