@@ -88,10 +88,13 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   deleted inside the PR cannot reach history. `uv.lock` and `pixi.lock` are
   exempt because they are generated. Data never goes in git (`.gitignore`
   covers the usual formats); build test fixtures inside the tests.
-- **`main` is PR-only**, by a GitHub ruleset requiring the CI checks. Work on
-  a branch. The `no-commit-to-branch` hook catches a local commit to `main`;
-  it always runs, so the pixi `lint` task and CI set
-  `SKIP=no-commit-to-branch`.
+- **`main` is PR-only**, by branch protection (Settings, Branches) that
+  requires the nine CI checks, admins included. Work on a branch. The
+  `no-commit-to-branch` hook catches a local commit to `main`; it always runs,
+  so the pixi `lint` task and CI set `SKIP=no-commit-to-branch`. The required
+  checks are listed by job name (`test-pip (3.11)` and so on): renaming a job,
+  or changing the Python matrix, means updating them, or every pull request
+  waits on a check that never reports.
 - **Commit messages: UPPERCASE verb prefix** -- `ADD`, `FIX`, `UPDATE`,
   `REWRITE`, `RELEASE`, `REMOVE`.
 - **Docs accuracy is a hard rule.** Every concrete detail (defaults, column
