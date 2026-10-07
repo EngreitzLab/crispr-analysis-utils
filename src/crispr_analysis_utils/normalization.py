@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 import numpy as np
@@ -56,7 +57,11 @@ def counts_per_million(
     0  250000.0  500000.0
     1  750000.0  500000.0
     """
-    if axis not in (0, 1):
+    if (
+        isinstance(axis, (bool, np.bool_))
+        or not isinstance(axis, (int, np.integer))
+        or axis not in (0, 1)
+    ):
         raise ValueError("axis must be 0 for columns or 1 for rows.")
     if not _is_valid_pseudocount(pseudocount):
         raise ValueError("pseudocount must be a single non-negative number.")
@@ -90,7 +95,10 @@ def _is_valid_pseudocount(value: object) -> bool:
         return False
     if not isinstance(value, (int, float, np.integer, np.floating)):
         return False
-    return bool(np.isfinite(value)) and value >= 0
+    try:
+        return math.isfinite(value) and value >= 0
+    except OverflowError:  # an int too large for a float
+        return False
 
 
 def _is_numeric(dtype: object) -> bool:

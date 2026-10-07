@@ -19,13 +19,26 @@ def test_counts_per_million_normalizes_columns():
     assert result["sample_b"].sum() == pytest.approx(1_000_000)
 
 
+# Rows sum to 200 and 800, columns to 400 and 600, so the two axes differ.
+ASYMMETRIC = [[100, 100], [300, 500]]
+
+
 def test_counts_per_million_normalizes_rows():
-    counts = pd.DataFrame({"sample_a": [100, 300], "sample_b": [300, 100]})
+    counts = pd.DataFrame(ASYMMETRIC, columns=["sample_a", "sample_b"])
 
     result = counts_per_million(counts, axis=1)
 
-    assert result.iloc[0].tolist() == pytest.approx([250_000, 750_000])
-    assert result.sum(axis=1).tolist() == pytest.approx([1_000_000, 1_000_000])
+    assert result.iloc[0].tolist() == pytest.approx([500_000, 500_000])
+    assert result.iloc[1].tolist() == pytest.approx([375_000, 625_000])
+    assert not np.allclose(result, counts_per_million(counts, axis=0))
+
+
+def test_counts_per_million_normalizes_ndarray_rows():
+    result = counts_per_million(np.array(ASYMMETRIC), axis=1)
+
+    assert result.ravel().tolist() == pytest.approx(
+        [500_000, 500_000, 375_000, 625_000]
+    )
 
 
 def test_counts_per_million_accepts_ndarray():
@@ -53,14 +66,25 @@ def test_counts_per_million_rejects_zero_totals():
         counts_per_million(counts)
 
 
-@pytest.mark.parametrize("axis", [-1, 2, "columns"])
-def test_counts_per_million_rejects_bad_axis(axis):
+@pytest.mark.parametrize("axis", [-1, 2, "columns", True, 1.0, np.float64(0)])
+@pytest.mark.parametrize(
+    "counts", [pd.DataFrame({"a": [1, 2]}), np.array([[1], [2]])], ids=["df", "ndarray"]
+)
+def test_counts_per_million_rejects_bad_axis(counts, axis):
     with pytest.raises(ValueError, match="axis must be 0"):
-        counts_per_million(pd.DataFrame({"a": [1, 2]}), axis=axis)
+        counts_per_million(counts, axis=axis)
+
+
+def test_counts_per_million_accepts_numpy_integer_axis():
+    result = counts_per_million(np.array(ASYMMETRIC), axis=np.int64(1))
+
+    assert result[0].tolist() == pytest.approx([500_000, 500_000])
 
 
 @pytest.mark.parametrize(
-    "pseudocount", [-1, float("nan"), float("inf"), [1, 2], True, "1", None]
+    "pseudocount",
+    [-1, float("nan"), float("inf"), 10**400, [1, 2], True, "1", None],
+    ids=lambda value: repr(value)[:12],
 )
 def test_counts_per_million_rejects_invalid_pseudocount(pseudocount):
     with pytest.raises(ValueError, match="pseudocount must be a single"):
