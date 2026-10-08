@@ -1,0 +1,24 @@
+[package]
+name = "crispr-analysis-utils"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+license = "MIT"
+description = "The compiled core of crispr-analysis-utils."
+publish = false
+
+[lib]
+# Imported as crispr_analysis_utils._core; the sources live under rust/ so that
+# src/ stays the Python package alone.
+name = "_core"
+path = "rust/src/lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+# abi3-py311 builds one wheel for every Python the project supports, which keeps
+# the release matrix to one wheel per platform rather than one per version.
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py311"] }
+
+[profile.release]
+lto = true
+codegen-units = 1

@@ -20,7 +20,13 @@ duplicate the README here, point at it.
 ## Layout
 
 src layout: the package is importable only once installed, and editable is
-fine (`pixi install` does it).
+fine (`pixi install` does it, building the Rust core as it goes).
+
+The build backend is **maturin**, not hatchling, because the package ships a
+compiled extension. `Cargo.toml` at the root declares the crate, its sources
+are in `rust/`, and `[tool.maturin]` keeps `python-source = "src"` so the
+Python layout is unchanged. The wheel is **abi3** (`abi3-py311`), so one wheel
+per platform serves every supported Python rather than one per version.
 
 - `src/crispr_analysis_utils/` -- the package, **and the Claude Code plugin
   root**: `.claude-plugin/marketplace.json` points its one plugin here.
@@ -32,6 +38,9 @@ fine (`pixi install` does it).
                              tables), `pipeline` (`run`), `iupac`. One
                              analysis module, one skill.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
+    - `_core.abi3.so`     -- the compiled Rust core, built in place by an
+                             editable install and gitignored. Its sources are
+                             in `rust/src/`.
     - `_version.py`       -- `__version__`. Import it from here: `__init__`
                              imports `guide_alignment` first, so `from ..
                              import __version__` inside a subpackage is a
@@ -43,6 +52,9 @@ fine (`pixi install` does it).
                              `references/` for detail. Data, not packages.
     - `agents/<name>.md`  -- subagents, each preloading the skill of the
                              module it runs.
+- `Cargo.toml`, `rust/` -- the Rust crate behind `_core`, and its sources.
+                           `Cargo.lock` is committed, like the other two
+                           lockfiles.
 - `tests/`              -- pytest. `conftest.py` runs every test inside its
                            own `tmp_path`. `fake_gem.py` stands in for the GEM
                            binaries, and `planted_genome.py` builds the
@@ -183,12 +195,12 @@ use 3.13.
   runtime dependency. `tests/test_skills.py` checks the reader against PyYAML
   on every bundled file. Write frontmatter in the shapes it handles:
   `key: value`, folded `key: >-` blocks, and `[a, b]` or `- item` lists.
-- **Hatchling ships every file under `src/crispr_analysis_utils/` that the
-  root `.gitignore` does not exclude, tracked or not.** It ignores
-  `.git/info/exclude`, nested `.gitignore` files and global excludes, so keep
-  scratch files out of the package directory. CI builds from a clean checkout
-  and checks that the wheel holds no `tests/`, `scripts/` or stray scripts, and
-  that it holds every skill file; a local `uv build` has no such guard.
+- **maturin ships every file under `src/crispr_analysis_utils/` that the root
+  `.gitignore` does not exclude, tracked or not** (checked, not assumed). So
+  keep scratch files out of the package directory. CI builds from a clean
+  checkout and checks that the wheel holds no `tests/`, `scripts/` or stray
+  scripts, and that it holds every skill file; a local `uv build` has no such
+  guard.
 - **On Apple silicon, `default` and `dev` are osx-64 environments.** bioconda
   builds gem3-mapper for linux-64 and osx-64 only, so the `gem` feature limits
   the environments that include it to those two platforms, and pixi falls back

@@ -1,7 +1,8 @@
 [build-system]
-# 1.27 is the first hatchling that writes the PEP 639 license expression by default.
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
+# The package ships a compiled Rust core, so maturin builds it rather than
+# hatchling. Cargo.toml at the root holds the crate; rust/ holds its sources.
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
 
 [project]
 name = "crispr-analysis-utils"
@@ -62,15 +63,14 @@ docs = [
     "mkdocstrings[python]>=1.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/crispr_analysis_utils"]
-
-# Hatchling otherwise puts the whole tree in the sdist, untracked files included.
-[tool.hatch.build.targets.sdist]
-include = [
-    "/src",
-    "/tests",
-]
+[tool.maturin]
+# The Python package stays where it is; the extension lands inside it.
+python-source = "src"
+module-name = "crispr_analysis_utils._core"
+# One abi3 wheel serves every supported Python, so the matrix is per platform.
+features = ["pyo3/extension-module"]
+# maturin would otherwise leave the tests out of the sdist.
+include = [{ path = "tests/**/*", format = "sdist" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -93,6 +93,9 @@ requires-pixi = ">=0.81"
 
 [tool.pixi.dependencies]
 python = "3.13.*"
+# The editable install builds the Rust core, so every environment needs them.
+rust = ">=1.80"
+maturin = ">=1.9,<2"
 
 # bioconda builds gem3-mapper for linux-64 and osx-64, not osx-arm64. An environment
 # with this feature has only those two platforms; on Apple silicon pixi installs it as
