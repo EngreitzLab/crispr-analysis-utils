@@ -2,7 +2,7 @@
 name = "crispr-analysis-utils"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.82"  # Option::is_none_or
 license = "MIT"
 description = "The compiled core of crispr-analysis-utils."
 publish = false
