@@ -48,6 +48,7 @@ cpm = cau.counts_per_million(counts)
 
 | Module | What it does |
 | --- | --- |
+| `cau.accession` | Stable accession ids for guides, computed from their sequence |
 | `cau.counts_per_million` | Counts-per-million normalization of count matrices |
 | `cau.guide_alignment` | Guide library alignment with GEM3: each guide's sites, class, coordinates and cut site (also the `cau guide-alignment` command) |
 

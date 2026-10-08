@@ -21,6 +21,11 @@ the main names, such as `guide_alignment.run` and
 - [`summary`](guide-alignment-summary.md): the classes, and the output tables.
 - [`iupac`](guide-alignment-iupac.md): IUPAC codes and PAM patterns.
 
+## Accession
+
+- [`accession`](accession.md): stable accession ids for guides, computed
+  from their sequence.
+
 ## Normalization
 
 - [`counts_per_million`](counts-per-million.md)
