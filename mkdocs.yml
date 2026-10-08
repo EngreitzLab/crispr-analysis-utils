@@ -35,9 +35,9 @@ markdown_extensions:
       permalink: true
   - pymdownx.highlight
   - pymdownx.superfences
-  # Pages include README.md sections, and the guide-QC output tables from the
-  # cau-guide-qc skill, by marker instead of copying them. check_paths turns a
-  # missing include into a build failure.
+  # Pages include README.md sections, and the output tables and migration note
+  # of the cau-guide-alignment skill's references/, by marker instead of copying
+  # them. check_paths turns a missing include into a build failure.
   - pymdownx.snippets:
       base_path: [docs, .]
       check_paths: true
@@ -46,20 +46,21 @@ nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Guides:
-      - Guide QC: python/guide-qc.md
-      - GEM mapper: python/gem-mapper.md
-      - "Tutorial: guide alignment QC": python/tutorial-guide-alignment-qc.md
+      - Guide alignment: guide-alignment.md
+      - "Tutorial: guide alignment on a cluster": tutorial-guide-alignment.md
   - Agents and skills: agents-and-skills.md
   - API reference:
-      - Overview: python/reference/index.md
-      - Preprocessing:
-          - guides_to_fastq: python/reference/guides-to-fastq.md
-          - filter_guide_alignments: python/reference/filter-guide-alignments.md
-      - Mapping:
-          - build_gem_index: python/reference/build-gem-index.md
-          - map_guides_with_gem: python/reference/map-guides-with-gem.md
-      - Utilities:
-          - run_shell_cmd: python/reference/run-shell-cmd.md
+      - Overview: reference/index.md
+      - Guide alignment:
+          - run: reference/guide-alignment-run.md
+          - Guide library: reference/guide-alignment-library.md
+          - GEM: reference/guide-alignment-gem.md
+          - Sites: reference/guide-alignment-sites.md
+          - Orientation: reference/guide-alignment-orientation.md
+          - Classes and tables: reference/guide-alignment-summary.md
+          - IUPAC codes: reference/guide-alignment-iupac.md
       - Normalization:
-          - counts_per_million: python/reference/counts-per-million.md
+          - counts_per_million: reference/counts-per-million.md
+      - Utilities:
+          - run_shell_cmd: reference/run-shell-cmd.md
   - Contributing: contributing.md

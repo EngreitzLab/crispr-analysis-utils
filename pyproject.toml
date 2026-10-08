@@ -36,11 +36,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.23",
     "pandas>=1.5",
-]
-
-[project.optional-dependencies]
-# SAM/BAM filtering in guide_qc. Imported lazily, so the rest of the package works without it.
-alignment = [
     "pysam>=0.22",
 ]
 
@@ -58,7 +53,6 @@ Issues = "https://github.com/EngreitzLab/crispr-analysis-utils/issues"
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "pysam>=0.22",
     "pyyaml>=6",
     "pre-commit>=4",
 ]
@@ -80,7 +74,11 @@ include = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# No -m here: it would deselect the gem marker by default.
 addopts = "-ra --strict-markers"
+markers = [
+    "gem: needs the GEM3 binaries on the PATH (the pixi environments have them)",
+]
 
 [tool.uv]
 # The single uv pin: setup-uv in CI reads it, and the lockfile format is stable within a minor.
@@ -90,24 +88,30 @@ required-version = ">=0.12,<0.13"
 # Python packages still resolve from PyPI. pixi locks to pixi.lock, uv to uv.lock.
 [tool.pixi.workspace]
 channels = ["conda-forge", "bioconda"]
-platforms = ["linux-64", "osx-arm64"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
 requires-pixi = ">=0.81"
 
 [tool.pixi.dependencies]
 python = "3.13.*"
 
-# bioconda builds gem3-mapper for linux-64 and osx-64 only.
-[tool.pixi.target.linux-64.dependencies]
+# bioconda builds gem3-mapper for linux-64 and osx-64, not osx-arm64. An environment
+# with this feature has only those two platforms; on Apple silicon pixi installs it as
+# osx-64, which runs under Rosetta.
+[tool.pixi.feature.gem]
+platforms = ["linux-64", "osx-64"]
+
+[tool.pixi.feature.gem.dependencies]
 gem3-mapper = ">=3.6.1"
 
 # pixi does not install the project by itself.
 [tool.pixi.pypi-dependencies]
 crispr-analysis-utils = { path = ".", editable = true }
 
-# The `alignment` extra and the `dev` and `docs` groups become features of the same name.
+# The `dev` and `docs` groups become features of the same name; `gem` is defined above.
+# docs has no GEM, so it stays native on all three platforms.
 [tool.pixi.environments]
-default = { features = ["alignment"], solve-group = "default" }
-dev = { features = ["alignment", "dev"], solve-group = "default" }
+default = { features = ["gem"], solve-group = "default" }
+dev = { features = ["dev", "gem"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
 [tool.pixi.feature.dev.tasks]

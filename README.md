@@ -8,27 +8,26 @@ Documentation: <https://engreitzlab.github.io/crispr-analysis-utils/>
 <!-- --8<-- [start:install] -->
 ## Install
 
-The package is not on PyPI yet. Install it from GitHub:
+The package is not on PyPI yet. Install it from GitHub; pip brings numpy,
+pandas and pysam along:
 
 ```bash
 pip install "crispr-analysis-utils @ git+https://github.com/EngreitzLab/crispr-analysis-utils"
 ```
 
-Filtering guide alignments (SAM/BAM) needs pysam, from the `alignment` extra:
-
-```bash
-pip install "crispr-analysis-utils[alignment] @ git+https://github.com/EngreitzLab/crispr-analysis-utils"
-```
-
-To work on the package, or to get the GEM3 aligner as well (linux-64 only),
-clone the repository and use [pixi](https://pixi.sh) or
-[uv](https://docs.astral.sh/uv/):
+Aligning guides also needs the GEM3 aligner, which pip cannot install. To get
+it, or to work on the package, clone the repository and use
+[pixi](https://pixi.sh): one environment holds the package,
+pysam and GEM3, on Linux (x86-64) and macOS. bioconda builds GEM3 for x86-64
+only, so on Apple silicon pixi installs that environment as an Intel macOS
+(osx-64) one, which runs under Rosetta 2 (`softwareupdate --install-rosetta`
+installs it):
 
 ```bash
 git clone https://github.com/EngreitzLab/crispr-analysis-utils.git
 cd crispr-analysis-utils
-pixi install  # conda + PyPI environment; includes gem3-mapper on linux-64
-uv sync       # or a uv virtual environment, with the development tools
+pixi install         # the package, pysam and GEM3
+pixi install -e dev  # the same, plus the development tools
 ```
 <!-- --8<-- [end:install] -->
 
@@ -50,8 +49,7 @@ cpm = cau.counts_per_million(counts)
 | Module | What it does |
 | --- | --- |
 | `cau.counts_per_million` | Counts-per-million normalization of count matrices |
-| `cau.guide_qc` | Guide FASTQs for alignment, and QC filtering of guide alignments |
-| `cau.gem_mapper` | GEM3 genome indexing and guide mapping |
+| `cau.guide_alignment` | Guide library alignment with GEM3: each guide's sites, class, coordinates and cut site (also the `cau guide-alignment` command) |
 
 The `cau` command line tool comes with the package:
 
@@ -100,7 +98,7 @@ pixi run -e dev lint           # every hook on every tracked file
 pixi run -e docs docs          # the documentation site, served locally
 ```
 
-With uv instead: `uv sync`, `uv run pytest`, `uv run pre-commit install`.
+pixi is the default environment for development: it is the only one with GEM3.
 
 `main` changes only through pull requests whose CI checks pass. The
 conventions (4-space indentation, `ruff check`, no file over 512 KB, UPPERCASE

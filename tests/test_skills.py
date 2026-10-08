@@ -18,14 +18,14 @@ from crispr_analysis_utils.cli.install_skills import read_frontmatter
 
 PACKAGE = Path(crispr_analysis_utils.__file__).parent
 SKILLS = PACKAGE / "skills"
-AGENTS = PACKAGE / "agents"  # absent until the first agent exists
+AGENTS = PACKAGE / "agents"
 REPO = Path(__file__).resolve().parent.parent
 
 # Which analysis modules each skill or agent covers.
 COVERAGE = {
     "cau-normalization": ("normalization",),
-    "cau-guide-qc": ("guide_qc",),
-    "cau-gem-mapper": ("gem_mapper",),
+    "cau-guide-alignment": ("guide_alignment",),
+    "cau-guide-alignment-runner": ("guide_alignment",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.

@@ -115,7 +115,7 @@ def bundled_items() -> dict[str, Bundled]:
                     description=str(fields.get("description", "")),
                     source=path,
                 )
-    agents_dir = root / "agents"  # absent until the first agent exists
+    agents_dir = root / "agents"  # a bundle may have no agents
     if agents_dir.is_dir():
         for path in sorted(agents_dir.glob("*.md")):
             fields = read_frontmatter(path)
