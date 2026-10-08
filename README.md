@@ -21,8 +21,7 @@ it, or to work on the package, clone the repository and use
 pysam and GEM3, on Linux (x86-64) and macOS. bioconda builds GEM3 for x86-64
 only, so on Apple silicon pixi installs that environment as an Intel macOS
 (osx-64) one, which runs under Rosetta 2 (`softwareupdate --install-rosetta`
-installs it). [uv](https://docs.astral.sh/uv/) works too, for the Python side
-only:
+installs it):
 
 ```bash
 git clone https://github.com/EngreitzLab/crispr-analysis-utils.git
