@@ -13,7 +13,7 @@ pixi install -e dev
 pixi run -e dev install-hooks  # the commit and push hooks
 ```
 
-With uv instead: `uv sync`, then `uv run pre-commit install`.
+pixi is the default environment: it is the only one with GEM3.
 
 ## What the hooks and CI enforce
 

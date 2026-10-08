@@ -72,7 +72,7 @@ pixi run -e dev cau install-skills --list
 claude plugin validate --strict . && claude plugin validate --strict src/crispr_analysis_utils
 ```
 
-pixi is the main tool, and its `dev` environment is the one environment for
+pixi is the default, and its `dev` environment is the one environment for
 everything, GEM3 included: run the tests, the linters and `cau` there, not in
 a uv `.venv`. `default` and `dev` carry GEM3 on linux-64 and osx-64; on Apple
 silicon pixi installs them as osx-64, which runs under Rosetta. `docs` has no

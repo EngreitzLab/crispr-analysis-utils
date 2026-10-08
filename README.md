@@ -29,7 +29,6 @@ git clone https://github.com/EngreitzLab/crispr-analysis-utils.git
 cd crispr-analysis-utils
 pixi install         # the package, pysam and GEM3
 pixi install -e dev  # the same, plus the development tools
-uv sync              # or a uv virtual environment: Python only, no GEM3
 ```
 <!-- --8<-- [end:install] -->
 
@@ -100,8 +99,7 @@ pixi run -e dev lint           # every hook on every tracked file
 pixi run -e docs docs          # the documentation site, served locally
 ```
 
-With uv instead (no GEM3): `uv sync`, `uv run pytest`,
-`uv run pre-commit install`.
+pixi is the default environment for development: it is the only one with GEM3.
 
 `main` changes only through pull requests whose CI checks pass. The
 conventions (4-space indentation, `ruff check`, no file over 512 KB, UPPERCASE
