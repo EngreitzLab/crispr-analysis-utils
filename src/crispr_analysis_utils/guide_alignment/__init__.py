@@ -10,18 +10,12 @@ for the output tables (the ``write_*`` functions). `run` chains it all into
 one folder of outputs. The IUPAC helpers live in `iupac`.
 """
 
-from . import gem, iupac, pipeline
-from .gem import GemError, MappingResult, build_index, map_reads
-from .library import Guide, read_guides, write_site_reads, write_spacer_reads
-from .orientation import (
-    OrientationResult,
-    PerfectHit,
-    check_orientation,
-    resolve_orientation,
-    reversed_rows,
-)
+from . import iupac, pipeline, scan
+from .library import Guide, read_guides
+from .orientation import EVIDENCE, VERDICTS
 from .pipeline import OrientationError, RunResult, run
-from .sites import Site, SiteResult, read_sites
+from .scan import ScanResult, scan_guides
+from .sites import Site
 from .summary import (
     GuideSummary,
     fan_out_sites,
@@ -36,36 +30,29 @@ from .summary import (
 )
 
 __all__ = [
-    "GemError",
     "Guide",
     "GuideSummary",
-    "MappingResult",
     "OrientationError",
-    "OrientationResult",
-    "PerfectHit",
     "RunResult",
+    "EVIDENCE",
+    "EVIDENCE",
+    "ScanResult",
+    "VERDICTS",
+    "VERDICTS",
     "Site",
-    "SiteResult",
-    "build_index",
-    "check_orientation",
     "fan_out_sites",
-    "gem",
     "guide_columns",
     "iupac",
-    "resolve_orientation",
-    "reversed_rows",
-    "map_reads",
     "pipeline",
     "read_guides",
-    "read_sites",
     "run",
+    "scan",
+    "scan_guides",
     "summarize",
     "write_cut_sites_bed",
     "write_guides_bed",
     "write_guides_tsv",
     "write_orientation_tsv",
-    "write_site_reads",
     "write_sites_tsv",
-    "write_spacer_reads",
     "write_qc_tsv",
 ]

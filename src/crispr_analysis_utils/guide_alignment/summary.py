@@ -22,13 +22,15 @@ import os
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TextIO
+from typing import TYPE_CHECKING, TextIO
 
-from ._alignment import check_max_mismatches
 from .iupac import validate_pams
 from .library import Guide
-from .orientation import NOT_CHECKED, VERDICTS, OrientationResult
+from .orientation import NOT_CHECKED, VERDICTS
 from .sites import NO_PAM_CLASS, Site
+
+if TYPE_CHECKING:
+    from .scan import ScanResult
 
 UNIQUE = "unique"
 """Exactly one perfect site with a matching PAM."""
@@ -67,9 +69,9 @@ ORIENTATION_COLUMNS = (
     "start",
     "end",
     "strand",
-    "flank_5p",
-    "flank_3p",
+    "pam",
     "verdict",
+    "evidence",
 )
 """The columns of orientation.tsv, in order."""
 
@@ -111,15 +113,15 @@ class GuideSummary:
         ``unique``, ``multi``, ``mismatch_only`` or ``no_site``.
     orientation
         The orientation verdict, or ``not_checked``.
+    orientation_evidence
+        For a ``reverse_complement`` guide, whether that reading was a
+        distinct sequence or only the spacer's reverse complement; None
+        otherwise.
     g_added
         Whether the guide's site reads carry an added 5' G.
     min_mismatches
         The fewest spacer mismatches among the sites with a matching PAM;
         None without any.
-    n_alignments
-        The alignments the aligner reported for this guide in the site passes,
-        before any were verified: a repeat shows a large number here and few
-        sites. None when the counts were not given.
     n_sites
         Sites with a matching PAM by spacer mismatches: ``n_sites[m]`` sites
         have ``m``, for ``m`` from 0 to `max_mismatches`.
@@ -142,9 +144,9 @@ class GuideSummary:
     cut_site: int | None
     site_class: str
     orientation: str
+    orientation_evidence: str | None
     g_added: bool
     min_mismatches: int | None
-    n_alignments: int | None
     n_sites: tuple[int, ...]
     n_alt_pam: tuple[int, ...]
     input_sequence: str
@@ -155,10 +157,10 @@ def summarize(
     sites: Mapping[int, Sequence[Site]],
     orientation: Mapping[int, str] | None = None,
     *,
+    evidence: Mapping[int, str | None] | None = None,
     pam: str = "NGG",
     alt_pams: Iterable[str] = (),
     max_mismatches: int = 3,
-    n_alignments: Mapping[int, int] | None = None,
 ) -> list[GuideSummary]:
     """Classify every guide from its sites.
 
@@ -170,16 +172,13 @@ def summarize(
         The kept sites by guide row, as in `SiteResult.sites`.
     orientation
         The orientation verdicts by guide row, as in
-        `OrientationResult.verdicts`; None when the check did not run.
+        `ScanResult.verdicts`; None when the check did not run.
     pam
         The PAM pattern the sites were classified with.
     alt_pams
         The alternative PAM patterns the sites were classified with.
     max_mismatches
         The mismatch limit the sites were kept with.
-    n_alignments
-        The aligner's alignment count by guide row, for the `n_alignments`
-        column. None leaves the column empty.
 
     Returns
     -------
@@ -196,7 +195,7 @@ def summarize(
         guide's verdict.
     """
     patterns = validate_pams([pam, *alt_pams])
-    check_max_mismatches(max_mismatches)
+    _check_max_mismatches(max_mismatches)
     primary, alternatives = patterns[0], frozenset(patterns[1:])
     summaries = []
     for guide, source in zip(guides, _source_rows(guides), strict=True):
@@ -254,10 +253,10 @@ def summarize(
                 cut_site=_cut_site(unique) if unique else None,
                 site_class=site_class,
                 orientation=verdict,
-                g_added=guide.g_added,
-                n_alignments=(
-                    None if n_alignments is None else n_alignments.get(source, 0)
+                orientation_evidence=(
+                    None if evidence is None else evidence.get(source)
                 ),
+                g_added=guide.g_added,
                 min_mismatches=next(
                     (count for count, n in enumerate(n_sites) if n), None
                 ),
@@ -324,7 +323,7 @@ def guide_columns(max_mismatches: int, alt_pams: Sequence[str] = ()) -> list[str
         table's own name for the guide is ``alias``; the rest are this
         tool's.
     """
-    check_max_mismatches(max_mismatches)
+    _check_max_mismatches(max_mismatches)
     counts = range(max_mismatches + 1)
     return [
         "guide_id",
@@ -340,8 +339,8 @@ def guide_columns(max_mismatches: int, alt_pams: Sequence[str] = ()) -> list[str
         "cut_site",
         "site_class",
         "orientation",
+        "orientation_evidence",
         "g_added",
-        "n_alignments",
         "min_mismatches",
         *(f"n_sites_{m}mm" for m in counts),
         *(f"n_alt_pam_{m}mm" for m in counts if alt_pams),
@@ -399,8 +398,8 @@ def write_guides_tsv(
                     summary.cut_site,
                     summary.site_class,
                     summary.orientation,
+                    summary.orientation_evidence,
                     summary.g_added,
-                    summary.n_alignments,
                     summary.min_mismatches,
                     *summary.n_sites,
                     *(summary.n_alt_pam if alt_pams else ()),
@@ -438,9 +437,9 @@ def write_sites_tsv(
 def write_orientation_tsv(
     path: str | os.PathLike[str],
     guides: Sequence[Guide],
-    orientation: OrientationResult,
+    scan: ScanResult,
 ) -> None:
-    """Write orientation.tsv: each guide's perfect hits, flanks and verdict.
+    """Write orientation.tsv: each guide's sites, their PAM and its verdict.
 
     Parameters
     ----------
@@ -448,43 +447,45 @@ def write_orientation_tsv(
         The file to write.
     guides
         The library, as returned by `read_guides`.
-    orientation
-        The result of `check_orientation`.
+    scan
+        The result of `scan_guides`.
 
     Raises
     ------
     ValueError
-        If `orientation` lacks a guide's verdict.
+        If `scan` lacks a guide's verdict.
 
     Notes
     -----
-    The columns are `ORIENTATION_COLUMNS`. Each guide, duplicates included,
-    has one row per perfect hit, or a single row with empty hit fields when it
-    has none; ``verdict`` repeats on every row.
+    The columns are `ORIENTATION_COLUMNS`. Each entry has one row per exact
+    site, or a single row with empty site fields when it has none; the verdict
+    and its evidence repeat on every row.
     """
     with _open_table(path, ORIENTATION_COLUMNS) as handle:
         for guide, source in zip(guides, _source_rows(guides), strict=True):
-            if source not in orientation.verdicts:
-                raise ValueError(
-                    f"No orientation verdict for guide {guide.guide_id!r}."
+            if source not in scan.verdicts:
+                raise ValueError(f"No orientation verdict for guide {guide.alias!r}.")
+            verdict = scan.verdicts[source]
+            evidence = scan.evidence.get(source)
+            sites = scan.sites.get(source, ())
+            if not sites:
+                _write_row(
+                    handle,
+                    [guide.guide_id, guide.alias, *[None] * 5, verdict, evidence],
                 )
-            verdict = orientation.verdicts[source]
-            hits = orientation.hits.get(source, ())
-            if not hits:
-                _write_row(handle, [guide.guide_id, guide.alias, *[None] * 6, verdict])
-            for hit in hits:
+            for site in sites:
                 _write_row(
                     handle,
                     [
                         guide.guide_id,
                         guide.alias,
-                        hit.chr,
-                        hit.start,
-                        hit.end,
-                        hit.strand,
-                        hit.flank_5p,
-                        hit.flank_3p,
+                        site.chr,
+                        site.start,
+                        site.end,
+                        site.strand,
+                        site.pam,
                         verdict,
+                        evidence,
                     ],
                 )
 
@@ -657,3 +658,9 @@ def _cell(value: object) -> str:
     if isinstance(value, (list, tuple)):
         return ",".join(str(item) for item in value)
     return str(value)
+
+
+def _check_max_mismatches(value: object) -> None:
+    """A mismatch limit must be a non-negative integer."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("max_mismatches must be a non-negative integer.")
