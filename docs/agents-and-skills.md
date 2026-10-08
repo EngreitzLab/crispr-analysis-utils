@@ -6,7 +6,7 @@
 
 | Skill | Covers |
 | --- | --- |
-| `cau-accession` | `cau.accession`: stable accession ids for guides, computed from their sequence |
+| `cau-accession` | `cau.accession`: accession ids for SpCas9 guides, encoded from the guide's own sequence |
 | `cau-normalization` | `cau.counts_per_million` |
 | `cau-guide-alignment` | `cau.guide_alignment` and the `cau guide-alignment` command: aligning a guide library to a genome, and reading its outputs |
 

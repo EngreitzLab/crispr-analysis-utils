@@ -1,53 +1,45 @@
-"""Stable accession ids for guides, computed from their sequence.
+"""Accession ids for SpCas9 guides, encoded from the guide's own sequence.
 
-A guide's accession is ``GU`` followed by 12 uppercase hexadecimal digits: the
-first 12 of the UUID version 5 of its sequence in `GUIDE_NAMESPACE`. The same
-sequence gets the same accession on any machine, in any library, whatever the
-lab calls the guide.
+A guide is written ``G...NGG``. Its accession is ``GU`` followed by the bases
+before the PAM, packed two bits each behind a leading 1 bit and written in
+Crockford's base 32. The packing is reversible, so two guides never share an
+accession.
 """
 
 from __future__ import annotations
 
-import re
-import uuid
 from collections.abc import Iterable
 
-GUIDE_NAMESPACE = uuid.UUID("ee28d900-f51b-5e2b-9ca7-4c5808da45cc")
-"""The UUID namespace of guide accessions.
-
-It is ``uuid.uuid5(uuid.NAMESPACE_URL,
-"https://github.com/EngreitzLab/crispr-analysis-utils/accession/guide")``,
-written out so that no edit to that string can change every accession.
-"""
+PAM = "NGG"
+"""The PAM every accessioned guide ends with."""
 
 _PREFIX = "GU"
-# The first 12 hexadecimal digits of a UUID are all hash: its version digit is
-# the 13th.
-_DIGITS = 12
-_ACGT = re.compile(r"[ACGT]+")
+_BASES = "ACGT"
+_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_VALUES = {character: value for value, character in enumerate(_ALPHABET)}
+_VALUES.update({"I": 1, "L": 1, "O": 0})
 
 
 def normalize_guide_sequence(sequence: str) -> str:
-    """Return the form of a guide sequence that its accession is computed from.
+    """Strip and uppercase a guide sequence, and check it is a whole guide.
 
     Parameters
     ----------
     sequence
-        A guide sequence, 5' to 3'. Case and surrounding whitespace are
-        ignored.
+        A guide, 5' to 3': a G, the rest of the protospacer, then ``NGG``.
 
     Returns
     -------
     str
-        `sequence` without surrounding whitespace, in uppercase.
+        `sequence` stripped and in uppercase.
 
     Raises
     ------
     TypeError
-        If `sequence` is not a string, such as the NaN pandas reads for an
-        empty cell.
+        If `sequence` is not a string.
     ValueError
-        If `sequence` is empty, or holds anything but A, C, G and T.
+        If `sequence` is empty, holds a base other than A, C, G and T outside
+        the PAM's N, does not begin with G, or does not end with ``NGG``.
     """
     if not isinstance(sequence, str):
         raise TypeError(
@@ -58,100 +50,158 @@ def normalize_guide_sequence(sequence: str) -> str:
     if not stripped:
         raise ValueError("A guide sequence must not be empty.")
     normalized = stripped.upper()
-    if not (stripped.isascii() and _ACGT.fullmatch(normalized)):
-        others = "".join(sorted(set(normalized) - set("ACGT")))
+
+    unknown = "".join(sorted(set(normalized) - set(_BASES + "N")))
+    if unknown:
         raise ValueError(
-            f"Guide sequence {sequence!r} holds {others!r}: only A, C, G and T "
-            "are allowed."
+            f"Guide sequence {sequence!r} holds {unknown!r}: a guide is written "
+            f"with A, C, G and T, and the N of its {PAM} PAM."
+        )
+    if not normalized.endswith(PAM):
+        raise ValueError(
+            f"Guide sequence {sequence!r} does not end with the PAM {PAM!r}. "
+            "Write the PAM as 'NGG' itself, not as the bases the genome holds "
+            "there."
+        )
+    spacer = normalized[: -len(PAM)]
+    if "N" in spacer:
+        raise ValueError(
+            f"Guide sequence {sequence!r} holds an N before the PAM: only the "
+            "PAM's first base may be N."
+        )
+    if not spacer.startswith("G"):
+        raise ValueError(
+            f"Guide sequence {sequence!r} does not start with G. Write the whole "
+            "guide, including the 5' G it carries or is cloned with."
         )
     return normalized
 
 
 def guide_accession(sequence: str) -> str:
-    """Return the accession of a guide.
-
-    Pass the sequence that is aligned: 5' to 3', with the 5' G when the guide
-    carries one, and without the PAM. A guide written with and without its G
-    gets two accessions.
+    """Return a guide's accession.
 
     Parameters
     ----------
     sequence
-        The guide sequence. Case and surrounding whitespace are ignored.
+        A guide, ``G...NGG``, as `normalize_guide_sequence` takes it.
 
     Returns
     -------
     str
-        ``GU`` followed by 12 uppercase hexadecimal digits.
+        ``GU`` and the encoded bases: 9 characters for a guide of 20 to 22
+        bases before the PAM, 8 for 19.
 
     Raises
     ------
     TypeError
         If `sequence` is not a string.
     ValueError
-        If `sequence` is empty, or holds anything but A, C, G and T.
+        If `sequence` is not a whole guide written ``G...NGG``.
 
     See Also
     --------
-    guide_accessions : The accessions of a whole library, checked for
-        collisions.
+    guide_sequence : The inverse.
 
     Examples
     --------
-    >>> guide_accession("GAAAAGCCAACATGAATGCAG")
-    'GU5C664EE08629'
-    >>> guide_accession(" gaaaagccaacatgaatgcag ")
-    'GU5C664EE08629'
+    >>> guide_accession("GAAAAGCCAACATGAATGCAGNGG")
+    'GU602A170WJ'
     """
-    return _accession(normalize_guide_sequence(sequence))
+    spacer = normalize_guide_sequence(sequence)[: -len(PAM)]
+    # The leading 1 distinguishes a guide from the same bases after an A.
+    packed = 1
+    for base in spacer:
+        packed = packed * 4 + _BASES.index(base)
+
+    characters = ""
+    while packed:
+        packed, remainder = divmod(packed, 32)
+        characters = _ALPHABET[remainder] + characters
+    return _PREFIX + characters
 
 
-def guide_accessions(sequences: Iterable[str]) -> list[str]:
-    """Return the accession of each guide, and check that none collide.
-
-    Repeats of one sequence share an accession. Two different sequences with
-    the same accession are a collision, which raises an error rather than let
-    one accession name two guides. To check a library against accessions
-    already in use, pass all their sequences in one call.
+def guide_sequence(accession: str) -> str:
+    """Return the guide an accession encodes.
 
     Parameters
     ----------
-    sequences
-        Guide sequences, as `guide_accession` takes them: a list, or a pandas
-        Series.
+    accession
+        An accession from `guide_accession`. Case is ignored, and I, L and O
+        read as 1, 1 and 0.
 
     Returns
     -------
-    list of str
-        One accession per sequence, in order.
+    str
+        The guide, ``G...NGG``.
 
     Raises
     ------
     TypeError
-        If a sequence is not a string. The message gives its position.
+        If `accession` is not a string.
     ValueError
-        If a sequence is empty or holds anything but A, C, G and T (the
-        message gives its position), or two different sequences have the same
-        accession.
+        If `accession` does not begin with ``GU`` and base 32 characters, or
+        encodes no guide.
+
+    Examples
+    --------
+    >>> guide_sequence("GU602A170WJ")
+    'GAAAAGCCAACATGAATGCAGNGG'
+    """
+    if not isinstance(accession, str):
+        raise TypeError(
+            f"An accession must be a string, not {type(accession).__name__} "
+            f"({accession!r})."
+        )
+    text = accession.strip().upper()
+    if not text.startswith(_PREFIX) or len(text) == len(_PREFIX):
+        raise ValueError(
+            f"Accession {accession!r} does not begin with {_PREFIX!r} and its "
+            "encoded bases."
+        )
+
+    packed = 0
+    for character in text[len(_PREFIX) :]:
+        if character not in _VALUES:
+            raise ValueError(
+                f"Accession {accession!r} holds {character!r}, which is not a "
+                "base 32 character."
+            )
+        packed = packed * 32 + _VALUES[character]
+
+    spacer = ""
+    while packed > 1:
+        packed, remainder = divmod(packed, 4)
+        spacer = _BASES[remainder] + spacer
+    if packed != 1 or not spacer.startswith("G"):
+        raise ValueError(f"Accession {accession!r} encodes no guide.")
+    return spacer + PAM
+
+
+def guide_accessions(sequences: Iterable[str]) -> list[str]:
+    """Return every guide's accession, in order.
+
+    Parameters
+    ----------
+    sequences
+        Guides, as `guide_accession` takes them.
+
+    Returns
+    -------
+    list of str
+        One accession per sequence.
+
+    Raises
+    ------
+    TypeError
+        If a sequence is not a string. The message names its position.
+    ValueError
+        If a sequence is not a whole guide written ``G...NGG``. The message
+        names its position.
     """
     accessions = []
-    first_sequence: dict[str, str] = {}
     for position, sequence in enumerate(sequences):
         try:
-            normalized = normalize_guide_sequence(sequence)
+            accessions.append(guide_accession(sequence))
         except (TypeError, ValueError) as error:
             raise type(error)(f"Sequence at position {position}: {error}") from None
-        accession = _accession(normalized)
-        first = first_sequence.setdefault(accession, normalized)
-        if first != normalized:
-            raise ValueError(
-                f"Two different sequences have the accession {accession}: "
-                f"{first} and {normalized}."
-            )
-        accessions.append(accession)
     return accessions
-
-
-def _accession(normalized: str) -> str:
-    digits = uuid.uuid5(GUIDE_NAMESPACE, normalized).hex[:_DIGITS]
-    return _PREFIX + digits.upper()

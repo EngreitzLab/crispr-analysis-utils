@@ -23,8 +23,8 @@ the main names, such as `guide_alignment.run` and
 
 ## Accession
 
-- [`accession`](accession.md): stable accession ids for guides, computed
-  from their sequence.
+- [`accession`](accession.md): accession ids for SpCas9 guides, encoded
+  from the guide's own sequence.
 
 ## Normalization
 
