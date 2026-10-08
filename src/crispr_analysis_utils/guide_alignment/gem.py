@@ -310,7 +310,7 @@ def build_index(
 
 
 def mapper_options(
-    *, max_mismatches: int, n_ambiguous: int = 0, leading_g: bool = False
+    *, max_mismatches: int, n_ambiguous: int = 0, g_added: bool = False
 ) -> list[str]:
     """The gem-mapper options of one pass: `MAPPER_OPTIONS`, then its budget.
 
@@ -320,7 +320,7 @@ def mapper_options(
         The spacer mismatches to find, k; 0 for exact matches.
     n_ambiguous
         The highest number of non-ACGT codes among the PAMs of the reads, n.
-    leading_g
+    g_added
         Whether the reads carry an added 5' G, g.
 
     Returns
@@ -337,7 +337,7 @@ def mapper_options(
     """
     _check_non_negative(max_mismatches, "max_mismatches")
     _check_non_negative(n_ambiguous, "n_ambiguous")
-    g = int(bool(leading_g))
+    g = int(bool(g_added))
     errors = max_mismatches + g
     budget = max_mismatches + n_ambiguous + g
     return [
@@ -354,7 +354,7 @@ def mapper_argv(
     *,
     max_mismatches: int,
     n_ambiguous: int = 0,
-    leading_g: bool = False,
+    g_added: bool = False,
     threads: int = 1,
     gem_mapper: str = "gem-mapper",
 ) -> list[str]:
@@ -370,7 +370,7 @@ def mapper_argv(
         The spacer mismatches to find, k (see `mapper_options`).
     n_ambiguous
         The highest number of non-ACGT codes among the PAMs of the reads, n.
-    leading_g
+    g_added
         Whether the reads carry an added 5' G, g.
     threads
         gem-mapper threads.
@@ -399,7 +399,7 @@ def mapper_argv(
         *mapper_options(
             max_mismatches=max_mismatches,
             n_ambiguous=n_ambiguous,
-            leading_g=leading_g,
+            g_added=g_added,
         ),
     ]
 
@@ -412,7 +412,7 @@ def map_reads(
     log: str | os.PathLike[str],
     max_mismatches: int,
     n_ambiguous: int = 0,
-    leading_g: bool = False,
+    g_added: bool = False,
     threads: int = 1,
     gem_mapper: str = "gem-mapper",
 ) -> MappingResult:
@@ -440,7 +440,7 @@ def map_reads(
         The spacer mismatches to find, k (see `mapper_options`).
     n_ambiguous
         The highest number of non-ACGT codes among the PAMs of the reads, n.
-    leading_g
+    g_added
         Whether the reads carry an added 5' G, g.
     threads
         gem-mapper threads.
@@ -473,7 +473,7 @@ def map_reads(
         fastq,
         max_mismatches=max_mismatches,
         n_ambiguous=n_ambiguous,
-        leading_g=leading_g,
+        g_added=g_added,
         threads=threads,
         gem_mapper=gem_mapper,
     )
@@ -615,16 +615,73 @@ def _reference_span(cigar: bytes) -> int:
 
 @contextmanager
 def _open_output(path: Path):
-    """Open a SAM for binary writing; gzip-compressed if the name ends in .gz."""
-    compressed = path.name.removesuffix(".partial").endswith(".gz")
+    """Open the alignment output: BAM for .bam, else SAM, gzip-compressed for .gz.
+
+    Every writer takes whole SAM lines, so `_filter_sam` streams bytes either
+    way and never parses a record it is only copying.
+    """
+    name = path.name.removesuffix(".partial")
+    if name.endswith(".bam"):
+        writer = _BamWriter(path)
+        try:
+            yield writer
+        finally:
+            writer.close()
+        return
     with path.open("wb") as raw:
-        if compressed:
+        if name.endswith(".gz"):
             with gzip.GzipFile(
                 filename="", mode="wb", fileobj=raw, compresslevel=1, mtime=0
             ) as handle:
                 yield handle
         else:
             yield raw
+
+
+class _BamWriter:
+    """Write SAM lines as BAM, holding the header back until the first record.
+
+    gem-mapper emits a read's alignments together, in the order the FASTQ
+    lists them, so the records are grouped by read name without a sort. The
+    header says exactly that: ``SO:unsorted GO:query``.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+        self._header_lines: list[bytes] = []
+        self._out = None
+
+    def write(self, line: bytes) -> None:
+        """Take one SAM line: a header line, or a record to write as BAM."""
+        if self._out is None:
+            if line.startswith(b"@"):
+                if not line.startswith(b"@HD\t"):
+                    self._header_lines.append(line)
+                return
+            self._open()
+        self._out.write(self._segment(line))
+
+    def close(self) -> None:
+        """Finish the BAM, writing a header-only file when there were no records."""
+        if self._out is None:
+            self._open()
+        self._out.close()
+
+    def _open(self) -> None:
+        import pysam
+
+        text = b"@HD\tVN:1.6\tSO:unsorted\tGO:query\n" + b"".join(self._header_lines)
+        self._bam_header = pysam.AlignmentHeader.from_text(
+            text.decode(errors="replace")
+        )
+        self._out = pysam.AlignmentFile(str(self._path), "wb", header=self._bam_header)
+
+    def _segment(self, line: bytes):
+        import pysam
+
+        return pysam.AlignedSegment.fromstring(
+            line.decode(errors="replace").rstrip("\n"), self._bam_header
+        )
 
 
 def _mapping_error(fastq: Path, log: Path, returncode: int, text: str) -> GemError:

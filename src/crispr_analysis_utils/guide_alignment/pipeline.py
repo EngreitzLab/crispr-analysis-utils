@@ -16,7 +16,7 @@ import logging
 import os
 import time
 from collections import Counter
-from collections.abc import Collection, Iterable, Iterator, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -36,15 +36,14 @@ from .gem import (
     read_sidecar,
     sidecar_path,
 )
-from .iupac import count_ambiguous, validate_pams
+from .iupac import count_ambiguous, reverse_complement, validate_pams
 from .library import Guide, read_guides, write_site_reads, write_spacer_reads
 from .orientation import (
-    OK,
-    REVERSED,
     VERDICTS,
     OrientationResult,
     check_orientation,
-    library_reversed,
+    resolve_orientation,
+    reversed_rows,
 )
 from .sites import SiteResult, read_sites
 from .summary import (
@@ -55,8 +54,8 @@ from .summary import (
     write_guides_bed,
     write_guides_tsv,
     write_orientation_tsv,
+    write_qc_tsv,
     write_sites_tsv,
-    write_summary_tsv,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,12 +65,15 @@ ORIENTATION_CHECKS = ("warn", "error", "off")
 
 PASS_ORIENTATION = "orientation"
 """Pass 1: the bare spacers, matched exactly."""
-PASS_SITES = "sites"
-"""Pass 2, the reads without an added G."""
-PASS_SITES_LEADING_G = "sites_leading_g"
-"""Pass 2, the reads with an added 5' G."""
+PASS_ORIENTATION_RC = "orientation_rc"
+"""Pass 1 again, on the reverse-complemented sequences: the other direction."""
+PASS_GUIDES = "guides"
+"""Pass 2: every guide as ordered, plus the PAM."""
 
-RUN_JSON = "run.json"
+METADATA_DIR = "run_metadata"
+"""Where each invocation leaves its metadata, one file per invocation."""
+STEP = "guide_alignment"
+"""The step those metadata files are named for."""
 LOG_FILE = "guide_alignment.log"
 _LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
@@ -117,10 +119,11 @@ def run(
     *,
     max_mismatches: int = 3,
     pam: str = "NGG",
-    alt_pams: Iterable[str] = ("NAG", "NGA"),
+    alt_pams: Iterable[str] = (),
     spacer_length: int = 20,
     add_leading_g: bool = False,
-    orientation_check: str = "warn",
+    orientation_check: str = "error",
+    fix_orientation: bool = False,
     contigs: Collection[str] | None = None,
     threads: int = 8,
     id_col: int | str = 0,
@@ -151,8 +154,10 @@ def run(
     pam
         The primary PAM, in IUPAC codes, 3' of the protospacer.
     alt_pams
-        The alternative PAMs, in IUPAC codes; empty for none. Every PAM must
-        have the same length.
+        Alternative PAMs, in IUPAC codes. Empty by default: only `pam` is a
+        PAM, and guides.tsv has no alternative-PAM columns. Given any, every
+        PAM must have the same length, and their sites are counted but never
+        decide a guide's class.
     spacer_length
         See `read_guides`.
     add_leading_g
@@ -229,6 +234,7 @@ def run(
         "spacer_length": spacer_length,
         "add_leading_g": add_leading_g,
         "orientation_check": orientation_check,
+        "fix_orientation": fix_orientation,
         "contigs": contig_list,
         "threads": threads,
         "id_col": id_col,
@@ -240,6 +246,7 @@ def run(
     outdir = Path(outdir)
     (outdir / "logs").mkdir(parents=True, exist_ok=True)
     (outdir / "alignments").mkdir(exist_ok=True)
+    (outdir / METADATA_DIR).mkdir(exist_ok=True)
     with _log_to(outdir / "logs" / LOG_FILE):
         return _Run(outdir, parameters, patterns).execute(guides, reference, index)
 
@@ -255,15 +262,18 @@ class _Run:
         self.logs = outdir / "logs"
         self.parameters = parameters
         self.patterns = patterns
-        self.run_json = outdir / RUN_JSON
-        self.previous = _read_previous(self.run_json)
+        self.metadata_dir = outdir / METADATA_DIR
+        self.run_json = self.metadata_dir / f"{STEP}_{_stamp()}.json"
+        self.previous = _read_previous(self.metadata_dir)
         self.previous_passes = _mapping(self.previous.get("passes"))
         self.attempted: set[str] = set()
         self.started = time.perf_counter()
         self.state: dict = {
+            "step": STEP,
             "complete": False,
             "error": None,
             "started": _now(),
+            "orientation_fixed": False,
             "finished": None,
             "cau_version": __version__,
             "gem_version": None,
@@ -274,11 +284,10 @@ class _Run:
             "classes": {},
             "orientation": {},
             "seconds": {},
-            "alignments_per_guide": {},
         }
 
     def save(self) -> None:
-        """Write ``run.json``.
+        """Write this invocation's metadata file.
 
         Until the run completes, the earlier run's records of the passes this
         run has not reached are kept, marked ``carried_over``, so a failed run
@@ -339,11 +348,12 @@ class _Run:
                 header=parameters["header"],
                 spacer_length=parameters["spacer_length"],
                 add_leading_g=parameters["add_leading_g"],
+                pam=parameters["pam"],
             )
-        n_distinct = sum(guide.duplicate_of is None for guide in library)
-        n_leading_g = sum(guide.leading_g for guide in library)
+        n_distinct = len({guide.guide_id for guide in library})
+        n_leading_g = sum(guide.g_added for guide in library)
         logger.info(
-            "%d guides, %d distinct spacers, %d with an added G",
+            "%d entries, %d distinct guides, %d with an added G",
             len(library),
             n_distinct,
             n_leading_g,
@@ -406,28 +416,16 @@ class _Run:
                 pam=self.patterns[0],
                 alt_pams=self.patterns[1:],
                 max_mismatches=parameters["max_mismatches"],
+                n_alignments=self._alignments_per_guide(library),
             )
-            self._write_outputs(
-                library,
-                summaries,
-                sites,
-                orientation,
-                {
-                    "guides": guides_input["path"] or "DataFrame",
-                    "reference": str(reference),
-                    "index": str(index),
-                    "gem_version": version,
-                    "cau_version": __version__,
-                },
-            )
+            self._write_outputs(library, summaries, sites, orientation)
 
         self.state["classes"] = _ordered_counts(
-            (s.alignment_class for s in summaries), CLASSES
+            (s.site_class for s in summaries), CLASSES
         )
         self.state["orientation"] = _ordered_counts(
             (s.orientation for s in summaries), VERDICTS
         )
-        self.state["alignments_per_guide"] = self._alignments_per_guide(library)
         self.state["complete"] = True
         self.state["finished"] = _now()
         self.state["seconds"]["total"] = round(time.perf_counter() - self.started, 3)
@@ -473,39 +471,58 @@ class _Run:
     ) -> OrientationResult | None:
         """Pass 1 and the library-level orientation check."""
         fastq = self.alignments / f"{PASS_ORIENTATION}.fastq"
-        sam = self.alignments / f"{PASS_ORIENTATION}.sam.gz"
+        rc_fastq = self.alignments / f"{PASS_ORIENTATION_RC}.fastq"
+        sam = self.alignments / f"{PASS_ORIENTATION}.bam"
+        rc_sam = self.alignments / f"{PASS_ORIENTATION_RC}.bam"
         table = self.outdir / "orientation.tsv"
         check = self.parameters["orientation_check"]
         if check == "off":
             self.attempted.add(PASS_ORIENTATION)
-            for stale in (fastq, sam, table):
+            self.attempted.add(PASS_ORIENTATION_RC)
+            for stale in (fastq, sam, rc_fastq, rc_sam, table):
                 stale.unlink(missing_ok=True)
             logger.info("Orientation check: off")
             return None
 
-        with self.timed(PASS_ORIENTATION):
-            n_reads = write_spacer_reads(context["library"], fastq)
-            self._gem_pass(
-                PASS_ORIENTATION,
-                context,
-                fastq=fastq,
-                n_reads=n_reads,
-                sam=sam,
-                max_mismatches=0,
-                n_ambiguous=0,
-                leading_g=False,
-            )
+        results = {}
+        for name, path, rc in (
+            (PASS_ORIENTATION, fastq, False),
+            (PASS_ORIENTATION_RC, rc_fastq, True),
+        ):
+            with self.timed(name):
+                n_reads = write_spacer_reads(
+                    context["library"], path, reverse_complement=rc
+                )
+                self._gem_pass(
+                    name,
+                    context,
+                    fastq=path,
+                    n_reads=n_reads,
+                    sam=self.alignments / f"{name}.bam",
+                    max_mismatches=0,
+                    n_ambiguous=0,
+                    g_added=False,
+                )
+            with self.timed(f"{name}_check"):
+                results[name] = check_orientation(
+                    self.alignments / f"{name}.bam",
+                    context["library"],
+                    reference,
+                    pam=self.patterns[0],
+                    alt_pams=self.patterns[1:],
+                    contigs=self.parameters["contigs"],
+                    fasta_index=fasta_index,
+                )
+        orientation = results[PASS_ORIENTATION]
+        reverse = results[PASS_ORIENTATION_RC]
+        orientation.verdicts = resolve_orientation(
+            orientation.verdicts, reverse.verdicts
+        )
         with self.timed("orientation_check"):
-            orientation = check_orientation(
-                sam,
-                context["library"],
-                reference,
-                pam=self.patterns[0],
-                alt_pams=self.patterns[1:],
-                contigs=self.parameters["contigs"],
-                fasta_index=fasta_index,
-            )
             write_orientation_tsv(table, context["library"], orientation)
+        # orientation.tsv is the result; the reads and alignments were scratch.
+        for scratch in (fastq, sam, rc_fastq, rc_sam):
+            scratch.unlink(missing_ok=True)
         self.state["counts"]["orientation_check"] = {
             "n_out_of_range": self.state["passes"][PASS_ORIENTATION]["counts"][
                 "n_out_of_range"
@@ -514,17 +531,31 @@ class _Run:
         }
         self.save()
 
-        verdicts = Counter(orientation.verdicts.values())
-        if library_reversed(orientation.verdicts.values()):
+        backwards = reversed_rows(orientation.verdicts)
+        if backwards:
+            aliases = [context["library"][row].alias for row in backwards[:5]]
+            listed = ", ".join(repr(alias) for alias in aliases)
+            if len(backwards) > len(aliases):
+                listed += ", ..."
             message = (
-                f"Reversed guides outnumber ok ones ({verdicts[REVERSED]} against "
-                f"{verdicts[OK]}, counted per distinct spacer): the guide table may "
-                "give the spacers 3' to 5' or reverse-complemented. Each guide's "
-                f"perfect hits and their flanks are in {table}."
+                f"{len(backwards)} of {len(orientation.verdicts)} entries read "
+                f"3' to 5': their reverse complement has a perfect hit with a "
+                f"PAM and the sequence as given does not ({listed}). Every "
+                f"entry's hits and flanks are in {table}."
             )
-            if check == "error":
-                raise OrientationError(message)
-            logger.warning(message)
+            if self.parameters["fix_orientation"]:
+                logger.warning("%s Reverse-complementing those entries.", message)
+                context["library"] = _reverse_complemented(
+                    context["library"], backwards, self.parameters
+                )
+                self.state["orientation_fixed"] = len(backwards)
+            elif check == "error":
+                raise OrientationError(
+                    f"{message} Pass --fix-orientation to align their reverse "
+                    "complement instead."
+                )
+            else:
+                logger.warning(message)
         return orientation
 
     def _sites(
@@ -533,30 +564,31 @@ class _Run:
         """Pass 2, with and without the added G, then the site checks."""
         library = context["library"]
         n_ambiguous = max(count_ambiguous(pattern) for pattern in self.patterns)
+        fastq = self.alignments / f"{PASS_GUIDES}.fastq.gz"
+        sam = self.alignments / f"{PASS_GUIDES}.bam"
+        # One budget for every read: the extra error a guide with an added G
+        # needs. A wider search only offers more candidates, and every one is
+        # re-read from the reference and filtered at max_mismatches anyway.
+        g_added = any(guide.g_added for guide in library)
         sams = []
-        for name, leading_g in ((PASS_SITES, False), (PASS_SITES_LEADING_G, True)):
-            fastq = self.alignments / f"{name}.fastq"
-            sam = self.alignments / f"{name}.sam.gz"
-            with self.timed(name):
-                n_reads = write_site_reads(
-                    library, fastq, pams=self.patterns, leading_g=leading_g
-                )
-                if not n_reads:
-                    self.attempted.add(name)
-                    fastq.unlink(missing_ok=True)
-                    sam.unlink(missing_ok=True)
-                    continue
+        with self.timed(PASS_GUIDES):
+            n_reads = write_site_reads(library, fastq, pams=self.patterns)
+            if not n_reads:
+                self.attempted.add(PASS_GUIDES)
+                fastq.unlink(missing_ok=True)
+                sam.unlink(missing_ok=True)
+            else:
                 self._gem_pass(
-                    name,
+                    PASS_GUIDES,
                     context,
                     fastq=fastq,
                     n_reads=n_reads,
                     sam=sam,
                     max_mismatches=self.parameters["max_mismatches"],
                     n_ambiguous=n_ambiguous,
-                    leading_g=leading_g,
+                    g_added=g_added,
                 )
-            sams.append(sam)
+                sams.append(sam)
 
         with self.timed("site_check"):
             sites = read_sites(
@@ -573,7 +605,7 @@ class _Run:
         self.state["counts"]["site_search"] = {
             "n_out_of_range": sum(
                 passes[name]["counts"]["n_out_of_range"]
-                for name in (PASS_SITES, PASS_SITES_LEADING_G)
+                for name in (PASS_GUIDES,)
                 if name in passes
             ),
             **sites.counts(),
@@ -591,7 +623,7 @@ class _Run:
         sam: Path,
         max_mismatches: int,
         n_ambiguous: int,
-        leading_g: bool,
+        g_added: bool,
     ) -> None:
         """Map one FASTQ, or reuse an earlier run's alignments of it."""
         key = {
@@ -599,7 +631,7 @@ class _Run:
             "options": mapper_options(
                 max_mismatches=max_mismatches,
                 n_ambiguous=n_ambiguous,
-                leading_g=leading_g,
+                g_added=g_added,
             ),
             "index": context["index_identity"],
             "gem_version": context["version"],
@@ -615,7 +647,7 @@ class _Run:
                 "%s: reusing %s; its reads, options, index and GEM version match %s",
                 name,
                 sam,
-                RUN_JSON,
+                self._relative(self.run_json),
             )
             earlier.pop("carried_over", None)
             self.state["passes"][name] = {**earlier, "reused": True}
@@ -640,7 +672,7 @@ class _Run:
                 log=log,
                 max_mismatches=max_mismatches,
                 n_ambiguous=n_ambiguous,
-                leading_g=leading_g,
+                g_added=g_added,
                 threads=threads,
             )
         except GemError as error:
@@ -666,44 +698,33 @@ class _Run:
         summaries: Sequence[GuideSummary],
         sites: SiteResult,
         orientation: OrientationResult | None,
-        inputs: dict,
     ) -> None:
         max_mismatches = self.parameters["max_mismatches"]
         write_guides_tsv(
-            self.outdir / "guides.tsv", summaries, max_mismatches=max_mismatches
+            self.outdir / "guides_metadata.tsv",
+            summaries,
+            max_mismatches=max_mismatches,
+            alt_pams=self.patterns[1:],
         )
         write_sites_tsv(self.outdir / "sites.tsv", library, sites.sites)
         write_guides_bed(self.outdir / "guides.bed", summaries)
         write_cut_sites_bed(self.outdir / "cut_sites.bed", summaries)
-        write_summary_tsv(
-            self.outdir / "summary.tsv",
+        write_qc_tsv(
+            self.outdir / "qc.tsv",
             summaries,
             counts=self.state["counts"],
-            parameters={
-                name: _printable(value)
-                for name, value in {**self.parameters, **inputs}.items()
-            },
         )
 
-    def _alignments_per_guide(self, library: Sequence[Guide]) -> dict[str, dict]:
-        """The kept alignment records of each distinct guide, by pass."""
-        passes = self.state["passes"]
-        orientation = passes.get(PASS_ORIENTATION, {}).get("mapped_per_row")
-        site_rows = [
-            passes[name]["mapped_per_row"]
-            for name in (PASS_SITES, PASS_SITES_LEADING_G)
-            if name in passes
-        ]
-        per_guide = {}
-        for row, guide in enumerate(library):
-            if guide.duplicate_of is not None:
-                continue
-            entry = {}
-            if orientation is not None:
-                entry["orientation"] = _at(orientation, row)
-            entry["sites"] = sum(_at(rows, row) for rows in site_rows)
-            per_guide[guide.guide_id] = entry
-        return per_guide
+    def _alignments_per_guide(self, library: Sequence[Guide]) -> dict[int, int]:
+        """Each distinct guide's kept alignments in the guide pass, by row."""
+        rows = self.state["passes"].get(PASS_GUIDES, {}).get("mapped_per_row")
+        if rows is None:
+            return {}
+        return {
+            row: _at(rows, row)
+            for row, guide in enumerate(library)
+            if guide.duplicate_of is None
+        }
 
     def _relative(self, path: Path) -> str:
         return os.path.relpath(path, self.outdir)
@@ -753,7 +774,7 @@ def _naming_the_guide(error: GemError, library: Sequence[Guide]) -> GemError:
     guide = library[row]
     described = f"read {read_name!r}"
     detail = f"guide {guide.guide_id!r}"
-    if guide.leading_g:
+    if guide.g_added:
         detail += ", with the added G"
     message = str(error)
     if described in message:
@@ -791,10 +812,19 @@ def _printable(value: object) -> object:
     return value
 
 
-def _read_previous(path: Path) -> dict:
-    """An earlier run's ``run.json``, or an empty dict."""
-    if not path.is_file():
+def _stamp() -> str:
+    """The UTC timestamp that names this invocation's metadata file."""
+    return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+
+
+def _read_previous(directory: Path) -> dict:
+    """The newest metadata file in `directory`, or an empty dict."""
+    if not directory.is_dir():
         return {}
+    files = sorted(directory.glob(f"{STEP}_*.json"))
+    if not files:
+        return {}
+    path = files[-1]
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -829,3 +859,31 @@ def _log_to(path: Path) -> Iterator[None]:
         package.removeHandler(handler)
         handler.close()
         package.setLevel(level)
+
+
+def _reverse_complemented(
+    library: Sequence[Guide], rows: Sequence[int], parameters: Mapping[str, object]
+) -> list[Guide]:
+    """The library with only `rows` read again from their reverse complement."""
+    import pandas as pd
+
+    flip = set(rows)
+    table = pd.DataFrame(
+        {
+            "alias": [guide.alias for guide in library],
+            "sequence": [
+                reverse_complement(guide.input_sequence)
+                if row in flip
+                else guide.input_sequence
+                for row, guide in enumerate(library)
+            ],
+        }
+    )
+    return read_guides(
+        table,
+        id_col="alias",
+        spacer_col="sequence",
+        spacer_length=parameters["spacer_length"],
+        add_leading_g=parameters["add_leading_g"],
+        pam=parameters["pam"],
+    )

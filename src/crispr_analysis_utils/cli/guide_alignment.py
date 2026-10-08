@@ -48,8 +48,10 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Align a guide library to its genomic sites and classify each guide.",
         description=(
             "Align a guide library with GEM3, check every hit against the "
-            "reference, and write guides.tsv, sites.tsv, orientation.tsv, "
-            "guides.bed, cut_sites.bed, summary.tsv and run.json into --outdir."
+            "reference, and write guides_metadata.tsv, sites.tsv, "
+            "orientation.tsv, guides.bed, cut_sites.bed and qc.tsv into "
+            "--outdir, with the BAMs in alignments/ and this invocation's "
+            "metadata in run_metadata/."
         ),
     )
     inputs = run.add_argument_group("inputs and outputs")
@@ -82,15 +84,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     search.add_argument(
         "--pam",
         default="NGG",
-        help="The primary PAM, IUPAC codes, 3' of the protospacer (default: NGG).",
+        help="The PAM, IUPAC codes, 3' of the protospacer (default: NGG).",
     )
     search.add_argument(
         "--alt-pams",
         type=_pam_list,
-        default=["NAG", "NGA"],
+        default=[],
         help=(
-            'Alternative PAMs, comma-separated; "" for none. They are counted '
-            "but never decide a guide's class (default: NAG,NGA)."
+            "Alternative PAMs, comma-separated. They are counted in their own "
+            "columns but never decide a guide's class (default: none)."
         ),
     )
     search.add_argument(
@@ -110,11 +112,19 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     search.add_argument(
         "--orientation-check",
         choices=("warn", "error", "off"),
-        default="warn",
+        default="error",
         help=(
-            "Check that the spacers are given 5' to 3', from their exact hits: "
-            "warn, stop with an error when reversed guides outnumber ok ones, "
-            "or skip the check (default: warn)."
+            "Check that the library reads 5' to 3', by aligning the sequences "
+            "both as given and reverse-complemented: stop when the reverse "
+            "complement wins, only warn, or skip the check (default: error)."
+        ),
+    )
+    search.add_argument(
+        "--fix-orientation",
+        action="store_true",
+        help=(
+            "When the check finds the library reverse-complemented, align the "
+            "reverse complement instead of stopping."
         ),
     )
     search.add_argument(
@@ -180,6 +190,7 @@ def run(args: argparse.Namespace) -> int:
                 spacer_length=args.spacer_length,
                 add_leading_g=args.add_leading_g,
                 orientation_check=args.orientation_check,
+                fix_orientation=args.fix_orientation,
                 contigs=args.contigs,
                 threads=args.threads,
                 id_col=args.id_col,
@@ -189,7 +200,7 @@ def run(args: argparse.Namespace) -> int:
             )
         except expected as error:
             raise CommandError(str(error)) from error
-    classes = Counter(summary.alignment_class for summary in result.summaries)
+    classes = Counter(summary.site_class for summary in result.summaries)
     print(
         f"{len(result.summaries)} guides: "
         + ", ".join(f"{classes[name]} {name}" for name in CLASSES)

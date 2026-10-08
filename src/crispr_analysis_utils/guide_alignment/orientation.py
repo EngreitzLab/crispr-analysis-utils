@@ -1,9 +1,14 @@
-"""Pass 1 of the guide alignment: is each spacer given 5' to 3'?
+"""Pass 1 of the guide alignment: is the library given 5' to 3'?
 
 The bare spacers (see `write_spacer_reads`) are aligned with no mismatch
-allowed. For each perfect hit, the flanks are read from the reference in guide
-orientation: a PAM on the 3' side means the spacer reads the right way, and
-the reverse complement of a PAM on the 5' side means it is reversed.
+allowed, once as given and once reverse-complemented. For each perfect hit the
+flanks are read from the reference in read orientation, and the verdict says
+where a PAM was found: ``pam_3p`` is what a correctly oriented guide gives.
+
+`resolve_orientation` then gives each guide its verdict from both directions:
+an entry is ``reverse_complement`` only when its reverse complement has a
+perfect hit with a PAM and the sequence as given does not. A table can mix
+orientations, so this is per guide; `reversed_rows` names the ones to flip.
 Coordinates are 0-based and half-open on the reference's forward strand.
 """
 
@@ -12,7 +17,7 @@ from __future__ import annotations
 import logging
 import os
 from collections import Counter
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -28,7 +33,7 @@ from ._alignment import (
     open_reference,
     strand_of,
 )
-from .iupac import pattern_matches, reverse_complement, validate_pams
+from .iupac import pattern_matches, validate_pams
 from .library import Guide
 
 if TYPE_CHECKING:
@@ -36,17 +41,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-OK = "ok"
-"""A perfect hit has a PAM (primary or alternative) on its 3' side."""
-REVERSED = "reversed"
-"""No perfect hit is ``ok``, but one has a reverse-complemented PAM on its 5' side."""
+PAM_3P = "pam_3p"
+"""One direction's result: a perfect hit has a PAM on its 3' side."""
 NO_PAM = "no_pam"
-"""The guide has perfect hits, and none is ``ok`` or ``reversed``."""
+"""The guide has perfect hits, and none has a PAM 3' of it."""
 NO_PERFECT_HIT = "no_perfect_hit"
 """The guide has no perfect hit."""
 NOT_CHECKED = "not_checked"
 """The orientation check did not run."""
-VERDICTS = (OK, REVERSED, NO_PAM, NO_PERFECT_HIT, NOT_CHECKED)
+
+FORWARD = "forward"
+"""The sequence as given has a perfect hit with a PAM 3' of it."""
+REVERSE_COMPLEMENT = "reverse_complement"
+"""Only the reverse complement does: this entry is written 3' to 5'."""
+VERDICTS = (FORWARD, REVERSE_COMPLEMENT, NO_PAM, NO_PERFECT_HIT, NOT_CHECKED)
 """Every orientation verdict, in report order."""
 
 
@@ -205,12 +213,10 @@ def check_orientation(
             found[row].values(),
             key=lambda hit: (order[hit.chr], hit.start, hit.strand),
         )
-    reversed_patterns = [reverse_complement(pattern) for pattern in patterns]
+
     for row, guide in enumerate(guides):
         if guide.duplicate_of is None:
-            result.verdicts[row] = _verdict(
-                result.hits.get(row, []), patterns, reversed_patterns
-            )
+            result.verdicts[row] = _verdict(result.hits.get(row, []), patterns)
     logger.info(
         "Orientation check: %s; verdicts %s",
         result.counts(),
@@ -219,22 +225,63 @@ def check_orientation(
     return result
 
 
-def library_reversed(verdicts: Iterable[str]) -> bool:
-    """The library-level orientation check: do reversed guides outnumber ok ones?
+def resolve_orientation(
+    forward: Mapping[int, str], reverse: Mapping[int, str]
+) -> dict[int, str]:
+    """Each guide's orientation, from its result in both directions.
+
+    A guide is only called ``reverse_complement`` when its reverse complement
+    has a perfect hit with a PAM and the sequence as given does not. Nothing
+    is inferred from a flank: the other direction was aligned, so there is no
+    need to guess at it.
+
+    Parameters
+    ----------
+    forward
+        Each guide row's result for the sequences as given, as in
+        `OrientationResult.verdicts`.
+    reverse
+        The same for the reverse-complemented sequences.
+
+    Returns
+    -------
+    dict
+        The verdict of every row in either mapping: ``forward``,
+        ``reverse_complement``, ``no_pam`` or ``no_perfect_hit``.
+    """
+    verdicts = {}
+    for row in sorted(set(forward) | set(reverse)):
+        as_given = forward.get(row, NO_PERFECT_HIT)
+        flipped = reverse.get(row, NO_PERFECT_HIT)
+        if as_given == PAM_3P:
+            verdicts[row] = FORWARD
+        elif flipped == PAM_3P:
+            verdicts[row] = REVERSE_COMPLEMENT
+        elif NO_PAM in (as_given, flipped):
+            verdicts[row] = NO_PAM
+        else:
+            verdicts[row] = NO_PERFECT_HIT
+    return verdicts
+
+
+def reversed_rows(verdicts: Mapping[int, str]) -> list[int]:
+    """The rows whose entry is written 3' to 5', in order.
 
     Parameters
     ----------
     verdicts
-        Orientation verdicts, one per guide.
+        The verdicts of `resolve_orientation`.
 
     Returns
     -------
-    bool
-        True when more verdicts are ``reversed`` than ``ok``. The other
-        verdicts count for neither side, and a tie is False.
+    list of int
+        Every row whose verdict is ``reverse_complement``.
     """
-    counts = Counter(verdicts)
-    return counts[REVERSED] > counts[OK]
+    return [
+        row
+        for row, verdict in sorted(verdicts.items())
+        if verdict == REVERSE_COMPLEMENT
+    ]
 
 
 def _read_record(
@@ -289,16 +336,10 @@ def _read_record(
     )
 
 
-def _verdict(
-    hits: Sequence[PerfectHit],
-    patterns: Sequence[str],
-    reversed_patterns: Sequence[str],
-) -> str:
-    """The orientation verdict from one guide's perfect hits."""
+def _verdict(hits: Sequence[PerfectHit], patterns: Sequence[str]) -> str:
+    """One direction's result for a guide, from its perfect hits."""
     if not hits:
         return NO_PERFECT_HIT
     if any(pattern_matches(hit.flank_3p, p) for hit in hits for p in patterns):
-        return OK
-    if any(pattern_matches(hit.flank_5p, p) for hit in hits for p in reversed_patterns):
-        return REVERSED
+        return PAM_3P
     return NO_PAM

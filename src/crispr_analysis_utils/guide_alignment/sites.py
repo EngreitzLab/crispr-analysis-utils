@@ -61,21 +61,25 @@ class Site:
     pam
         The genomic PAM, uppercased, in guide orientation.
     pam_class
-        The first pattern the genomic PAM matches, trying the primary PAM and
-        then the alternatives in their order, or ``none``. A genomic ``N``
-        matches only an ``N`` of the pattern.
+        The first pattern the genomic PAM matches, trying the PAM and then any
+        alternatives in their order, or ``none``. A genomic ``N`` matches only
+        an ``N`` of the pattern.
     n_mismatches
         The mismatches between the spacer and the genomic protospacer. A
         genomic ``N`` counts as one; the added G never counts.
     mismatch_positions
         The 1-based spacer positions of those mismatches, counted from the
         guide's 5' end.
+    mapped_sequence
+        The guide's own bases that pair with the genome here, 5' to 3': the
+        spacer, keeping an added 5' G only when the genomic base under it is
+        also G. The PAM is genomic, so it is not part of it.
     genomic_protospacer
         The reference bases of the protospacer, uppercased, in guide
         orientation.
-    leading_g_base
-        For a guide with an added G, the genomic base under that G, in guide
-        orientation; None otherwise.
+    added_g_base
+        For a guide with bases 5' of its spacer, the genomic bases under
+        them, in guide orientation; None otherwise.
     """
 
     guide_id: str
@@ -87,8 +91,9 @@ class Site:
     pam_class: str
     n_mismatches: int
     mismatch_positions: tuple[int, ...]
+    mapped_sequence: str
     genomic_protospacer: str
-    leading_g_base: str | None
+    added_g_base: str | None
 
 
 @dataclass
@@ -151,7 +156,7 @@ def read_sites(
     reference: str | os.PathLike[str],
     *,
     pam: str = "NGG",
-    alt_pams: Iterable[str] = ("NAG", "NGA"),
+    alt_pams: Iterable[str] = (),
     max_mismatches: int = 3,
     contigs: Collection[str] | None = None,
     fasta_index: str | os.PathLike[str] | None = None,
@@ -171,10 +176,10 @@ def read_sites(
     reference
         The reference FASTA the aligner's index was built from.
     pam
-        The primary PAM pattern, in IUPAC codes.
+        The PAM pattern, in IUPAC codes.
     alt_pams
-        The alternative PAM patterns, in IUPAC codes, tried in order after
-        `pam` to classify a genomic PAM.
+        Alternative PAM patterns, in IUPAC codes, tried in order after `pam`
+        to classify a genomic PAM. Empty by default: only `pam` is a PAM.
     max_mismatches
         Keep a site only if its spacer has at most this many mismatches.
     contigs
@@ -262,7 +267,7 @@ def _read_record(
         return
 
     guide = guides[row]
-    n_g = int(guide.leading_g)
+    n_g = guide.n_extra
     n_spacer = len(guide.spacer)
     n_pam = len(read_pam)
     check_cigar(record, n_g + n_spacer + n_pam)
@@ -274,7 +279,7 @@ def _read_record(
 
     strand = strand_of(record)
     bases = fetch_oriented(fasta, chrom, position, stop, strand, lengths[chrom])
-    leading_g_base = bases[:n_g] or None
+    added_g_base = bases[:n_g] or None
     protospacer = bases[n_g : n_g + n_spacer]
     genomic_pam = bases[n_g + n_spacer :]
     positions = tuple(
@@ -289,7 +294,7 @@ def _read_record(
         recomputed = (
             len(positions)
             + _pam_errors(genomic_pam, read_pam)
-            + int(leading_g_base not in (None, "G"))
+            + int(added_g_base not in (None, "G"))
         )
         if record.get_tag("NM") != recomputed:
             result.n_nm_disagreements += 1
@@ -317,8 +322,9 @@ def _read_record(
         ),
         n_mismatches=len(positions),
         mismatch_positions=positions,
+        mapped_sequence=_mapped_sequence(guide, added_g_base),
         genomic_protospacer=protospacer,
-        leading_g_base=leading_g_base,
+        added_g_base=added_g_base,
     )
 
 
@@ -341,3 +347,21 @@ def _pam_errors(genomic_pam: str, pattern: str) -> int:
         code not in "ACGT" or base != code
         for base, code in zip(genomic_pam, pattern, strict=True)
     )
+
+
+def _mapped_sequence(guide: Guide, added_g_base: str | None) -> str:
+    """The guide's own bases that pair with the genome at a site.
+
+    The spacer always pairs, mismatches and all. A base 5' of it is kept only
+    where the genome holds the same base, so a guide whose added G sits on a
+    genomic G reads as 21 bases and one whose does not reads as 20.
+    """
+    extra = guide.aligned_sequence[: guide.n_extra]
+    if not extra or added_g_base is None:
+        return guide.spacer
+    kept = "".join(
+        base
+        for base, genomic in zip(extra, added_g_base, strict=True)
+        if base == genomic
+    )
+    return kept + guide.spacer

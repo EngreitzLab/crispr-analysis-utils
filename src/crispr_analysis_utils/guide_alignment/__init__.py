@@ -17,7 +17,8 @@ from .orientation import (
     OrientationResult,
     PerfectHit,
     check_orientation,
-    library_reversed,
+    resolve_orientation,
+    reversed_rows,
 )
 from .pipeline import OrientationError, RunResult, run
 from .sites import Site, SiteResult, read_sites
@@ -30,8 +31,8 @@ from .summary import (
     write_guides_bed,
     write_guides_tsv,
     write_orientation_tsv,
+    write_qc_tsv,
     write_sites_tsv,
-    write_summary_tsv,
 )
 
 __all__ = [
@@ -51,7 +52,8 @@ __all__ = [
     "gem",
     "guide_columns",
     "iupac",
-    "library_reversed",
+    "resolve_orientation",
+    "reversed_rows",
     "map_reads",
     "pipeline",
     "read_guides",
@@ -65,5 +67,5 @@ __all__ = [
     "write_site_reads",
     "write_sites_tsv",
     "write_spacer_reads",
-    "write_summary_tsv",
+    "write_qc_tsv",
 ]
