@@ -68,11 +68,11 @@ per platform serves every supported Python rather than one per version.
 ## Commands
 
 ```bash
-pixi install -e dev              # conda + PyPI: the package, dev tools and GEM3
+pixi install -e dev              # conda + PyPI: the package, its Rust core and the dev tools
 pixi run -e dev test
 pixi run -e dev lint             # every pre-commit hook on every tracked file
 pixi run -e dev install-hooks    # once per clone: commit and push hooks
-pixi run -e dev gem-mapper       # GEM3's usage: the binaries are on the PATH
+pixi run -e gem gem-mapper       # GEM3's usage: only this environment has it
 pixi run -e dev cau guide-alignment run --help
 pixi run -e docs docs            # serve the site locally
 pixi run -e docs docs-build      # mkdocs build --strict, as CI runs it
@@ -86,9 +86,8 @@ claude plugin validate --strict . && claude plugin validate --strict src/crispr_
 
 pixi is the default, and its `dev` environment is the one environment for
 everything, GEM3 included: run the tests, the linters and `cau` there, not in
-a uv `.venv`. `default` and `dev` carry GEM3 on linux-64 and osx-64; on Apple
-silicon pixi installs them as osx-64, which runs under Rosetta. `docs` has no
-GEM3 and stays native. uv locks `uv.lock`, builds, and runs the CI jobs that
+a uv `.venv`. `default`, `dev` and `docs` are native on all three platforms; only `gem`
+carries GEM3, on linux-64 and osx-64. uv locks `uv.lock`, builds, and runs the CI jobs that
 need no conda: the `test-pip` matrix, where the `gem` tests skip, `build` and
 `docs-build`.
 
@@ -201,17 +200,14 @@ use 3.13.
   checkout and checks that the wheel holds no `tests/`, `scripts/` or stray
   scripts, and that it holds every skill file; a local `uv build` has no such
   guard.
-- **On Apple silicon, `default` and `dev` are osx-64 environments.** bioconda
-  builds gem3-mapper for linux-64 and osx-64 only, so the `gem` feature limits
-  the environments that include it to those two platforms, and pixi falls back
-  to osx-64 there. Everything in them runs under Rosetta, Python included:
-  `platform.machine()` returns `x86_64`. pixi warns about the fallback once per
-  clone and about archspec once per environment; both are expected. A clone
-  whose `default` or `dev` was installed as osx-arm64 (before GEM came to
-  macOS) keeps the arm64 PyPI wheels when pixi switches it to osx-64, and
+- **GEM lives in the `gem` environment alone.** bioconda builds gem3-mapper
+  for linux-64 and osx-64 only, so that one environment is limited to those
+  platforms and runs under Rosetta on Apple silicon; `default`, `dev` and
+  `docs` are native everywhere. The gem-marked tests skip in `dev` and run in
+  `gem`, which is what CI's `test` job does. Switching an environment between
+  osx-64 and osx-arm64 leaves PyPI wheels of the wrong architecture behind and
   pysam then fails to import ("incompatible architecture"): run
-  `pixi clean -e dev` and `pixi clean -e default`, then reinstall. The unit
-  tests mock the binaries; CI's `test` job checks that they run.
+  `pixi clean -e <name>` and reinstall.
 - **GEM 3.6 misbehaves at the start of its index and at contig ends.**
     - A read that aligns across the first base of the reference's first contig
       (on +) makes gem-mapper crash ("Signal raised", exit status 1, a partial

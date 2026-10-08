@@ -97,9 +97,10 @@ python = "3.13.*"
 rust = ">=1.80"
 maturin = ">=1.9,<2"
 
-# bioconda builds gem3-mapper for linux-64 and osx-64, not osx-arm64. An environment
-# with this feature has only those two platforms; on Apple silicon pixi installs it as
-# osx-64, which runs under Rosetta.
+# bioconda builds gem3-mapper for linux-64 and osx-64, not osx-arm64, so an environment
+# with this feature has only those two platforms and runs under Rosetta on Apple silicon.
+# It is quarantined in the `gem` environment on purpose: default, dev and docs stay
+# native everywhere, and this goes away with gem.py.
 [tool.pixi.feature.gem]
 platforms = ["linux-64", "osx-64"]
 
@@ -111,11 +112,13 @@ gem3-mapper = ">=3.6.1"
 crispr-analysis-utils = { path = ".", editable = true }
 
 # The `dev` and `docs` groups become features of the same name; `gem` is defined above.
-# docs has no GEM, so it stays native on all three platforms.
+# Only the `gem` environment carries GEM3, and only it is limited to linux-64 and
+# osx-64; everything else is native on all three platforms.
 [tool.pixi.environments]
-default = { features = ["gem"], solve-group = "default" }
-dev = { features = ["dev", "gem"], solve-group = "default" }
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
+gem = { features = ["dev", "gem"] }
 
 [tool.pixi.feature.dev.tasks]
 test = { cmd = "pytest", description = "Run the test suite" }

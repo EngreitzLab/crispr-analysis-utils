@@ -83,17 +83,21 @@ jobs:
         with:
           pixi-version: ${{ env.PIXI_VERSION }}
           manifest-path: pyproject.toml
-          environments: dev
+          environments: dev gem
           locked: true
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
       - run: pixi run -e dev test
+      # dev is native everywhere and so has no GEM: the gem-marked tests skip there and
+      # run in the one environment that carries the binaries.
+      - name: The GEM tests run where GEM is
+        run: pixi run -e gem pytest -m gem
       # The unit tests mock the GEM binaries. This checks that the bioconda build runs
       # here, with the same probes as its recipe.
       - name: GEM binaries run
         run: |
-          pixi run -e dev bash -c 'gem-mapper 2>&1 | grep -q -- "-I <index_file.gem>"'
-          pixi run -e dev bash -c 'gem-indexer -h 2>&1 | grep -q -- "-i <input_file>"'
+          pixi run -e gem bash -c 'gem-mapper 2>&1 | grep -q -- "-I <index_file.gem>"'
+          pixi run -e gem bash -c 'gem-indexer -h 2>&1 | grep -q -- "-i <input_file>"'
       - name: Tests left the working tree clean
         run: test -z "$(git status --porcelain)" || { git status --porcelain; exit 1; }
 
