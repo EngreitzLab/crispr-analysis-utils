@@ -59,6 +59,7 @@ nav:
           - Orientation: reference/guide-alignment-orientation.md
           - Classes and tables: reference/guide-alignment-summary.md
           - IUPAC codes: reference/guide-alignment-iupac.md
+      - Accession: reference/accession.md
       - Normalization:
           - counts_per_million: reference/counts-per-million.md
       - Utilities:

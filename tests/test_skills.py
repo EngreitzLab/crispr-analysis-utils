@@ -23,6 +23,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 # Which analysis modules each skill or agent covers.
 COVERAGE = {
+    "cau-accession": ("accession",),
     "cau-normalization": ("normalization",),
     "cau-guide-alignment": ("guide_alignment",),
     "cau-guide-alignment-runner": ("guide_alignment",),

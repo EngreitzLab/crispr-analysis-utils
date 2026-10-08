@@ -24,6 +24,11 @@ fine (`pixi install` does it).
 
 - `src/crispr_analysis_utils/` -- the package, **and the Claude Code plugin
   root**: `.claude-plugin/marketplace.json` points its one plugin here.
+    - `accession.py`      -- `guide_accession` encodes a guide (`G...NGG`,
+                             SpCas9) rather than hashing it, so two guides
+                             never collide and `guide_sequence` decodes one
+                             back. It validates and never repairs. Changing
+                             the scheme renames every guide.
     - `normalization.py`  -- `counts_per_million`.
     - `guide_alignment/`  -- maps a guide library to its genomic sites with
                              GEM3: `library` (the guide table, the reads),
