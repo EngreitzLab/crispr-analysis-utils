@@ -47,6 +47,7 @@ fn scan_fasta(
     let width = pam_length(pam).map_err(PyValueError::new_err)?;
     let table = Spacers::new(&spacers).map_err(PyValueError::new_err)?;
     let wanted: Option<HashSet<String>> = contigs.map(|names| names.into_iter().collect());
+    let mut seen: HashSet<String> = HashSet::new();
 
     let file = File::open(fasta)
         .map_err(|error| PyOSError::new_err(format!("Cannot read {fasta}: {error}")))?;
@@ -64,6 +65,9 @@ fn scan_fasta(
             .map_err(|error| PyOSError::new_err(format!("Cannot read {fasta}: {error}")))?;
         let last = read == 0;
         if last || line.first() == Some(&b'>') {
+            if !name.is_empty() {
+                seen.insert(name.clone());
+            }
             if !name.is_empty() && wanted.as_ref().is_none_or(|set| set.contains(&name)) {
                 // Releasing the GIL here is what makes a whole genome bearable
                 // from Python: the scan touches nothing the interpreter owns.
@@ -82,6 +86,24 @@ fn scan_fasta(
                 }
             }
             if last {
+                // A contig that was asked for and never appeared is a typo, not
+                // an empty result: without this the whole run would quietly
+                // report that no guide maps anywhere.
+                if let Some(set) = wanted.as_ref() {
+                    let mut missing: Vec<&str> =
+                        set.iter().filter(|n| !seen.contains(*n)).map(|n| n.as_str()).collect();
+                    if !missing.is_empty() {
+                        missing.sort_unstable();
+                        return Err(PyValueError::new_err(format!(
+                            "{fasta} has no contig named {}.",
+                            missing
+                                .iter()
+                                .map(|n| format!("{n:?}"))
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )));
+                    }
+                }
                 break;
             }
             name = String::from_utf8_lossy(&line[1..])

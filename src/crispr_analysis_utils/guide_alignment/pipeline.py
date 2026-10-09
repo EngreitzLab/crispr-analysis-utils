@@ -260,14 +260,15 @@ def _run(
         summaries = summarize(
             library,
             scan.sites,
-            scan.verdicts,
+            scan.verdicts or None,
             evidence=scan.evidence,
             pam=parameters["pam"],
             max_mismatches=0,
         )
         write_guides_tsv(outdir / "guides_metadata.tsv", summaries, max_mismatches=0)
         write_sites_tsv(outdir / "sites.tsv", library, scan.sites)
-        write_orientation_tsv(outdir / "orientation.tsv", library, scan)
+        if scan.verdicts:
+            write_orientation_tsv(outdir / "orientation.tsv", library, scan)
         write_guides_bed(outdir / "guides.bed", summaries)
         write_cut_sites_bed(outdir / "cut_sites.bed", summaries)
         write_qc_tsv(outdir / "qc.tsv", summaries, counts=state["counts"])
@@ -305,7 +306,11 @@ def _check_orientation(
     """Act on the orientation verdicts, flipping entries when asked to."""
     check = parameters["orientation_check"]
     if check == "off":
+        # The scan holds both readings whatever happens, but "off" has to mean
+        # off: no verdicts in guides_metadata.tsv and no orientation.tsv.
         logger.info("Orientation check: off")
+        scan.verdicts = {}
+        scan.evidence = {}
         return library, scan
 
     counts = Counter(scan.verdicts.values())
@@ -323,14 +328,16 @@ def _check_orientation(
         f"reverse complement has a site with a PAM and the sequence as given "
         f"does not ({aliases})."
     )
-    # One guide can look reversed because its PAM differs between assemblies,
-    # so only a table that is reversed throughout stops the run.
-    if counts[REVERSE_COMPLEMENT] > counts[FORWARD] and check == "error":
-        raise OrientationError(
-            f"{message} Pass --fix-orientation to align their reverse complement "
-            "instead, or --orientation-check warn to carry on."
-        )
+    # Asked to fix them, fix them: the refusal below names this flag, so it has
+    # to be acted on before we refuse, or the advice would be impossible to take.
     if not parameters["fix_orientation"]:
+        # One guide can look reversed because its PAM differs between
+        # assemblies, so only a table reversed throughout stops the run.
+        if counts[REVERSE_COMPLEMENT] > counts[FORWARD] and check == "error":
+            raise OrientationError(
+                f"{message} Pass --fix-orientation to align their reverse "
+                "complement instead, or --orientation-check warn to carry on."
+            )
         logger.warning(message)
         return library, scan
 

@@ -1,21 +1,17 @@
-"""The guide library: reading the guide table and writing the reads to align.
+"""The guide library: reading and validating the guide table.
 
-A guide is known by its row: its 0-based position in the list `read_guides`
-returns. Read names carry that row, so the alignments can be matched back to
-the guide without parsing names.
+A guide is known by its row, its 0-based position in the list `read_guides`
+returns, and identified by `Guide.guide_id`: the sequence that is aligned,
+plus the PAM. The name the table gives it is `Guide.alias`.
 """
 
 from __future__ import annotations
 
-import gzip
-import io
 import logging
 import os
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TextIO
 
 import pandas as pd
 
@@ -131,6 +127,7 @@ def read_guides(
         other than A, C, G and T; or a sequence is shorter than
         `spacer_length`.
     """
+    pam = validate_pams([pam])[0]
     if (
         isinstance(spacer_length, bool)
         or not isinstance(spacer_length, int)
@@ -245,95 +242,6 @@ def read_guides(
     return guides
 
 
-def write_spacer_reads(
-    guides: Sequence[Guide],
-    path: str | os.PathLike[str],
-    *,
-    reverse_complement: bool = False,
-) -> int:
-    """Write the orientation-check reads: one bare spacer per distinct spacer.
-
-    Parameters
-    ----------
-    guides
-        The library, as returned by `read_guides`.
-    path
-        The FASTQ to write. A path ending in ``.gz`` is gzip-compressed.
-    reverse_complement
-        Write the spacer of the reverse-complemented input sequence instead,
-        which is what the library would read if it were given 3' to 5'. Taking
-        the spacer again after reverse-complementing matters: the base an
-        added G displaces is at the other end.
-
-    Returns
-    -------
-    int
-        The number of reads written.
-
-    Notes
-    -----
-    Each guide without `duplicate_of` gives one read: its name is the guide's
-    row, its sequence the spacer (no PAM, no added G), and every quality is
-    ``I``.
-    """
-    n_reads = 0
-    with _open_fastq(path) as handle:
-        for row, guide in enumerate(guides):
-            if guide.duplicate_of is None:
-                _write_read(handle, str(row), _read_sequence(guide, reverse_complement))
-                n_reads += 1
-    return n_reads
-
-
-def write_site_reads(
-    guides: Sequence[Guide],
-    path: str | os.PathLike[str],
-    *,
-    pams: Iterable[str],
-) -> int:
-    """Write the site-search reads: one read per guide and PAM.
-
-    Parameters
-    ----------
-    guides
-        The library, as returned by `read_guides`.
-    path
-        The FASTQ to write. A path ending in ``.gz`` is gzip-compressed.
-    pams
-        The PAM patterns, primary first, as IUPAC codes (for example
-        ``["NGG", "NAG", "NGA"]``). They must share one length.
-
-    Returns
-    -------
-    int
-        The number of reads written.
-
-    Raises
-    ------
-    ValueError
-        If the PAM patterns fail `validate_pams`.
-
-    Notes
-    -----
-    Only guides without `duplicate_of` are written. A guide's reads are
-    consecutive, one per PAM in the order given. Each read is named
-    ``<row>:<pam>`` and its sequence is `Guide.aligned_sequence` then the PAM
-    pattern, so the guide is aligned whole; the PAM is uppercased, and
-    otherwise written as given, IUPAC codes included. Every quality is
-    ``I``.
-    """
-    patterns = validate_pams(pams)
-    n_reads = 0
-    with _open_fastq(path) as handle:
-        for row, guide in enumerate(guides):
-            if guide.duplicate_of is not None:
-                continue
-            for pam in patterns:
-                _write_read(handle, f"{row}:{pam}", f"{guide.aligned_sequence}{pam}")
-                n_reads += 1
-    return n_reads
-
-
 def _column(
     table: pd.DataFrame, column: int | str, argument: str, origin: str
 ) -> pd.Series:
@@ -368,26 +276,3 @@ def _listing(items: Sequence[str]) -> str:
     if len(items) > _MAX_LISTED:
         shown += f", and {len(items) - _MAX_LISTED} more"
     return shown
-
-
-def _open_fastq(path: str | os.PathLike[str]) -> TextIO:
-    """Open a FASTQ for writing; gzip-compressed when the path ends in .gz."""
-    path = Path(path)
-    if path.suffix == ".gz":
-        return io.TextIOWrapper(
-            gzip.GzipFile(path, mode="wb", mtime=0), encoding="ascii", newline="\n"
-        )
-    return path.open("w", encoding="ascii", newline="\n")
-
-
-def _write_read(handle: TextIO, name: str, sequence: str) -> None:
-    """Write one FASTQ record with a constant quality."""
-    handle.write(f"@{name}\n{sequence}\n+\n{_QUALITY * len(sequence)}\n")
-
-
-def _read_sequence(guide: Guide, reverse_complement: bool) -> str:
-    """The orientation read of `guide`, in the direction asked for."""
-    if not reverse_complement:
-        return guide.spacer
-    flipped = guide.aligned_sequence[::-1].translate(_COMPLEMENT)
-    return flipped[-len(guide.spacer) :]

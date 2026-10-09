@@ -97,8 +97,12 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     search.add_argument(
         "--sep",
+        type=_separator,
         default="\t",
-        help="The guide table's field separator (default: a tab).",
+        help=(
+            "The guide table's field separator: tab, comma, or one character "
+            "(default: tab)."
+        ),
     )
     search.add_argument(
         "--header",
@@ -149,6 +153,18 @@ def _contigs(value: str | None) -> list[str] | None:
     if not names:
         raise CommandError("--contigs was given no contig names.")
     return names
+
+
+def _separator(value: str) -> str:
+    """The field separator: a name, an escape, or a single character."""
+    names = {"tab": "\t", "comma": ",", "semicolon": ";", "space": " ", "\\t": "\t"}
+    if value.lower() in names:
+        return names[value.lower()]
+    if len(value) != 1:
+        raise argparse.ArgumentTypeError(
+            f"--sep takes tab, comma, or one character, not {value!r}."
+        )
+    return value
 
 
 def _column(value: str) -> int | str:

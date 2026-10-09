@@ -1,4 +1,4 @@
-"""File helpers shared by the GEM wrappers and the pipeline."""
+"""File helpers for the pipeline."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ def check_plain_fasta(path: str | os.PathLike[str], what: str) -> Path:
         raise FileNotFoundError(f"The {what} {path} does not exist.")
     if is_gzip(path):
         raise ValueError(
-            f"The {what} {path} is gzip-compressed; GEM and the site checks need "
-            "an uncompressed FASTA."
+            f"The {what} {path} is gzip-compressed; the scan reads an "
+            "uncompressed FASTA."
         )
     return path
 

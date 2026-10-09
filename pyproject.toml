@@ -74,11 +74,7 @@ include = [{ path = "tests/**/*", format = "sdist" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# No -m here: it would deselect the gem marker by default.
 addopts = "-ra --strict-markers"
-markers = [
-    "gem: needs the GEM3 binaries on the PATH (the pixi environments have them)",
-]
 
 [tool.uv]
 # The single uv pin: setup-uv in CI reads it, and the lockfile format is stable within a minor.
@@ -97,28 +93,17 @@ python = "3.13.*"
 rust = ">=1.80"
 maturin = ">=1.9,<2"
 
-# bioconda builds gem3-mapper for linux-64 and osx-64, not osx-arm64, so an environment
-# with this feature has only those two platforms and runs under Rosetta on Apple silicon.
-# It is quarantined in the `gem` environment on purpose: default, dev and docs stay
-# native everywhere, and this goes away with gem.py.
-[tool.pixi.feature.gem]
-platforms = ["linux-64", "osx-64"]
-
-[tool.pixi.feature.gem.dependencies]
-gem3-mapper = ">=3.6.1"
-
 # pixi does not install the project by itself.
 [tool.pixi.pypi-dependencies]
 crispr-analysis-utils = { path = ".", editable = true }
 
-# The `dev` and `docs` groups become features of the same name; `gem` is defined above.
-# Only the `gem` environment carries GEM3, and only it is limited to linux-64 and
-# osx-64; everything else is native on all three platforms.
+# The `dev` and `docs` groups become features of the same name. Every environment is
+# native on all three platforms: the genome scan is the package's own Rust core, so
+# nothing pulls in an x86-64-only aligner any more.
 [tool.pixi.environments]
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
-gem = { features = ["dev", "gem"] }
 
 [tool.pixi.feature.dev.tasks]
 test = { cmd = "pytest", description = "Run the test suite" }

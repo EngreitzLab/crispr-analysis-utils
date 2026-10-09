@@ -1,13 +1,11 @@
-"""Guide alignment: map a CRISPR guide library to its genomic sites.
+"""Guide alignment: find every guide's genomic site.
 
-The library is read and validated (`read_guides`), then written as reads for
-the aligner: bare spacers for the orientation check (`write_spacer_reads`) and
-one ``[G] + spacer + PAM`` read per guide and PAM for the site search
-(`write_site_reads`). GEM3 maps them (`build_index`, `map_reads`, in `gem`).
-The alignments come back through `check_orientation` and `read_sites`, which
-verify every hit against the reference, and `summarize` classifies each guide
-for the output tables (the ``write_*`` functions). `run` chains it all into
-one folder of outputs. The IUPAC helpers live in `iupac`.
+A guide is designed, not sequenced, so its site is an exact match of the
+spacer. The library is read and validated (`read_guides`), `scan_guides` walks
+the reference once holding both readings of every guide, and `summarize`
+classifies each one for the output tables (the ``write_*`` functions). `run`
+chains it into one folder of outputs. The IUPAC helpers live in `iupac`, and
+the scan itself is the package's Rust core.
 """
 
 from . import iupac, pipeline, scan
@@ -30,16 +28,14 @@ from .summary import (
 )
 
 __all__ = [
+    "EVIDENCE",
     "Guide",
     "GuideSummary",
     "OrientationError",
     "RunResult",
-    "EVIDENCE",
-    "EVIDENCE",
     "ScanResult",
-    "VERDICTS",
-    "VERDICTS",
     "Site",
+    "VERDICTS",
     "fan_out_sites",
     "guide_columns",
     "iupac",
@@ -53,6 +49,6 @@ __all__ = [
     "write_guides_bed",
     "write_guides_tsv",
     "write_orientation_tsv",
-    "write_sites_tsv",
     "write_qc_tsv",
+    "write_sites_tsv",
 ]

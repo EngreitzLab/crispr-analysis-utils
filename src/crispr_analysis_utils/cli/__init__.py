@@ -24,7 +24,7 @@ from .._version import __version__
 COMMANDS: dict[str, tuple[str, str]] = {
     "guide-alignment": (
         "guide_alignment",
-        "Align a CRISPR guide library to a reference with GEM3.",
+        "Find every guide's genomic site in a reference.",
     ),
     "install-skills": (
         "install_skills",

@@ -32,11 +32,12 @@ per platform serves every supported Python rather than one per version.
   root**: `.claude-plugin/marketplace.json` points its one plugin here.
     - `normalization.py`  -- `counts_per_million`.
     - `guide_alignment/`  -- maps a guide library to its genomic sites with
-                             GEM3: `library` (the guide table, the reads),
-                             `gem` (index, gem-mapper), `orientation` (pass
-                             1), `sites` (pass 2), `summary` (classes,
-                             tables), `pipeline` (`run`), `iupac`. One
-                             analysis module, one skill.
+                             an exact scan: `library` (the guide table),
+                             `scan` (the genome pass, over `_core`), `sites`
+                             (the `Site` record), `orientation` (the
+                             verdicts), `summary` (classes, tables),
+                             `pipeline` (`run`), `iupac`. One analysis module,
+                             one skill.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
     - `_core.abi3.so`     -- the compiled Rust core, built in place by an
                              editable install and gitignored. Its sources are
@@ -56,10 +57,10 @@ per platform serves every supported Python rather than one per version.
                            `Cargo.lock` is committed, like the other two
                            lockfiles.
 - `tests/`              -- pytest. `conftest.py` runs every test inside its
-                           own `tmp_path`. `fake_gem.py` stands in for the GEM
-                           binaries, and `planted_genome.py` builds the
-                           synthetic genomes of the GEM integration test;
-                           pytest collects neither.
+                           own `tmp_path`. `test_core_scan.py` checks the Rust
+                           scan against a naive Python scan of every position
+                           on every strand; that oracle is what makes the scan
+                           trustworthy.
 - `docs/`               -- the MkDocs-Material site, published to GitHub Pages
                            by `.github/workflows/docs.yml`.
 - `.claude-plugin/marketplace.json` -- makes the repository a Claude Code
@@ -72,7 +73,6 @@ pixi install -e dev              # conda + PyPI: the package, its Rust core and 
 pixi run -e dev test
 pixi run -e dev lint             # every pre-commit hook on every tracked file
 pixi run -e dev install-hooks    # once per clone: commit and push hooks
-pixi run -e gem gem-mapper       # GEM3's usage: only this environment has it
 pixi run -e dev cau guide-alignment run --help
 pixi run -e docs docs            # serve the site locally
 pixi run -e docs docs-build      # mkdocs build --strict, as CI runs it
@@ -85,11 +85,10 @@ claude plugin validate --strict . && claude plugin validate --strict src/crispr_
 ```
 
 pixi is the default, and its `dev` environment is the one environment for
-everything, GEM3 included: run the tests, the linters and `cau` there, not in
-a uv `.venv`. `default`, `dev` and `docs` are native on all three platforms; only `gem`
-carries GEM3, on linux-64 and osx-64. uv locks `uv.lock`, builds, and runs the CI jobs that
-need no conda: the `test-pip` matrix, where the `gem` tests skip, `build` and
-`docs-build`.
+everything: run the tests, the linters and `cau` there, not in a uv `.venv`.
+Every environment is native on all three platforms, since the genome scan is
+the package's own Rust core. uv locks `uv.lock`, builds, and runs the CI jobs
+that need no conda: the `test-pip` matrix, `build` and `docs-build`.
 
 Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14; the pixi environments
 use 3.13.
@@ -200,43 +199,6 @@ use 3.13.
   checkout and checks that the wheel holds no `tests/`, `scripts/` or stray
   scripts, and that it holds every skill file; a local `uv build` has no such
   guard.
-- **GEM lives in the `gem` environment alone.** bioconda builds gem3-mapper
-  for linux-64 and osx-64 only, so that one environment is limited to those
-  platforms and runs under Rosetta on Apple silicon; `default`, `dev` and
-  `docs` are native everywhere. The gem-marked tests skip in `dev` and run in
-  `gem`, which is what CI's `test` job does. Switching an environment between
-  osx-64 and osx-arm64 leaves PyPI wheels of the wrong architecture behind and
-  pysam then fails to import ("incompatible architecture"): run
-  `pixi clean -e <name>` and reinstall.
-- **GEM 3.6 misbehaves at the start of its index and at contig ends.**
-    - A read that aligns across the first base of the reference's first contig
-      (on +) makes gem-mapper crash ("Signal raised", exit status 1, a partial
-      SAM) or, on another genome, report garbage. With `--add-leading-g` a
-      site at that base is enough. hg38's first contig starts with N, so hg38
-      is safe.
-    - A read that overhangs any other contig end comes back past that contig,
-      or at POS 2^64-22 on the next one, which pysam cannot parse
-      (`OSError: truncated file`).
-    - So `guide_alignment.gem.map_reads` fails the run on a non-zero exit
-      status or "Signal raised", and drops every record whose span leaves its
-      contig before anything reads the SAM. The crash's error suggests a
-      reference whose first contig starts with N, or no added G: `--contigs`
-      cannot help, since it filters hits after GEM has run.
-    - The planted-site test leaves that one site out of its comparison
-      (`planted_genome.GEM_CRASHES_WITH_LEADING_G`) and checks it in a test of
-      its own, which accepts either outcome: the crash's `GemError`, or a
-      completed run with no site for it and none anywhere else. It also leaves
-      out the sites GEM cannot reach (`GEM_MISSES`): a genomic N in the
-      protospacer plus other mismatches, and protospacers in the N runs of 50
-      or more that gem-indexer strips.
-    - A PAM running off either end of the index (a protospacer at the first
-      base on `-`, or ending at the last base on `+`) crashes nothing: a test
-      on a second planted genome (`build_index_ends_genome`) checks that the
-      run reports no site there and none anywhere else, with or without the
-      added G.
-    - gem-indexer's `--tmp-folder` needs a trailing separator: it joins the
-      folder and a file name with nothing between them. gem-mapper silently
-      ignores `--clipping` and `--sam-compact` given without `=`.
 - **pysam is a core dependency, imported inside functions.** The modules that
   read SAM, BAM and FASTA import it where they open a file, never at module
   level, so `import crispr_analysis_utils` and `cau --help` do not load it.
@@ -257,27 +219,30 @@ use 3.13.
   separate change.
 - **`guide_alignment` behaviour that trips readers up** (the
   `cau-guide-alignment` skill states the user-facing part):
-    - read names carry the guide's row, its 0-based position in the list
-      `read_guides` returns: `<row>` in pass 1, `<row>:<PAM>` in pass 2. Ids
-      never reach GEM;
-    - only the first guide of each spacer gets reads. Its duplicates point at
-      it through `duplicate_of`, and `summary` copies its sites and verdict to
-      them (`_source_rows`, `fan_out_sites`);
-    - every hit is re-read from the reference with pysam, uppercased and in
-      guide orientation, and its mismatches recounted; GEM's `NM` is only
-      compared. With `p` the alignment's 0-based start: on `+` the added G is
-      at `p`, the protospacer at `[p + g, p + g + S)` and the PAM after it;
-      on `-` the PAM is at `[p, p + P)`, the protospacer after it, then the G;
+    - a guide is designed, not sequenced, so its site is an **exact** match of
+      the spacer. There is no aligner, no index and no error budget. The three
+      questions are where the spacer matches, what sits 3' of it (the PAM) and
+      what sits 5' of it;
+    - `guide_id` is the sequence that is aligned plus the PAM, and `alias` is
+      the table's name for the entry. Two entries of one sequence are one
+      guide; `duplicate_of` only records that, and is not an output column;
+    - `g_added` comes from the length (`n_extra = len(aligned) - spacer_length`),
+      never from whether the first base is G. The old rule dropped the real
+      added G of a `GG` 21-mer and then called it a duplicate;
+    - `mapped_sequence` is the guide's own bases that pair with the genome:
+      the spacer, keeping a base 5' of it only where the genome holds the
+      same base. The coordinates stay on the declared protospacer, so a G that
+      pairs by chance never shifts a start;
     - coordinates are 0-based half-open protospacers, without the PAM or the
-      G, and `cut_site` is the boundary `b` (`end - 3` on `+`, `start + 3` on
-      `-`), written `[b, b + 1)` in `cut_sites.bed`. The IGVF-named columns
-      of `guides.tsv` keep these definitions, which differ from the lab's
+      added base, and `cut_site` is the boundary `b` (`end - 3` on `+`,
+      `start + 3` on `-`), written `[b, b + 1)` in `cut_sites.bed`. The
+      IGVF-named columns keep these definitions, which differ from the lab's
       DC_TAP tables (the guide page has the comparison);
-    - classes count the primary PAM only, and the `n_ngg_*` names stay
-      whatever `--pam` is. A site whose genomic PAM matches no pattern stays
-      in `sites.tsv` as `pam_class` `none` and counts nowhere;
-    - `run` writes only inside `outdir`: without a `.fai` next to the
-      reference, it builds one in `outdir` rather than let pysam write next to
-      the FASTA. A GEM pass is reused only when its `run.json` key (FASTQ
-      checksum, options, index identity, GEM version) matches and its SAM
-      checksum is unchanged.
+    - classes count sites whose genomic PAM matches. A site whose PAM does not
+      stays in `sites.tsv` with `pam_class` `none` and counts nowhere, so a
+      spacer matching twice with one PAM is `unique`;
+    - orientation is decided from both readings, held in the same scan: an
+      entry is `reverse_complement` only when its reversed reading has a
+      PAM-bearing site and the sequence as given does not. A `CCN` 5' of a
+      match is not evidence; it falls there by chance one time in sixteen.
+      Only a table reversed throughout stops a run.
