@@ -30,9 +30,9 @@ cau element-mapping run \
 
 - **Which element list, and is it the whole one?** A screen usually has
   several design files. Pass the combined list: with a partial one, every
-  guide for a missing element comes back `unassigned`, which looks like a
-  result rather than a missing input. Check the `unassigned` count against
-  what the user expects before believing the table.
+  guide for a missing element comes back `safe_targeting`, which looks like a
+  result rather than a missing input. Check that count against what the user
+  expects before believing the table.
 - **Is `--annotation` available?** Without it `distance_to_tss` is empty.
   The classes do not depend on it, so the command warns but still runs.
 
