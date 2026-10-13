@@ -243,21 +243,22 @@ use 3.13.
       same base. The coordinates stay on the declared protospacer, so a G that
       pairs by chance never shifts a start;
     - coordinates are 0-based half-open protospacers, without the PAM or the
-      added base, and `cut_site` is the boundary `b` (`end - 3` on `+`,
-      `start + 3` on `-`), written `[b, b + 1)` in `cut_sites.bed`. The
-      IGVF-named columns keep these definitions, which differ from the lab's
-      DC_TAP tables (the guide page has the comparison);
-    - classes count sites whose genomic PAM matches. A site whose PAM does not
-      stays in `sites.tsv` with `pam_class` `none` and counts nowhere, so a
-      spacer matching twice with one PAM is `unique`;
+      added base, and `cut_site` is a column, the boundary `b` (`end - 3` on
+      `+`, `start + 3` on `-`). The IGVF-named columns keep these
+      definitions, which differ from the lab's DC_TAP tables (the guide page
+      has the comparison);
+    - classes count sites whose genomic PAM matches. A site whose PAM does
+      not stays in the table with `pam_matches` `FALSE` and counts nowhere,
+      so a spacer matching twice with one PAM is `unique`;
     - `run` writes only inside `outdir`, and only three folders: the results
       in `alignments/`, this invocation's record in `run_metadata/` and the
       log in `logs/`. Nothing of the run's own sits beside an input;
-    - the results are four files, and only two carry anything of their own:
-      `sites.tsv` is one row per match, `guides_metadata.tsv` one row per
-      library entry. `guides.bed` is a subset of the latter, for a browser,
-      and `qc.tsv` is counts. The chosen site's coordinates are copied into
-      `guides_metadata.tsv` on purpose, so the common question needs no join;
+    - `alignments/` holds four files: `guides_alignment_metadata.tsv`, one
+      row per library entry per site and the only one with the whole picture;
+      `guides_mapping.bed`, its PAM-bearing rows for a browser, named by
+      spacer; `columns.yaml`, generated from the same definitions as the
+      table, so it always describes the folder it sits in; and `qc.tsv`,
+      counts;
     - orientation is decided from both readings, held in the same scan: an
       entry is `reverse_complement` only when its reversed reading has a
       PAM-bearing site and the sequence as given does not. A `CCN` 5' of a
