@@ -183,6 +183,24 @@ TSS = {
 """The reference transcript's start, which is what `promoters_from_store` takes."""
 
 
+def _exon_ids(genes):
+    """One ENSEMBL id per distinct exon block, as GENCODE gives one.
+
+    Two transcripts sharing a block share its id, which is what lets
+    `igvf_export` name an exon without choosing a transcript.
+    """
+    ids = {}
+    for gene in genes:
+        for transcript in gene["transcripts"]:
+            for block in transcript["exons"]:
+                ids.setdefault((gene["chrom"], block), f"ENSE{len(ids) + 1:011d}")
+    return ids
+
+
+EXON_IDS = _exon_ids(GENES)
+"""Each exon block's id, keyed by (contig, block), for the default genes."""
+
+
 def _attributes(pairs):
     """GTF attributes, as `key "value";` in the order given."""
     return " ".join(f'{key} "{value}";' for key, value in pairs)
@@ -223,6 +241,7 @@ def _row(gene, start, end, feature, attributes, frame="."):
 def gtf_lines(genes=GENES):
     """Every GTF line of `genes`, in GENCODE's gene-then-transcript order."""
     lines = []
+    exon_ids = _exon_ids(genes)
     for gene in genes:
         shared = [
             ("gene_id", f"{gene['ensg']}.5"),
@@ -253,12 +272,19 @@ def gtf_lines(genes=GENES):
                         if feature == "exon"
                         else _containing(block, numbers)
                     )
+                    fields = [*named, ("exon_number", number)]
+                    if feature == "exon":
+                        # Versioned, as GENCODE writes it, so a store is shown
+                        # to strip the version off.
+                        fields.append(
+                            ("exon_id", f"{exon_ids[gene['chrom'], block]}.1")
+                        )
                     lines.append(
                         _row(
                             gene,
                             *block,
                             feature,
-                            _attributes([*named, ("exon_number", number)]),
+                            _attributes(fields),
                             frame="0" if feature == "CDS" else ".",
                         )
                     )

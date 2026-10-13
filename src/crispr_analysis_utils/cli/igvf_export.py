@@ -68,6 +68,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
 
 def run(args: argparse.Namespace) -> int:
     """Run the ``run`` action."""
+    from ..element_mapping import ElementError
+    from ..guide_annotation import PromoterError, StoreError
     from ..igvf_export import TYPES, ExportError
     from ..igvf_export import run as export
 
@@ -82,7 +84,16 @@ def run(args: argparse.Namespace) -> int:
             genes=args.genes,
             promoter_window=args.promoter_window,
         )
-    except (FileNotFoundError, ExportError, ValueError, OSError, KeyError) as error:
+    except (
+        FileNotFoundError,
+        ExportError,
+        ElementError,
+        PromoterError,
+        StoreError,
+        ValueError,
+        OSError,
+        KeyError,
+    ) as error:
         raise CommandError(str(error)) from error
 
     found = result.metadata["counts"]

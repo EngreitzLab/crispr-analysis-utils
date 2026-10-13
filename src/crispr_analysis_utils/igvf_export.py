@@ -58,8 +58,9 @@ COLUMNS = {
     "intended_target_start": "Start of the target element, 0-based.",
     "intended_target_end": "End of it, half-open.",
     "putative_target_genes": (
-        "Every gene in ENSEMBL associated with the element, comma-separated,"
-        " so a bidirectional promoter keeps both."
+        "Every gene in ENSEMBL associated with the element, comma-separated."
+        " A measured pair can name several, as a bidirectional promoter does;"
+        " an inferred one names the nearest TSS's gene alone."
     ),
     "reporter": "Sequence of the reporter element. Unused here.",
     "imperfect": "Sequence of the matching perfect guide. Unused here.",
@@ -376,8 +377,15 @@ def build_table(
     if guides["alias"].duplicated().any():
         raise ExportError("Two guides share an alias, so guide_id would not be unique.")
 
-    chosen = _one_element_per_guide(mapping, elements)
-    rows = mapping.drop_duplicates("guide_id").set_index("guide_id")
+    rows = _chosen_rows(mapping, elements)
+    missing = guides.index.difference(rows.index)
+    if len(missing):
+        raise ExportError(
+            f"{len(missing)} guides are in the alignment but not in the element"
+            f" mapping, starting with {list(missing[:3])}. The two tables"
+            " describe different libraries."
+        )
+    chosen = rows["element_id"]
     info = elements.set_index("element_id")
 
     out = pd.DataFrame(index=guides.index)
@@ -439,27 +447,35 @@ def build_table(
     return out.reset_index(drop=True)[list(COLUMNS)]
 
 
-def _one_element_per_guide(mapping: pd.DataFrame, elements: pd.DataFrame) -> pd.Series:
-    """The element to name for each guide, when several overlap its site.
+def _chosen_rows(mapping: pd.DataFrame, elements: pd.DataFrame) -> pd.DataFrame:
+    """One row of the mapping per guide, the one its output row describes.
 
     The format allows one row per guide, so a guide inside two overlapping
-    elements has to name one. The element sharing the most bases with the
+    elements has to name one: the element sharing the most bases with the
     protospacer wins, and its id breaks a tie, so the choice is the same on
-    every run.
+    every run. The class and the coordinates come from that same row, or the
+    row would name one site's element beside another site's coordinates.
     """
-    rows = mapping[mapping["element_id"].notna() & (mapping["element_id"] != "")]
-    if rows.empty:
-        return pd.Series(dtype=object)
-    bounds = elements.set_index("element_id")[["Start", "End"]]
-    joined = rows.join(bounds, on="element_id")
-    overlap = np.minimum(joined["End"], joined["end"]) - np.maximum(
-        joined["Start"], joined["start"]
+    named = mapping[mapping["element_id"].notna() & (mapping["element_id"] != "")]
+    best = named.head(0)
+    if len(named):
+        bounds = elements.drop_duplicates("element_id").set_index("element_id")
+        joined = named.join(bounds[["Start", "End"]], on="element_id")
+        overlap = np.minimum(joined["End"], joined["end"]) - np.maximum(
+            joined["Start"], joined["start"]
+        )
+        best = (
+            joined.assign(_overlap=overlap)
+            .sort_values(
+                ["guide_id", "_overlap", "element_id"], ascending=[True, False, True]
+            )
+            .drop_duplicates("guide_id")
+            .drop(columns=["Start", "End", "_overlap"])
+        )
+    rest = mapping[~mapping["guide_id"].isin(set(best["guide_id"]))].drop_duplicates(
+        "guide_id"
     )
-    joined = joined.assign(_overlap=overlap).sort_values(
-        ["guide_id", "_overlap", "element_id"], ascending=[True, False, True]
-    )
-    first = joined.drop_duplicates("guide_id")
-    return pd.Series(first["element_id"].to_numpy(), index=first["guide_id"])
+    return pd.concat([best, rest], ignore_index=True).set_index("guide_id")
 
 
 def write_table(path: str | os.PathLike[str], table: pd.DataFrame) -> None:
