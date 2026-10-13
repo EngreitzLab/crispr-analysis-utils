@@ -198,7 +198,13 @@ def _site(
 ) -> Site:
     """One match, as a `Site`. An exact match has no mismatches by definition."""
     extra = guide.aligned_sequence[: guide.n_extra]
-    genomic_extra = upstream[-guide.n_extra :] if guide.n_extra else None
+    # The core returns an empty flank when it would run off the contig, so a
+    # guide with a 5' base matching at base 0 has nothing under that base.
+    genomic_extra = (
+        upstream[-guide.n_extra :]
+        if guide.n_extra and len(upstream) >= guide.n_extra
+        else None
+    )
     return Site(
         guide_id=guide.guide_id,
         chr=chrom,

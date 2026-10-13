@@ -1,17 +1,13 @@
 """Per-guide classes, and the guide alignment's output tables.
 
-A guide's class counts only the sites whose genomic PAM matches: ``unique``
-with exactly one perfect site, ``multi`` with more than one, ``mismatch_only``
-with none but at least one site with 1 to `max_mismatches` mismatches, and
-``no_site`` otherwise. A site whose genomic PAM matches no pattern is written
-to sites.tsv with ``pam_class`` ``none`` and counted nowhere. Alternative PAMs
-are off by default; given any, their sites are counted in their own columns
-but never decide the class. A guide that duplicates an earlier entry's spacer
-gets that entry's sites.
+A guide's class counts the matches whose genomic PAM matches: ``unique`` with
+exactly one, ``multi`` with more, ``no_site`` with none. A match whose PAM does
+not is still written, with ``pam_matches`` FALSE, and counted nowhere. An entry
+that duplicates an earlier one's sequence gets that entry's sites.
 
 Coordinates are 0-based and half-open on the reference's forward strand, and
-the protospacer excludes the PAM and the added G. The cut site is a boundary
-``b``: the cut lies between bases ``b - 1`` and ``b``, 3 bases 5' of the PAM
+the protospacer excludes the PAM and any base 5' of it. The cut site is a
+boundary ``b``: the cut lies between ``b - 1`` and ``b``, 3 bases 5' of the PAM
 (``end - 3`` on ``+``, ``start + 3`` on ``-``). In the tables, a value that
 does not apply is an empty field, and booleans are ``TRUE`` or ``FALSE``.
 """
@@ -44,21 +40,6 @@ CLASSES = (UNIQUE, MULTI, NO_SITE)
 CUT_OFFSET = 3
 """Bases between the cut and the PAM."""
 
-SITE_COLUMNS = (
-    "guide_id",
-    "chr",
-    "start",
-    "end",
-    "strand",
-    "pam",
-    "pam_class",
-    "n_mismatches",
-    "mismatch_positions",
-    "mapped_sequence",
-    "genomic_protospacer",
-    "genomic_5p_base",
-)
-"""The columns of sites.tsv, in order: the fields of `Site`."""
 
 _QC_SECTIONS = ("guides", "class", "orientation")
 
@@ -95,7 +76,7 @@ class GuideSummary:
         The unique site's cut boundary (see the module description); None
         unless unique.
     site_class
-        ``unique``, ``multi``, ``mismatch_only`` or ``no_site``.
+        ``unique``, ``multi`` or ``no_site``.
     orientation
         The orientation verdict, or ``not_checked``.
     orientation_evidence
@@ -297,10 +278,15 @@ COLUMNS = {
         " Identifies the guide."
     ),
     "alias": "Name for the guide from the input table.",
-    "spacer": "The protospacer: guide_id without any base 5' of it.",
+    "spacer": (
+        "The protospacer: guide_id without the PAM pattern or any base 5' of it."
+    ),
     # about the whole guide
     "site_class": "unique, multi or no_site: how many places this guide can cut.",
-    "n_matches": "How many places the protospacer occurs in the genome.",
+    "n_matches": (
+        "How many places the protospacer matches, which is how many rows"
+        " this guide has below."
+    ),
     "n_cut_sites": "How many of those have a PAM, so Cas9 could cut there.",
     "orientation": (
         "Whether the sequence reads 5' to 3': forward, reverse_complement,"
@@ -342,7 +328,7 @@ BED_COLUMNS = {
 
 
 def guide_columns() -> list[str]:
-    """The columns of guides.tsv, in order.
+    """The columns of guides_alignment_metadata.tsv, in order.
 
     One row per library entry per site, so the guide's own columns repeat on
     every site it has, and an entry with no site gets one row whose site
@@ -363,7 +349,7 @@ def write_guides_tsv(
     summaries: Sequence[GuideSummary],
     sites: Mapping[int, Sequence[Site]],
 ) -> None:
-    """Write guides.tsv: every entry, with a row for each of its sites.
+    """Write guides_alignment_metadata.tsv: every entry, a row per site.
 
     Parameters
     ----------
@@ -383,15 +369,11 @@ def write_guides_tsv(
 
     Notes
     -----
-    A BED of everything cuttable is one filter away::
+    `write_guides_bed` writes the same sites as a BED.
 
-        awk -F'\t' '$18=="NGG" && $12!="" {print $12"\t"$13"\t"$14"\t"$2"\t0\t"$15}' \\
-            guides.tsv > guides.bed
-
-    ``multimaps`` is ``n_matches > 1``: the spacer occurs more than once in
-    the genome. That is not the same as ``site_class`` ``multi``, which counts
-    only the matches with a PAM beside them, so a guide can multimap and still
-    be ``unique``.
+    ``n_matches`` is not ``site_class``: it counts every place the protospacer
+    occurs, while ``multi`` counts only the matches with a PAM beside them, so
+    a guide can match many places and still be cuttable at one.
     """
     if len(summaries) != len(guides):
         raise ValueError(f"Got {len(summaries)} summaries for {len(guides)} guides.")
@@ -452,12 +434,20 @@ def write_guides_bed(
     is not somewhere anything can be cut, so it is left out;
     guides_alignment_metadata.tsv has them all.
     """
-    rows = sorted(
-        (site.chr, site.start, site.end, guide.spacer, site.strand)
-        for guide, source in zip(guides, _source_rows(guides), strict=True)
-        for site in sites.get(source, ())
-        if site.pam_class != NO_PAM_CLASS
-    )
+    # One row per distinct guide, not per entry: two entries of one sequence
+    # would otherwise give byte-identical rows and bedtools would count twice.
+    seen: set[str] = set()
+    rows = []
+    for guide, source in zip(guides, _source_rows(guides), strict=True):
+        if guide.guide_id in seen:
+            continue
+        seen.add(guide.guide_id)
+        rows.extend(
+            (site.chr, site.start, site.end, guide.spacer, site.strand)
+            for site in sites.get(source, ())
+            if site.pam_class != NO_PAM_CLASS
+        )
+    rows.sort()
     with _open_table(path, None) as handle:
         for chrom, start, end, name, strand in rows:
             _write_row(handle, [chrom, start, end, name, 0, strand])

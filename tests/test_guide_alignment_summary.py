@@ -431,14 +431,15 @@ def test_the_bed_name_is_the_spacer_and_its_span_is_the_protospacer(
 
     _, bed = write_tables(tmp_path, guides, summaries, sites)
 
+    # One row per distinct guide, not per entry: 'uniq' and 'dup' are the same
+    # sequence at the same locus, so bedtools must not see it twice.
     assert bed == [
-        ["chr1", "100", "120", SPACER_A, "0", "+"],
-        # 'uniq' and 'dup' are the same sequence, and each entry gets a row.
         ["chr1", "100", "120", SPACER_A, "0", "+"],
         ["chr1", "200", "220", SPACER_C, "0", "-"],
         ["chr1", "600", "620", SPACER_G, "0", "+"],
         ["chr1", "700", "720", SPACER_G, "0", "-"],
     ]
+    assert len(bed) == len({tuple(row) for row in bed})
     for chrom, start, end, name, score, strand in bed:
         assert name in SPACERS.values()
         # The span is the protospacer: no PAM, and no base 5' of it.

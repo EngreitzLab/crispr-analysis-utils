@@ -210,8 +210,8 @@ def test_run_writes_every_output(setup):
         for line in (out / "alignments" / "guides_mapping.bed").read_text().splitlines()
     ]
     assert [(row[0], row[1], row[3], row[5]) for row in bed] == [
-        ("chr1", str(a_start), SPACER_A, "+"),
-        # 'g_dup' is the same sequence as 'g_a', and each entry gets a row.
+        # One row per distinct guide: 'g_dup' is the same sequence as 'g_a' at
+        # the same locus, so it must not appear twice.
         ("chr1", str(a_start), SPACER_A, "+"),
         ("chr1", str(c_start), SPACER_C, "-"),
         ("chr1", str(setup["sites"]["g_g_1"][1]), SPACER_G, "+"),
@@ -594,3 +594,27 @@ def test_missing_and_compressed_references_are_reported(setup, tmp_path):
     with pytest.raises(ValueError, match="gzip-compressed"):
         run(setup["guides"], squashed, setup["outdir"])
     assert not setup["outdir"].exists()
+
+
+def test_a_5prime_base_at_a_contig_edge_does_not_crash(setup, tmp_path):
+    # The core returns an empty flank where it would run off the contig. Taking
+    # the last n_extra bases of "" gave "" rather than None, and the zip that
+    # compares them is strict, so the whole run died on a site it had kept.
+    contig = Contig()
+    start = contig.add(SPACER_A + "TGG")
+    contig.add("AAAACCCCGGGGTTTTAAAA")
+    reference = write_fasta(tmp_path / "edge.fa", {"edge": contig.sequence})
+    assert start == 0
+
+    result = run(
+        write_guides(tmp_path / "edge.tsv", [("g_a", SPACER_A)]),
+        reference,
+        tmp_path / "edge_out",
+        add_leading_g=True,
+        orientation_check="off",
+    )
+
+    (row,) = result.summaries
+    assert row.site_class == "unique"
+    assert result.scan.sites[0][0].genomic_5p_base is None
+    assert result.scan.sites[0][0].mapped_sequence == SPACER_A + "TGG"
