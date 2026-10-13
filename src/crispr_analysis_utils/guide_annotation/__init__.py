@@ -7,11 +7,21 @@ gene and transcript, and how far it is from the nearest protein-coding TSS.
 
 from __future__ import annotations
 
+from .annotate import AnnotationError, annotate_sites
 from .db import Store, StoreError, build_store, load_store
+from .pipeline import RunResult, run
+from .promoters import PromoterError, promoters_from_store, read_promoters
 
 __all__ = [
+    "AnnotationError",
+    "PromoterError",
+    "RunResult",
     "Store",
     "StoreError",
+    "annotate_sites",
     "build_store",
     "load_store",
+    "promoters_from_store",
+    "read_promoters",
+    "run",
 ]
