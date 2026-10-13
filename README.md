@@ -52,6 +52,7 @@ cpm = cau.counts_per_million(counts)
 | `cau.counts_per_million` | Counts-per-million normalization of count matrices |
 | `cau.guide_alignment` | Where a guide library maps: each guide's exact sites, class, coordinates and cut site (also the `cau guide-alignment` command) |
 | `cau.guide_annotation` | What those sites hit: exon, intron, promoter or intergenic, the gene and transcript, and the distance to the nearest TSS (also the `cau guide-annotation` command) |
+| `cau.element_mapping` | Which element of a screen each guide tests, and which guides are controls (also the `cau element-mapping` command) |
 
 The `cau` command line tool comes with the package:
 

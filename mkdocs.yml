@@ -48,6 +48,7 @@ nav:
   - Guides:
       - Guide alignment: guide-alignment.md
       - Gene annotation: guide-annotation.md
+      - Element mapping: element-mapping.md
   - Agents and skills: agents-and-skills.md
   - API reference:
       - Overview: reference/index.md
@@ -65,6 +66,7 @@ nav:
           - Promoters: reference/guide-annotation-promoters.md
           - Placing sites in genes: reference/guide-annotation-annotate.md
           - Columns and tables: reference/guide-annotation-summary.md
+      - Element mapping: reference/element-mapping.md
       - Accession: reference/accession.md
       - Normalization:
           - counts_per_million: reference/counts-per-million.md
