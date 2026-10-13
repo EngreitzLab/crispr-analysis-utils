@@ -30,6 +30,10 @@ COMMANDS: dict[str, tuple[str, str]] = {
         "guide_annotation",
         "Place every aligned site in a gene.",
     ),
+    "element-mapping": (
+        "element_mapping",
+        "Map a guide library to the elements a screen targets.",
+    ),
     "install-skills": (
         "install_skills",
         "Install the bundled Claude Code skills and agents.",

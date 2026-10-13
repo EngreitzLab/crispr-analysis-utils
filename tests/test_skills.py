@@ -27,6 +27,7 @@ COVERAGE = {
     "cau-normalization": ("normalization",),
     "cau-guide-alignment": ("guide_alignment",),
     "cau-guide-annotation": ("guide_annotation",),
+    "cau-element-mapping": ("element_mapping",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.

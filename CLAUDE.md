@@ -48,6 +48,9 @@ per platform serves every supported Python rather than one per version.
                              (the interval work), `summary` (columns, the
                              table), `pipeline` (`run`). One analysis module,
                              one skill.
+    - `element_mapping.py` -- which element of a screen each guide tests, and
+                             which guides are controls. One module, no
+                             package: it is overlap and bookkeeping.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
     - `_files.py`         -- checksums, gzip sniffing, atomic JSON. Shared by
                              both pipelines.
@@ -235,6 +238,20 @@ and narrowing it would buy nothing.
   `mkdocs<2`, and that cap matters: MkDocs 2.0, in development, is a rewrite
   without plugins. The successor, Zensical, is still alpha; moving to it is a
   separate change.
+- **`element_mapping` is where a design's own labels get tested**, so
+  disagreement is the output, not a bug:
+    - the classes are decided per site, not per guide, because a guide whose
+      two sites differ really is doing two things;
+    - `safe_targeting` means only "maps, overlaps no element". There is no
+      distance threshold: how far is far enough depends on what the screen
+      reads out, so `distance_to_tss` is carried through for every row and
+      thresholded by the analysis. A 1 Mb rule was tried and disagreed with a
+      real design on 1,281 of its 1,530 controls;
+    - an incomplete element list inflates `safe_targeting` rather than
+      failing, so the count is checked against the design before it is
+      believed;
+    - `element_id` keeps the BED's fourth column when it has one, and is
+      otherwise `chr:start-end` with a 1-based start.
 - **`guide_annotation` behaviour that trips readers up** (the
   `cau-guide-annotation` skill states the user-facing part):
     - **`pr.read_gtf(duplicate_attr=True)` is not optional.** A GENCODE row
