@@ -30,6 +30,7 @@ COLUMNS = (
     "ensg",
     "gene_symbol",
     "enst",
+    "exon_id",
     "exon_number",
     "is_reference",
 )
@@ -125,6 +126,7 @@ def build_store(
     frame = frame.assign(
         ensg=_unversioned(frame["gene_id"]),
         enst=_unversioned(frame["transcript_id"]),
+        exon_id=_optional(frame, "exon_id"),
         gene_symbol=frame["gene_name"],
         mane_select=tags.str.contains("MANE_Select"),
         ensembl_canonical=tags.str.contains("Ensembl_canonical"),
@@ -196,6 +198,20 @@ def load_store(path: str | os.PathLike[str]) -> Store:
         features=table.to_pandas(),
         provenance=json.loads(raw) if raw else {},
     )
+
+
+def _optional(frame: pd.DataFrame, name: str) -> pd.Series:
+    """An id column the GTF may not carry, without its version.
+
+    GENCODE gives exons an `exon_id`; a GTF from elsewhere need not.
+    """
+    # A declared string dtype, because an all-missing object column loses its
+    # type through parquet and comes back as floats.
+    if name not in frame:
+        return pd.Series(
+            pd.array([None] * len(frame), dtype="string"), index=frame.index
+        )
+    return _unversioned(frame[name]).astype("string")
 
 
 def _unversioned(ids: pd.Series) -> pd.Series:
