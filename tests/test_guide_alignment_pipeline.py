@@ -458,18 +458,17 @@ def test_a_reversed_library_under_error_leaves_a_failed_record(setup, tmp_path):
     assert "read 3' to 5'" in (out / "logs" / "guide_alignment.log").read_text()
 
 
-def test_a_reversed_library_is_only_logged_when_the_check_is_warn(
-    setup, tmp_path, caplog
-):
+def test_a_reversed_library_is_only_logged_when_the_check_is_warn(setup, tmp_path):
     reversed_guides = write_guides(
         tmp_path / "reversed.tsv",
         [(gid, reverse_complement(spacer)) for gid, spacer in GUIDES[:3]],
     )
 
-    with caplog.at_level(logging.WARNING, logger="crispr_analysis_utils"):
-        result = go(setup, guides=reversed_guides, orientation_check="warn")
+    result = go(setup, guides=reversed_guides, orientation_check="warn")
 
-    assert "3 of 3 entries read 3' to 5'" in caplog.text
+    # The warning goes to the run's own log, not to the terminal.
+    log = (setup["outdir"] / "logs" / "guide_alignment.log").read_text()
+    assert "3 of 3 entries read 3' to 5'" in log
     assert {s.orientation for s in result.summaries} == {"reverse_complement"}
     assert {s.orientation_evidence for s in result.summaries} == {"ambiguous"}
     assert (setup["outdir"] / "alignments" / "guides_alignment_metadata.tsv").is_file()
