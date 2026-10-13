@@ -12,17 +12,14 @@ from guide_alignment_fixtures import (
 )
 
 from crispr_analysis_utils.guide_alignment import (
-    ScanResult,
     Site,
     fan_out_sites,
     guide_columns,
     read_guides,
     scan_guides,
     summarize,
-    write_cut_sites_bed,
     write_guides_bed,
     write_guides_tsv,
-    write_orientation_tsv,
     write_qc_tsv,
     write_sites_tsv,
 )
@@ -334,86 +331,28 @@ def test_sites_tsv(tmp_path, guides, sites):
     ]
 
 
-def test_orientation_tsv(tmp_path, guides):
-    scan = ScanResult(
-        sites={
-            0: [
-                site(SPACER_A, 100),
-                site(SPACER_A, 5, strand="-", pam="AGG"),
-            ]
-        },
-        verdicts=VERDICTS,
-        evidence=EVIDENCE,
-    )
-
-    write_orientation_tsv(tmp_path / "orientation.tsv", guides, scan)
-
-    table = read_table(tmp_path / "orientation.tsv")
-    assert list(table.columns) == [
-        "guide_id",
-        "alias",
-        "chr",
-        "start",
-        "end",
-        "strand",
-        "pam",
-        "verdict",
-        "evidence",
-    ]
-    assert table.iloc[1].tolist() == [
-        SPACER_A + "NGG",
-        "uniq",
-        "chr1",
-        "5",
-        "25",
-        "-",
-        "AGG",
-        "forward",
-        "",
-    ]
-    assert table.iloc[2].tolist() == [
-        SPACER_C + "NGG",
-        "uniq_minus",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "forward",
-        "",
-    ]
-    assert table[table.alias == "multi"]["evidence"].tolist() == ["ambiguous"]
-    # One row per site, or one row for an entry without sites. Unlike sites.tsv,
-    # this table has a row for every entry, so 'dup' repeats 'uniq''s two sites.
-    assert table.alias.tolist().count("dup") == 2
-    assert len(table) == 2 + 5 + 2
-
-
-def test_orientation_tsv_needs_every_verdict(tmp_path, guides):
-    with pytest.raises(ValueError, match="No orientation verdict for guide 'multi'"):
-        write_orientation_tsv(
-            tmp_path / "orientation.tsv",
-            guides,
-            ScanResult(verdicts={0: "forward", 1: "forward"}),
-        )
-
-
-def test_bed_files_hold_the_unique_guides(tmp_path, guides, sites):
+def test_the_bed_holds_the_unique_guides(tmp_path, guides, sites):
     summaries = summarized(guides, sites)
 
     write_guides_bed(tmp_path / "guides.bed", summaries)
-    write_cut_sites_bed(tmp_path / "cut_sites.bed", summaries)
 
     assert (tmp_path / "guides.bed").read_text(encoding="utf-8").splitlines() == [
         "chr1\t100\t120\tdup\t0\t+",
         "chr1\t100\t120\tuniq\t0\t+",
         "chr1\t200\t220\tuniq_minus\t0\t-",
     ]
-    assert (tmp_path / "cut_sites.bed").read_text(encoding="utf-8").splitlines() == [
-        "chr1\t117\t118\tdup\t0\t+",
-        "chr1\t117\t118\tuniq\t0\t+",
-        "chr1\t203\t204\tuniq_minus\t0\t-",
-    ]
+
+
+def test_the_cut_site_column_is_three_bases_from_the_pam(tmp_path, guides, sites):
+    # Still worth pinning now that cut_sites.bed is gone: the boundary is
+    # end - 3 on + and start + 3 on -, counted from the PAM either way.
+    by_alias = {s.alias: s for s in summarized(guides, sites)}
+
+    assert by_alias["uniq"].strand == "+"
+    assert by_alias["uniq"].guide_end - by_alias["uniq"].cut_site == 3
+    assert by_alias["uniq_minus"].strand == "-"
+    assert by_alias["uniq_minus"].cut_site - by_alias["uniq_minus"].guide_start == 3
+    assert (by_alias["uniq"].cut_site, by_alias["uniq_minus"].cut_site) == (117, 203)
 
 
 def test_qc_tsv_counts_sum_to_the_entries(tmp_path, guides, sites):
@@ -468,7 +407,7 @@ def test_qc_tsv_rejects_a_clashing_section(tmp_path, guides, sites):
         )
 
 
-def test_cut_sites_from_a_hand_built_reference(tmp_path):
+def test_coordinates_and_cut_sites_from_a_hand_built_reference(tmp_path):
     guides = read_guides(
         pd.DataFrame(
             [
@@ -495,7 +434,6 @@ def test_cut_sites_from_a_hand_built_reference(tmp_path):
 
     scan = scan_guides(guides, fasta)
     summaries = summarize(guides, scan.sites, scan.verdicts, max_mismatches=0)
-    write_cut_sites_bed(tmp_path / "cut_sites.bed", summaries)
 
     # + : protospacer [100, 120), cut between 116 and 117 (b = 117).
     # - : PAM [150, 153), protospacer [153, 173), b = 156.
@@ -522,9 +460,3 @@ def test_cut_sites_from_a_hand_built_reference(tmp_path):
     assert reverse_complement(contig.sequence[153:156]) == SPACER_C[-3:]
     assert contig.sequence[218:221] == SPACER_A[-3:]
     assert contig.sequence[252:255] == SPACER_T[-3:]
-    assert (tmp_path / "cut_sites.bed").read_text(encoding="utf-8").splitlines() == [
-        "chr1\t117\t118\tplus\t0\t+",
-        "chr1\t156\t157\tminus\t0\t-",
-        "chr1\t218\t219\tplus_g\t0\t+",
-        "chr1\t252\t253\tkept_g\t0\t+",
-    ]

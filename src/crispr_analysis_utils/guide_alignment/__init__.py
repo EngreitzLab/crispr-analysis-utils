@@ -19,10 +19,8 @@ from .summary import (
     fan_out_sites,
     guide_columns,
     summarize,
-    write_cut_sites_bed,
     write_guides_bed,
     write_guides_tsv,
-    write_orientation_tsv,
     write_qc_tsv,
     write_sites_tsv,
 )
@@ -45,10 +43,8 @@ __all__ = [
     "scan",
     "scan_guides",
     "summarize",
-    "write_cut_sites_bed",
     "write_guides_bed",
     "write_guides_tsv",
-    "write_orientation_tsv",
     "write_qc_tsv",
     "write_sites_tsv",
 ]

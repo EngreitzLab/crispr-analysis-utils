@@ -40,9 +40,7 @@ GUIDES = [
 OUTPUTS = (
     "guides_metadata.tsv",
     "sites.tsv",
-    "orientation.tsv",
     "guides.bed",
-    "cut_sites.bed",
     "qc.tsv",
 )
 
@@ -178,10 +176,6 @@ def test_run_writes_every_output(setup):
         "unique",
     ]
 
-    bed = (out / "alignments" / "cut_sites.bed").read_text().splitlines()
-    assert f"chr1\t{a_start + 17}\t{a_start + 18}\tg_a\t0\t+" in bed
-    assert len(bed) == 3
-
     qc = {
         (r["section"], r["name"]): r["value"]
         for r in table(out / "alignments" / "qc.tsv")
@@ -232,11 +226,12 @@ def test_the_scan_is_exact_so_a_mismatched_site_is_never_reported(setup):
 def test_entries_sharing_a_sequence_are_scanned_and_written_once(setup):
     result = go(setup)
 
+    # One set of site rows for the sequence, one metadata row per entry.
     sites = table(setup["outdir"] / "alignments" / "sites.tsv")
     assert [row["guide_id"] for row in sites].count(SPACER_A + "NGG") == 1
-    # orientation.tsv keeps a row per entry, so the duplicate shows up there.
-    orientation = table(setup["outdir"] / "alignments" / "orientation.tsv")
-    assert [row["alias"] for row in orientation].count("g_dup") == 1
+    guides = table(setup["outdir"] / "alignments" / "guides_metadata.tsv")
+    shared = [row for row in guides if row["guide_id"] == SPACER_A + "NGG"]
+    assert sorted(row["alias"] for row in shared) == ["g_a", "g_dup"]
     assert result.guides[4].duplicate_of == "g_a"
 
 
@@ -441,11 +436,10 @@ def test_orientation_check_off_reports_no_verdict_at_all(setup, tmp_path, caplog
         result = go(setup, guides=reversed_guides, orientation_check="off")
 
     # The scan holds both readings whatever happens, but "off" means off: the
-    # verdict column says not_checked, there is no orientation.tsv, and a table
+    # verdict column says not_checked and a table
     # that is reversed throughout neither warns nor stops.
     assert {s.orientation for s in result.summaries} == {"not_checked"}
     assert {s.orientation_evidence for s in result.summaries} == {None}
-    assert not (setup["outdir"] / "alignments" / "orientation.tsv").exists()
     assert "read 3' to 5'" not in caplog.text
     assert result.metadata["complete"] is True
     assert result.metadata["orientation"]["not_checked"] == 3

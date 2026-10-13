@@ -30,7 +30,7 @@ from .orientation import NOT_CHECKED, VERDICTS
 from .sites import NO_PAM_CLASS, Site
 
 if TYPE_CHECKING:
-    from .scan import ScanResult
+    pass
 
 UNIQUE = "unique"
 """Exactly one perfect site with a matching PAM."""
@@ -61,19 +61,6 @@ SITE_COLUMNS = (
     "added_g_base",
 )
 """The columns of sites.tsv, in order: the fields of `Site`."""
-
-ORIENTATION_COLUMNS = (
-    "guide_id",
-    "alias",
-    "chr",
-    "start",
-    "end",
-    "strand",
-    "pam",
-    "verdict",
-    "evidence",
-)
-"""The columns of orientation.tsv, in order."""
 
 _QC_SECTIONS = ("guides", "class", "orientation")
 
@@ -434,62 +421,6 @@ def write_sites_tsv(
             _write_row(handle, [getattr(site, column) for column in SITE_COLUMNS])
 
 
-def write_orientation_tsv(
-    path: str | os.PathLike[str],
-    guides: Sequence[Guide],
-    scan: ScanResult,
-) -> None:
-    """Write orientation.tsv: each guide's sites, their PAM and its verdict.
-
-    Parameters
-    ----------
-    path
-        The file to write.
-    guides
-        The library, as returned by `read_guides`.
-    scan
-        The result of `scan_guides`.
-
-    Raises
-    ------
-    ValueError
-        If `scan` lacks a guide's verdict.
-
-    Notes
-    -----
-    The columns are `ORIENTATION_COLUMNS`. Each entry has one row per exact
-    site, or a single row with empty site fields when it has none; the verdict
-    and its evidence repeat on every row.
-    """
-    with _open_table(path, ORIENTATION_COLUMNS) as handle:
-        for guide, source in zip(guides, _source_rows(guides), strict=True):
-            if source not in scan.verdicts:
-                raise ValueError(f"No orientation verdict for guide {guide.alias!r}.")
-            verdict = scan.verdicts[source]
-            evidence = scan.evidence.get(source)
-            sites = scan.sites.get(source, ())
-            if not sites:
-                _write_row(
-                    handle,
-                    [guide.guide_id, guide.alias, *[None] * 5, verdict, evidence],
-                )
-            for site in sites:
-                _write_row(
-                    handle,
-                    [
-                        guide.guide_id,
-                        guide.alias,
-                        site.chr,
-                        site.start,
-                        site.end,
-                        site.strand,
-                        site.pam,
-                        verdict,
-                        evidence,
-                    ],
-                )
-
-
 def write_guides_bed(
     path: str | os.PathLike[str], summaries: Sequence[GuideSummary]
 ) -> None:
@@ -511,34 +442,6 @@ def write_guides_bed(
         path,
         (
             (s.guide_chr, s.guide_start, s.guide_end, s.alias, s.strand)
-            for s in summaries
-            if s.site_class == UNIQUE
-        ),
-    )
-
-
-def write_cut_sites_bed(
-    path: str | os.PathLike[str], summaries: Sequence[GuideSummary]
-) -> None:
-    """Write cut_sites.bed: the cut site of every unique guide.
-
-    Parameters
-    ----------
-    path
-        The file to write.
-    summaries
-        The guides, as returned by `summarize`.
-
-    Notes
-    -----
-    BED6 without a header, one ``[b, b + 1)`` row per guide for its cut
-    boundary ``b``: contig, ``b``, ``b + 1``, guide id, score 0, strand,
-    sorted by contig name, then position and guide id.
-    """
-    _write_bed(
-        path,
-        (
-            (s.guide_chr, s.cut_site, s.cut_site + 1, s.alias, s.strand)
             for s in summaries
             if s.site_class == UNIQUE
         ),

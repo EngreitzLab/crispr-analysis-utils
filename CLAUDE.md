@@ -244,6 +244,11 @@ use 3.13.
     - `run` writes only inside `outdir`, and only three folders: the results
       in `alignments/`, this invocation's record in `run_metadata/` and the
       log in `logs/`. Nothing of the run's own sits beside an input;
+    - the results are four files, and only two carry anything of their own:
+      `sites.tsv` is one row per match, `guides_metadata.tsv` one row per
+      library entry. `guides.bed` is a subset of the latter, for a browser,
+      and `qc.tsv` is counts. The chosen site's coordinates are copied into
+      `guides_metadata.tsv` on purpose, so the common question needs no join;
     - orientation is decided from both readings, held in the same scan: an
       entry is `reverse_complement` only when its reversed reading has a
       PAM-bearing site and the sequence as given does not. A `CCN` 5' of a

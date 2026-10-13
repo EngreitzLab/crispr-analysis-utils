@@ -7,9 +7,9 @@ its own site is an exact match, and everything the tables report follows from
 that.
 
 `outdir` gets three folders and nothing else: ``alignments/`` with the
-results (``guides_metadata.tsv``, ``sites.tsv``, ``orientation.tsv``,
-``guides.bed``, ``cut_sites.bed``, ``qc.tsv``), ``run_metadata/`` with this
-invocation's record, and ``logs/``.
+results (``guides_metadata.tsv``, ``sites.tsv``,
+``guides.bed``, ``qc.tsv``), ``run_metadata/`` with this invocation's record,
+and ``logs/``.
 """
 
 from __future__ import annotations
@@ -36,10 +36,8 @@ from .summary import (
     CLASSES,
     GuideSummary,
     summarize,
-    write_cut_sites_bed,
     write_guides_bed,
     write_guides_tsv,
-    write_orientation_tsv,
     write_qc_tsv,
     write_sites_tsv,
 )
@@ -272,10 +270,7 @@ def _run(
         tables = outdir / RESULTS_DIR
         write_guides_tsv(tables / "guides_metadata.tsv", summaries, max_mismatches=0)
         write_sites_tsv(tables / "sites.tsv", library, scan.sites)
-        if scan.verdicts:
-            write_orientation_tsv(tables / "orientation.tsv", library, scan)
         write_guides_bed(tables / "guides.bed", summaries)
-        write_cut_sites_bed(tables / "cut_sites.bed", summaries)
         write_qc_tsv(tables / "qc.tsv", summaries, counts=state["counts"])
 
     state["classes"] = _ordered((summary.site_class for summary in summaries), CLASSES)
