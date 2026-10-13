@@ -562,6 +562,10 @@ def run(
     package.addHandler(handler)
     if package.level == logging.NOTSET:
         package.setLevel(logging.INFO)
+    # The run's log belongs in the file, not on the terminal. pyranges calls
+    # logging.basicConfig on import, which puts a handler on the root logger.
+    propagate = package.propagate
+    package.propagate = False
     try:
         library, sites = _read_alignment(alignment)
         state["inputs"]["alignment"] = (
@@ -619,6 +623,7 @@ def run(
         raise
     finally:
         package.removeHandler(handler)
+        package.propagate = propagate
         handler.close()
 
 

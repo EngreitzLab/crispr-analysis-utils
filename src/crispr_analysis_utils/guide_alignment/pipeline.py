@@ -418,9 +418,15 @@ def _log_to(path: Path) -> Iterator[None]:
     if package.getEffectiveLevel() > logging.INFO:
         package.setLevel(logging.INFO)
     package.addHandler(handler)
+    # The run's log belongs in the file, not on the terminal. A library that
+    # calls logging.basicConfig puts a handler on the root logger, and
+    # anything that propagates there would be printed as well.
+    propagate = package.propagate
+    package.propagate = False
     try:
         yield
     finally:
         package.removeHandler(handler)
         handler.close()
         package.setLevel(level)
+        package.propagate = propagate

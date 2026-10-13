@@ -6,6 +6,7 @@ record, and ``logs/``.
 """
 
 import json
+import logging
 import re
 
 import pandas as pd
@@ -462,3 +463,30 @@ def test_a_bad_input_is_reported_without_a_traceback(
     assert error.startswith("cau: error: ")
     assert message in error
     assert "Traceback" not in error
+
+
+def test_the_run_log_does_not_reach_the_root_logger(alignment, bed, tmp_path):
+    """pyranges calls logging.basicConfig on import, which would print the run's
+    log to stderr. The log belongs in the file."""
+    root = logging.getLogger()
+    seen: list[logging.LogRecord] = []
+
+    class Catch(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            seen.append(record)
+
+    catch = Catch()
+    root.addHandler(catch)
+    level = root.level
+    root.setLevel(logging.INFO)
+    try:
+        run(alignment, bed, tmp_path / "out")
+    finally:
+        root.removeHandler(catch)
+        root.setLevel(level)
+
+    assert [r for r in seen if r.name.startswith("crispr_analysis_utils")] == []
+    assert (
+        "Element mapping complete"
+        in (tmp_path / "out" / "logs" / "element_mapping.log").read_text()
+    )

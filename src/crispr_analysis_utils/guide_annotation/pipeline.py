@@ -270,9 +270,14 @@ def _log_to(path: Path) -> Iterator[None]:
     previous = package.level
     if previous == logging.NOTSET:
         package.setLevel(logging.INFO)
+    # The run's log belongs in the file, not on the terminal. pyranges calls
+    # logging.basicConfig on import, which puts a handler on the root logger.
+    propagate = package.propagate
+    package.propagate = False
     try:
         yield
     finally:
         package.removeHandler(handler)
         package.setLevel(previous)
+        package.propagate = propagate
         handler.close()
