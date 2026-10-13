@@ -34,6 +34,10 @@ COMMANDS: dict[str, tuple[str, str]] = {
         "element_mapping",
         "Map a guide library to the elements a screen targets.",
     ),
+    "igvf-export": (
+        "igvf_export",
+        "Write the guide design in the IGVF per-guide metadata format.",
+    ),
     "install-skills": (
         "install_skills",
         "Install the bundled Claude Code skills and agents.",
