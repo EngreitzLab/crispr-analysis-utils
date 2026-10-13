@@ -309,7 +309,7 @@ def _check_orientation(
     check = parameters["orientation_check"]
     if check == "off":
         # The scan holds both readings whatever happens, but "off" has to mean
-        # off: no verdicts in guides_alignment_metadata.tsv and no orientation.tsv.
+        # off: every entry's verdict is not_checked.
         logger.info("Orientation check: off")
         scan.verdicts = {}
         scan.evidence = {}
