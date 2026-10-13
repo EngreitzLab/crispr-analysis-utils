@@ -11,7 +11,7 @@ import pandas as pd
 from .annotate import ANTISENSE, CDS, INTERGENIC, LOCATIONS, SENSE, UTR
 
 GROUPS = (
-    ("the key back to guides_alignment_metadata.tsv, which holds the rest", 5),
+    ("which site this row is about, and the key back to the alignment table", 5),
     ("the gene it falls in; empty when it falls in none", 10),
     ("the nearest protein-coding promoter", 4),
     ("the protospacer itself", 2),
@@ -19,16 +19,19 @@ GROUPS = (
 """The column groups, in order, and how many columns each has."""
 
 COLUMNS = {
-    # the key back to the alignment table
+    # which site, and the key back to the alignment table
     "guide_id": (
         "The sequence that was aligned, ending in the PAM pattern. Join on it"
-        " and the four site columns to pick up the alias, accession, spacer"
-        " and the rest; a guide with two sites needs all five to be unambiguous."
+        " and the four site columns for the alias, accession and spacer, which"
+        " are the same on every row of a guide and so are not repeated here."
     ),
     "chr": "Contig of this site.",
     "start": "First base of the protospacer, 0-based.",
     "end": "One past its last base, so the protospacer is [start, end).",
-    "strand": "Strand the protospacer reads 5' to 3' on.",
+    "strand": (
+        "Strand the protospacer reads 5' to 3' on. With the three columns"
+        " above it says which of a multi-mapping guide's sites this row is."
+    ),
     # the gene
     "ensg": "Ensembl gene id, without its version. Empty when intergenic.",
     "gene_symbol": "The gene's name.",
