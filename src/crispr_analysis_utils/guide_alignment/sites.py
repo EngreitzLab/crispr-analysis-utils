@@ -38,15 +38,14 @@ class Site:
         The 1-based spacer positions of those mismatches, counted from the
         guide's 5' end.
     mapped_sequence
-        The guide's own bases that pair with the genome here, 5' to 3': the
-        spacer, keeping an added 5' G only when the genomic base under it is
-        also G. The PAM is genomic, so it is not part of it.
+        What was aligned here, 5' to 3': the base 5' of the protospacer where
+        the genome has that same base, the protospacer, then the genomic PAM.
     genomic_protospacer
         The reference bases of the protospacer, uppercased, in guide
         orientation.
-    added_g_base
-        For a guide with bases 5' of its spacer, the genomic bases under
-        them, in guide orientation; None otherwise.
+    genomic_5p_base
+        The genomic base under the sequence's base 5' of the protospacer, in
+        guide orientation; None when it has none.
     """
 
     guide_id: str
@@ -60,4 +59,4 @@ class Site:
     mismatch_positions: tuple[int, ...]
     mapped_sequence: str
     genomic_protospacer: str
-    added_g_base: str | None
+    genomic_5p_base: str | None

@@ -28,8 +28,8 @@ from .orientation import (
     AMBIGUOUS,
     DISTINCT,
     FORWARD,
+    NO_MATCH,
     NO_PAM,
-    NO_PERFECT_HIT,
     REVERSE_COMPLEMENT,
 )
 from .sites import NO_PAM_CLASS, Site
@@ -209,9 +209,9 @@ def _site(
         pam_class=pam if pattern_matches(genomic_pam, pam) else NO_PAM_CLASS,
         n_mismatches=0,
         mismatch_positions=(),
-        mapped_sequence=_kept(extra, genomic_extra) + guide.spacer,
+        mapped_sequence=(_kept(extra, genomic_extra) + guide.spacer + genomic_pam),
         genomic_protospacer=guide.spacer,
-        added_g_base=genomic_extra,
+        genomic_5p_base=genomic_extra,
     )
 
 
@@ -230,4 +230,4 @@ def _verdict(sites: Sequence[Site], reversed_has_pam: bool) -> str:
         return FORWARD
     if reversed_has_pam:
         return REVERSE_COMPLEMENT
-    return NO_PAM if sites else NO_PERFECT_HIT
+    return NO_PAM if sites else NO_MATCH

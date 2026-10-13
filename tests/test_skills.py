@@ -25,7 +25,6 @@ REPO = Path(__file__).resolve().parent.parent
 COVERAGE = {
     "cau-normalization": ("normalization",),
     "cau-guide-alignment": ("guide_alignment",),
-    "cau-guide-alignment-runner": ("guide_alignment",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.

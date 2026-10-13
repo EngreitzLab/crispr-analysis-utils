@@ -7,9 +7,9 @@ its own site is an exact match, and everything the tables report follows from
 that.
 
 `outdir` gets three folders and nothing else: ``alignments/`` with the
-results (``guides_metadata.tsv``, ``sites.tsv``,
-``guides.bed``, ``qc.tsv``), ``run_metadata/`` with this invocation's record,
-and ``logs/``.
+results (``guides_alignment_metadata.tsv``, ``guides_mapping.bed``,
+``columns.yaml``, ``qc.tsv``), ``run_metadata/`` with
+this invocation's record, and ``logs/``.
 """
 
 from __future__ import annotations
@@ -36,10 +36,10 @@ from .summary import (
     CLASSES,
     GuideSummary,
     summarize,
+    write_columns_yaml,
     write_guides_bed,
     write_guides_tsv,
     write_qc_tsv,
-    write_sites_tsv,
 )
 
 logger = logging.getLogger(__name__)
@@ -239,7 +239,7 @@ def _run(
         "%d entries, %d distinct guides, %d with a base 5' of the spacer",
         len(library),
         len({guide.guide_id for guide in library}),
-        sum(guide.g_added for guide in library),
+        sum(guide.extra_5p for guide in library),
     )
 
     with _timed(state, "checksums"):
@@ -268,9 +268,11 @@ def _run(
             max_mismatches=0,
         )
         tables = outdir / RESULTS_DIR
-        write_guides_tsv(tables / "guides_metadata.tsv", summaries, max_mismatches=0)
-        write_sites_tsv(tables / "sites.tsv", library, scan.sites)
-        write_guides_bed(tables / "guides.bed", summaries)
+        write_guides_tsv(
+            tables / "guides_alignment_metadata.tsv", library, summaries, scan.sites
+        )
+        write_guides_bed(tables / "guides_mapping.bed", library, scan.sites)
+        write_columns_yaml(tables / "columns.yaml")
         write_qc_tsv(tables / "qc.tsv", summaries, counts=state["counts"])
 
     state["classes"] = _ordered((summary.site_class for summary in summaries), CLASSES)

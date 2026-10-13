@@ -143,7 +143,7 @@ def test_add_leading_g_prepends_a_g_to_every_sequence():
     ]
 
 
-def test_g_added_comes_from_the_length_not_from_the_first_base():
+def test_extra_5p_comes_from_the_length_not_from_the_first_base():
     frame = pd.DataFrame(
         [("a", SPACER_A), ("g", SPACER_G), ("extra_g", "G" + SPACER_C)]
     )
@@ -154,9 +154,9 @@ def test_g_added_comes_from_the_length_not_from_the_first_base():
     # SPACER_G starts with a G but is only 20 bases long, so nothing sits 5'
     # of its spacer; the 21-base entry carries one without being told to.
     assert [guide.n_extra for guide in without_g] == [0, 0, 1]
-    assert [guide.g_added for guide in without_g] == [False, False, True]
+    assert [guide.extra_5p for guide in without_g] == [False, False, True]
     assert [guide.n_extra for guide in with_g] == [1, 1, 2]
-    assert [guide.g_added for guide in with_g] == [True, True, True]
+    assert [guide.extra_5p for guide in with_g] == [True, True, True]
 
 
 def test_duplicates_are_keyed_on_the_whole_sequence(caplog):

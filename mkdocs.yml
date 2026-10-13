@@ -47,14 +47,13 @@ nav:
   - Getting started: getting-started.md
   - Guides:
       - Guide alignment: guide-alignment.md
-      - "Tutorial: guide alignment on a cluster": tutorial-guide-alignment.md
   - Agents and skills: agents-and-skills.md
   - API reference:
       - Overview: reference/index.md
       - Guide alignment:
           - run: reference/guide-alignment-run.md
           - Guide library: reference/guide-alignment-library.md
-          - GEM: reference/guide-alignment-gem.md
+          - Genome scan: reference/guide-alignment-scan.md
           - Sites: reference/guide-alignment-sites.md
           - Orientation: reference/guide-alignment-orientation.md
           - Classes and tables: reference/guide-alignment-summary.md

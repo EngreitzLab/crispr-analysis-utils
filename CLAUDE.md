@@ -51,8 +51,9 @@ per platform serves every supported Python rather than one per version.
                              `install_skills.py`). Infrastructure: no skill.
     - `skills/<name>/`    -- one skill per analysis module: `SKILL.md`, plus
                              `references/` for detail. Data, not packages.
-    - `agents/<name>.md`  -- subagents, each preloading the skill of the
-                             module it runs.
+    - `agents/`           -- subagents, each preloading the skill of the
+                             module it runs. Empty: no module's use is long
+                             enough to need one.
 - `Cargo.toml`, `rust/` -- the Rust crate behind `_core`, and its sources.
                            `Cargo.lock` is committed, like the other two
                            lockfiles.

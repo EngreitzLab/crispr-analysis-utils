@@ -14,11 +14,11 @@ REVERSE_COMPLEMENT = "reverse_complement"
 """Only the reversed reading does: this entry is written 3' to 5'."""
 NO_PAM = "no_pam"
 """The spacer matches the genome, and no matching site has a PAM either way."""
-NO_PERFECT_HIT = "no_perfect_hit"
+NO_MATCH = "no_match"
 """The spacer matches nowhere. A non-targeting control belongs here."""
 NOT_CHECKED = "not_checked"
 """The orientation check did not run."""
-VERDICTS = (FORWARD, REVERSE_COMPLEMENT, NO_PAM, NO_PERFECT_HIT, NOT_CHECKED)
+VERDICTS = (FORWARD, REVERSE_COMPLEMENT, NO_PAM, NO_MATCH, NOT_CHECKED)
 """Every orientation verdict, in report order."""
 
 DISTINCT = "distinct"

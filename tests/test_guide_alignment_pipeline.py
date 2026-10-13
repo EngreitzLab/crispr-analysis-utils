@@ -38,10 +38,19 @@ GUIDES = [
     ("g_dup", SPACER_A),
 ]
 OUTPUTS = (
-    "guides_metadata.tsv",
-    "sites.tsv",
-    "guides.bed",
+    "guides_alignment_metadata.tsv",
+    "guides_mapping.bed",
+    "columns.yaml",
     "qc.tsv",
+)
+SITE_COLUMNS = (
+    "chr",
+    "start",
+    "end",
+    "strand",
+    "cut_site",
+    "pam_matches",
+    "mapped_sequence",
 )
 
 
@@ -113,7 +122,11 @@ def table(path):
 
 
 def by_alias(rows):
-    return {row["alias"]: row for row in rows}
+    """The rows grouped by alias: a guide with two sites has two rows."""
+    grouped = {}
+    for row in rows:
+        grouped.setdefault(row["alias"], []).append(row)
+    return grouped
 
 
 def record(setup):
@@ -135,38 +148,43 @@ def test_run_writes_every_output(setup):
     assert len(records) == 1
     assert sorted(p.name for p in out.iterdir()) == ["alignments", "logs", METADATA_DIR]
 
-    guides = by_alias(table(out / "alignments" / "guides_metadata.tsv"))
+    guides = by_alias(table(out / "alignments" / "guides_alignment_metadata.tsv"))
     chrom, a_start, _ = setup["sites"]["g_a"]
-    assert guides["g_a"]["site_class"] == "unique"
-    assert (guides["g_a"]["guide_chr"], guides["g_a"]["guide_start"]) == (
-        chrom,
-        str(a_start),
-    )
-    assert guides["g_a"]["strand"] == "+"
-    assert guides["g_a"]["site_pam"] == "TGG"
-    assert guides["g_a"]["cut_site"] == str(a_start + 17)
-    assert guides["g_a"]["guide_id"] == SPACER_A + "NGG"
-    assert guides["g_a"]["mapped_sequence"] == SPACER_A
-    assert guides["g_a"]["has_perfect_site"] == "TRUE"
-    assert guides["g_a"]["g_added"] == "FALSE"
+    (g_a,) = guides["g_a"]
+    assert g_a["site_class"] == "unique"
+    assert (g_a["chr"], g_a["start"]) == (chrom, str(a_start))
+    assert g_a["end"] == str(a_start + 20)
+    assert g_a["strand"] == "+"
+    assert g_a["pam_matches"] == "TRUE"
+    assert g_a["cut_site"] == str(a_start + 17)
+    assert g_a["guide_id"] == SPACER_A + "NGG"
+    # The genomic PAM is the tail of mapped_sequence; the pattern ends guide_id.
+    assert g_a["mapped_sequence"] == SPACER_A + "TGG"
+    assert (g_a["n_matches"], g_a["n_cut_sites"]) == ("1", "1")
+    assert result.summaries[0].site_pam == "TGG"
+    assert result.summaries[0].has_perfect_site is True
+    assert result.summaries[0].extra_5p is False
     _, c_start, _ = setup["sites"]["g_c"]
-    assert guides["g_c"]["site_class"] == "unique"
-    assert (guides["g_c"]["guide_start"], guides["g_c"]["strand"]) == (
-        str(c_start),
-        "-",
-    )
-    assert guides["g_c"]["cut_site"] == str(c_start + 3)
-    assert guides["g_g"]["site_class"] == "multi"
-    assert guides["g_g"]["n_sites_0mm"] == "2"
-    assert guides["g_nt"]["site_class"] == "no_site"
-    assert guides["g_dup"]["guide_id"] == guides["g_a"]["guide_id"]
-    assert guides["g_dup"]["guide_start"] == str(a_start)
-    assert {g: row["orientation"] for g, row in guides.items()} == {
-        "g_a": "forward",
-        "g_c": "forward",
-        "g_g": "forward",
-        "g_nt": "no_perfect_hit",
-        "g_dup": "forward",
+    (g_c,) = guides["g_c"]
+    assert g_c["site_class"] == "unique"
+    assert (g_c["start"], g_c["strand"]) == (str(c_start), "-")
+    assert g_c["cut_site"] == str(c_start + 3)
+    # Two sites, so two rows, with the guide's own columns repeated on each.
+    assert {row["site_class"] for row in guides["g_g"]} == {"multi"}
+    assert {row["n_cut_sites"] for row in guides["g_g"]} == {"2"}
+    assert len(guides["g_g"]) == 2
+    (g_nt,) = guides["g_nt"]
+    assert g_nt["site_class"] == "no_site"
+    assert [g_nt[name] for name in SITE_COLUMNS] == [""] * 7
+    (g_dup,) = guides["g_dup"]
+    assert g_dup["guide_id"] == g_a["guide_id"]
+    assert g_dup["start"] == str(a_start)
+    assert {g: {row["orientation"] for row in rows} for g, rows in guides.items()} == {
+        "g_a": {"forward"},
+        "g_c": {"forward"},
+        "g_g": {"forward"},
+        "g_nt": {"no_match"},
+        "g_dup": {"forward"},
     }
     assert [s.site_class for s in result.summaries] == [
         "unique",
@@ -186,22 +204,32 @@ def test_run_writes_every_output(setup):
     assert qc[("orientation", "forward")] == "4"
     assert qc[("scan", "n_sites")] == str(result.scan.n_sites)
 
+    # The BED holds every site a guide could be cut at, named by its spacer.
+    bed = [
+        line.split("\t")
+        for line in (out / "alignments" / "guides_mapping.bed").read_text().splitlines()
+    ]
+    assert [(row[0], row[1], row[3], row[5]) for row in bed] == [
+        ("chr1", str(a_start), SPACER_A, "+"),
+        # 'g_dup' is the same sequence as 'g_a', and each entry gets a row.
+        ("chr1", str(a_start), SPACER_A, "+"),
+        ("chr1", str(c_start), SPACER_C, "-"),
+        ("chr1", str(setup["sites"]["g_g_1"][1]), SPACER_G, "+"),
+        ("chr2", str(setup["sites"]["g_g_2"][1]), SPACER_G, "+"),
+    ]
+    assert {int(row[2]) - int(row[1]) for row in bed} == {20}
+
     state = record(setup)
     assert state == result.metadata
     assert state["complete"] is True and state["error"] is None
     assert state["step"] == STEP
     assert state["counts"]["scan"] == result.scan.counts()
-    assert state["classes"] == {
-        "unique": 3,
-        "multi": 1,
-        "mismatch_only": 0,
-        "no_site": 1,
-    }
+    assert state["classes"] == {"unique": 3, "multi": 1, "no_site": 1}
     assert state["orientation"] == {
         "forward": 4,
         "reverse_complement": 0,
         "no_pam": 0,
-        "no_perfect_hit": 1,
+        "no_match": 1,
         "not_checked": 0,
     }
     assert state["parameters"]["pam"] == "NGG"
@@ -212,54 +240,67 @@ def test_run_writes_every_output(setup):
 
 
 def test_the_scan_is_exact_so_a_mismatched_site_is_never_reported(setup):
-    go(setup)
-
-    _, nag_start, _ = setup["sites"]["g_c_nag"]
-    sites = table(setup["outdir"] / "alignments" / "sites.tsv")
-    assert str(nag_start) not in {row["start"] for row in sites}
-    guides = by_alias(table(setup["outdir"] / "alignments" / "guides_metadata.tsv"))
-    assert guides["g_c"]["n_sites_0mm"] == "1"
-    assert guides["g_c"]["min_mismatches"] == "0"
-    assert {row["n_mismatches"] for row in sites} == {"0"}
-
-
-def test_entries_sharing_a_sequence_are_scanned_and_written_once(setup):
     result = go(setup)
 
-    # One set of site rows for the sequence, one metadata row per entry.
-    sites = table(setup["outdir"] / "alignments" / "sites.tsv")
-    assert [row["guide_id"] for row in sites].count(SPACER_A + "NGG") == 1
-    guides = table(setup["outdir"] / "alignments" / "guides_metadata.tsv")
+    _, nag_start, _ = setup["sites"]["g_c_nag"]
+    rows = table(setup["outdir"] / "alignments" / "guides_alignment_metadata.tsv")
+    assert str(nag_start) not in {row["start"] for row in rows}
+    guides = by_alias(rows)
+    assert guides["g_c"][0]["n_cut_sites"] == "1"
+    assert guides["g_c"][0]["n_matches"] == "1"
+    assert [s.min_mismatches for s in result.summaries if s.alias == "g_c"] == [0]
+    assert {
+        site.n_mismatches for sites in result.scan.sites.values() for site in sites
+    } == {0}
+
+
+def test_entries_sharing_a_sequence_are_scanned_once_and_written_per_entry(setup):
+    result = go(setup)
+
+    # The sequence is searched once, however many entries carry it: four
+    # distinct spacers, four genomic matches between them.
+    assert result.scan.n_matches == 4
+    guides = table(setup["outdir"] / "alignments" / "guides_alignment_metadata.tsv")
     shared = [row for row in guides if row["guide_id"] == SPACER_A + "NGG"]
+    # One row per entry per site: both entries get the one site of the sequence.
     assert sorted(row["alias"] for row in shared) == ["g_a", "g_dup"]
+    assert {row["start"] for row in shared} == {str(setup["sites"]["g_a"][1])}
     assert result.guides[4].duplicate_of == "g_a"
 
 
 def test_add_leading_g_records_the_base_under_the_g(setup):
-    go(setup, add_leading_g=True)
+    result = go(setup, add_leading_g=True)
 
-    sites = table(setup["outdir"] / "alignments" / "sites.tsv")
-    bases = {(row["guide_id"], row["start"]): row["added_g_base"] for row in sites}
     _, a_start, _ = setup["sites"]["g_a"]
     _, c_start, _ = setup["sites"]["g_c"]
     # TTT precedes g_a on +; TTT follows g_c's site on +, so A in guide orientation.
-    assert bases[("G" + SPACER_A + "NGG", str(a_start))] == "T"
-    assert bases[("G" + SPACER_C + "NGG", str(c_start))] == "A"
-    guides = by_alias(table(setup["outdir"] / "alignments" / "guides_metadata.tsv"))
-    assert guides["g_a"]["g_added"] == "TRUE"
-    assert guides["g_a"]["guide_id"] == "G" + SPACER_A + "NGG"
+    bases = {
+        (site.guide_id, site.start): site.genomic_5p_base
+        for sites in result.scan.sites.values()
+        for site in sites
+    }
+    assert bases[("G" + SPACER_A + "NGG", a_start)] == "T"
+    assert bases[("G" + SPACER_C + "NGG", c_start)] == "A"
+    guides = by_alias(
+        table(setup["outdir"] / "alignments" / "guides_alignment_metadata.tsv")
+    )
+    assert result.guides[0].extra_5p is True
+    assert guides["g_a"][0]["guide_id"] == "G" + SPACER_A + "NGG"
     # The G is dropped from mapped_sequence because the genome has a T there.
-    assert guides["g_a"]["mapped_sequence"] == SPACER_A
+    assert guides["g_a"][0]["mapped_sequence"] == SPACER_A + "TGG"
     # The coordinates are the protospacer's: the added G is outside them.
-    assert guides["g_a"]["guide_start"] == str(a_start)
+    assert guides["g_a"][0]["start"] == str(a_start)
 
 
 def test_contigs_keep_only_their_hits(setup):
     result = go(setup, contigs=["chr1"])
 
-    guides = by_alias(table(setup["outdir"] / "alignments" / "guides_metadata.tsv"))
-    assert guides["g_g"]["site_class"] == "unique"
-    assert guides["g_g"]["guide_chr"] == "chr1"
+    guides = by_alias(
+        table(setup["outdir"] / "alignments" / "guides_alignment_metadata.tsv")
+    )
+    (g_g,) = guides["g_g"]
+    assert g_g["site_class"] == "unique"
+    assert g_g["chr"] == "chr1"
     assert result.metadata["parameters"]["contigs"] == ["chr1"]
 
 
@@ -287,19 +328,28 @@ def test_a_pam_running_off_a_contig_end_is_counted_not_reported(tmp_path):
         2,
         0,
     )
-    assert table(result.outdir / "alignments" / "sites.tsv") == []
+    # Nothing was kept, so the guide gets its one row with no site in it.
+    (row,) = table(result.outdir / "alignments" / "guides_alignment_metadata.tsv")
+    assert [row[name] for name in SITE_COLUMNS] == [""] * 7
+    assert (row["n_matches"], row["n_cut_sites"]) == ("0", "0")
     assert result.summaries[0].site_class == "no_site"
-    assert result.summaries[0].orientation == "no_perfect_hit"
+    assert result.summaries[0].orientation == "no_match"
 
 
-def test_a_match_without_a_pam_is_kept_as_pam_class_none(tmp_path):
+def test_a_match_without_a_pam_is_kept_out_of_the_bed_but_written_to_the_tsv(tmp_path):
     reference = write_fasta(tmp_path / "nopam.fa", {"c1": "TTTT" + SPACER_A + "TTTTTT"})
     result = run(
         write_guides(tmp_path / "g.tsv", [("g_a", SPACER_A)]), reference, "out"
     )
 
-    (row,) = table(result.outdir / "alignments" / "sites.tsv")
-    assert (row["pam"], row["pam_class"]) == ("TTT", "none")
+    (site,) = result.scan.sites[0]
+    assert (site.pam, site.pam_class) == ("TTT", "none")
+    (row,) = table(result.outdir / "alignments" / "guides_alignment_metadata.tsv")
+    assert (row["chr"], row["start"], row["pam_matches"]) == ("c1", "4", "FALSE")
+    assert (row["n_matches"], row["n_cut_sites"]) == ("1", "0")
+    assert row["mapped_sequence"] == SPACER_A + "TTT"
+    # Nothing can be cut there, so the BED is empty.
+    assert (result.outdir / "alignments" / "guides_mapping.bed").read_text() == ""
     assert result.scan.counts()["n_no_pam"] == 1
     assert result.scan.counts()["n_sites"] == 1
     assert result.summaries[0].site_class == "no_site"
@@ -307,12 +357,12 @@ def test_a_match_without_a_pam_is_kept_as_pam_class_none(tmp_path):
     assert result.summaries[0].n_sites == (0,)
 
 
-def test_a_spacer_that_matches_nowhere_is_no_perfect_hit(setup):
+def test_a_spacer_that_matches_nowhere_is_no_match(setup):
     result = go(setup)
 
     (nt,) = [s for s in result.summaries if s.alias == "g_nt"]
     assert (nt.orientation, nt.site_class, nt.has_perfect_site) == (
-        "no_perfect_hit",
+        "no_match",
         "no_site",
         False,
     )
@@ -343,7 +393,7 @@ def test_a_reversed_entry_is_flagged_only_with_a_pam_bearing_reversed_site(tmp_p
     assert scan.verdicts == {
         0: "reverse_complement",
         1: "no_pam",
-        2: "no_perfect_hit",
+        2: "no_match",
     }
 
 
@@ -386,7 +436,7 @@ def test_a_run_stops_only_when_reversed_entries_outnumber_forward_ones(setup, tm
         outdir=tmp_path / "tie",
     )
     assert [s.orientation for s in tie.summaries] == ["reverse_complement", "forward"]
-    assert (tmp_path / "tie" / "alignments" / "guides_metadata.tsv").is_file()
+    assert (tmp_path / "tie" / "alignments" / "guides_alignment_metadata.tsv").is_file()
 
 
 def test_a_reversed_library_under_error_leaves_a_failed_record(setup, tmp_path):
@@ -422,7 +472,7 @@ def test_a_reversed_library_is_only_logged_when_the_check_is_warn(
     assert "3 of 3 entries read 3' to 5'" in caplog.text
     assert {s.orientation for s in result.summaries} == {"reverse_complement"}
     assert {s.orientation_evidence for s in result.summaries} == {"ambiguous"}
-    assert (setup["outdir"] / "alignments" / "guides_metadata.tsv").is_file()
+    assert (setup["outdir"] / "alignments" / "guides_alignment_metadata.tsv").is_file()
     assert result.metadata["orientation_fixed"] == 0
 
 

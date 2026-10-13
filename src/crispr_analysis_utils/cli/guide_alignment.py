@@ -23,8 +23,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Find every guide's genomic site.",
         description=(
             "Scan a reference for every guide's exact site. --outdir gets "
-            "alignments/ with the results (guides_metadata.tsv, sites.tsv, "
-            "guides.bed, qc.tsv), "
+            "alignments/ with the results (guides_alignment_metadata.tsv, "
+            "guides_mapping.bed, columns.yaml, qc.tsv), "
             "run_metadata/ with this invocation's record, and logs/."
         ),
     )

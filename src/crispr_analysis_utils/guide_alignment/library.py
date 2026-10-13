@@ -33,8 +33,9 @@ class Guide:
     Attributes
     ----------
     guide_id
-        `aligned_sequence` and the PAM: the whole read. It identifies the
-        guide, so two entries share it only when their sequences are equal.
+        The sequence that is aligned, ending in the PAM pattern. It identifies
+        the guide, so two entries share it only when their sequences are
+        equal.
     alias
         The name the guide table gives this entry, as a string.
     input_sequence
@@ -50,8 +51,9 @@ class Guide:
         The bases of `aligned_sequence` 5' of the spacer, so 1 for a guide
         carrying an added G and 0 for one that does not. Their mismatches are
         reported but never counted.
-    g_added
-        Whether `n_extra` is more than zero.
+    extra_5p
+        Whether `n_extra` is more than zero: the sequence carries a base 5'
+        of the protospacer, read from its length and not from any alignment.
     duplicate_of
         The alias of the first entry whose `guide_id` is the same, or None for
         that first entry itself.
@@ -66,8 +68,8 @@ class Guide:
     duplicate_of: str | None
 
     @property
-    def g_added(self) -> bool:
-        """Whether the read carries a base 5' of the spacer."""
+    def extra_5p(self) -> bool:
+        """Whether the sequence carries a base 5' of the protospacer."""
         return self.n_extra > 0
 
 
@@ -109,7 +111,7 @@ def read_guides(
         sequences already carry the G they were ordered with: whether a guide
         has one then follows from its length, not from its first base.
     pam
-        The PAM that is aligned, which completes `Guide.guide_id`.
+        The PAM pattern, which ends `Guide.guide_id`.
 
     Returns
     -------

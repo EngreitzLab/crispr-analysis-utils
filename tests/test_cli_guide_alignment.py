@@ -155,14 +155,19 @@ def test_run_end_to_end(tmp_path, capsys):
     assert status == 0
     captured = capsys.readouterr()
     assert captured.out.splitlines() == [
-        "1 guides: 1 unique, 0 multi, 0 mismatch_only, 0 no_site",
+        "1 guides: 1 unique, 0 multi, 0 no_site",
         "Outputs in out",
     ]
     # Nothing is logged to the console: the run's log is a file in outdir.
     assert captured.err == ""
     assert "Done in" in (tmp_path / "out" / "logs" / "guide_alignment.log").read_text()
-    rows = (tmp_path / "out" / "alignments" / "guides.bed").read_text().splitlines()
-    assert rows == [f"chr1\t{start}\t{start + 20}\tg1\t0\t+"]
+    rows = (
+        (tmp_path / "out" / "alignments" / "guides_mapping.bed")
+        .read_text()
+        .splitlines()
+    )
+    # The BED's name field is the spacer, not the alias the table gives it.
+    assert rows == [f"chr1\t{start}\t{start + 20}\t{SPACER_A}\t0\t+"]
     records = (tmp_path / "out" / "run_metadata").glob("guide_alignment_*.json")
     state = json.loads(sorted(records)[-1].read_text())
     # --contigs is split and stripped, and a digit column stays a name here.
@@ -195,8 +200,13 @@ def test_column_positions_are_read_as_numbers(tmp_path, capsys):
 
     assert status == 0
     assert capsys.readouterr().out.startswith("1 guides: 1 unique")
-    rows = (tmp_path / "out" / "alignments" / "guides.bed").read_text().splitlines()
-    assert rows == [f"chr1\t{start}\t{start + 20}\tg1\t0\t+"]
+    rows = (
+        (tmp_path / "out" / "alignments" / "guides_mapping.bed")
+        .read_text()
+        .splitlines()
+    )
+    # The BED's name field is the spacer, not the alias the table gives it.
+    assert rows == [f"chr1\t{start}\t{start + 20}\t{SPACER_A}\t0\t+"]
 
 
 @pytest.mark.parametrize(
@@ -321,8 +331,13 @@ def test_fix_orientation_turns_a_reversed_entry_round(tmp_path, capsys):
 
     assert status == 0
     assert capsys.readouterr().out.startswith("1 guides: 1 unique")
-    rows = (tmp_path / "out" / "alignments" / "guides.bed").read_text().splitlines()
-    assert rows == [f"chr1\t{start}\t{start + 20}\tg1\t0\t+"]
+    rows = (
+        (tmp_path / "out" / "alignments" / "guides_mapping.bed")
+        .read_text()
+        .splitlines()
+    )
+    # The BED's name field is the spacer, not the alias the table gives it.
+    assert rows == [f"chr1\t{start}\t{start + 20}\t{SPACER_A}\t0\t+"]
 
 
 def test_the_sep_is_taken_literally(tmp_path, capsys):
