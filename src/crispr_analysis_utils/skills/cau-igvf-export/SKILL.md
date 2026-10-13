@@ -75,6 +75,13 @@ a promoter and the genome agrees.
 | `intron` | the intron's coordinates |
 | `enhancer`, `distal element` | the element's coordinates |
 
+## Reading the result
+
+`--outdir` gets `igvf/`, `run_metadata/` and `logs/`. The results are one
+table, `guide_metadata.tsv`, and the `columns.yaml` that describes it. See
+[`references/outputs.md`](references/outputs.md) for the columns in full and
+the three checks worth running before submitting.
+
 ## Traps that make a submission wrong but valid-looking
 
 - **`pam` is the genome's bases, not the pattern.** A file with `NGG` in
