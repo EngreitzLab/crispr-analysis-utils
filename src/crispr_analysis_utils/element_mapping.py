@@ -244,6 +244,8 @@ def counts(mapping: pd.DataFrame) -> dict:
     key = ["guide_id", "chr", "start", "end", "strand"]
     per_site = mapping.drop_duplicates(key)
     sites = Counter(per_site["target_class"])
+    # A guide that matches nowhere has no site, so it is not counted as one.
+    mapped = per_site[per_site["chr"].notna() & (per_site["chr"] != "")]
     guides = {
         name: int(mapping.loc[mapping["target_class"] == name, "guide_id"].nunique())
         for name in CLASSES
@@ -251,7 +253,7 @@ def counts(mapping: pd.DataFrame) -> dict:
     return {
         "rows": len(mapping),
         "guides": int(mapping["guide_id"].nunique()),
-        "sites": int(len(per_site)),
+        "sites": int(len(mapped)),
         "classes": {name: int(sites.get(name, 0)) for name in CLASSES},
         "guides_by_class": guides,
         "elements_with_a_guide": int(
@@ -270,6 +272,128 @@ def write_mapping_tsv(path: str | os.PathLike[str], mapping: pd.DataFrame) -> No
     for column in ("start", "end", "distance_to_tss"):
         frame[column] = frame[column].astype("Float64").astype("Int64")
     frame.to_csv(path, sep="\t", index=False, na_rep="")
+
+
+def write_qc_tsv(
+    path: str | os.PathLike[str],
+    mapping: pd.DataFrame,
+    elements: pd.DataFrame,
+    sites: pd.DataFrame | None = None,
+) -> None:
+    """Write qc.tsv: how the library covers the elements.
+
+    Parameters
+    ----------
+    path
+        The file to write.
+    mapping
+        What `map_to_elements` returned.
+    elements
+        The elements, as `read_elements` returns them, so the ones no guide
+        reaches are counted rather than missing.
+    sites
+        The mapped sites, used to say how far an element with no guide is
+        from the nearest one.
+
+    Notes
+    -----
+    Three columns, ``section``, ``name`` and ``value``. Guides per element
+    counts distinct guides, and the density beside it is per 100 bases,
+    because a wide element collects more guides without being better covered.
+    """
+    found = counts(mapping)
+    every = elements.drop_duplicates("element_id")
+    per = (
+        mapping.loc[mapping["target_class"] == TARGETING]
+        .groupby("element_id")["guide_id"]
+        .nunique()
+        .reindex(every["element_id"])
+        .fillna(0)
+        .astype(int)
+    )
+    width = (every["End"] - every["Start"]).to_numpy()
+    density = 100 * per.to_numpy() / np.where(width > 0, width, 1)
+    covered = per > 0
+    middle = float(np.median(density[covered])) if covered.any() else 0.0
+
+    rows: list[tuple[str, str, object]] = [("classes", "guides", found["guides"])]
+    rows += [("classes", f"sites_{k}", v) for k, v in found["classes"].items()]
+    rows += [
+        ("elements", "total", len(every)),
+        ("elements", "with_a_guide", int(covered.sum())),
+        ("elements", "without_a_guide", int((~covered).sum())),
+        ("elements", "below_half_median_density", int((density < middle / 2).sum())),
+        (
+            "guides_per_element",
+            "median",
+            _round(np.median(per[covered]) if covered.any() else 0),
+        ),
+        ("guides_per_element", "min", int(per[covered].min()) if covered.any() else 0),
+        ("guides_per_element", "max", int(per.max()) if len(per) else 0),
+        ("guides_per_element", "median_per_100bp", _round(middle)),
+    ]
+    for name, group in every.groupby("element_category", dropna=False):
+        if not str(name):
+            continue
+        got = per.reindex(group["element_id"])
+        rows += [
+            ("category", f"{name}_elements", len(group)),
+            ("category", f"{name}_without_a_guide", int((got == 0).sum())),
+            (
+                "category",
+                f"{name}_median_guides",
+                _round(np.median(got[got > 0]) if (got > 0).any() else 0),
+            ),
+        ]
+    rows += _untiled_rows(every[~covered.to_numpy()], sites)
+
+    lines = ["section\tname\tvalue"]
+    lines += [f"{section}\t{name}\t{value}" for section, name, value in rows]
+    Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _untiled_rows(
+    untiled: pd.DataFrame, sites: pd.DataFrame | None
+) -> list[tuple[str, str, object]]:
+    """How far the elements with no guide are from the nearest mapped one.
+
+    A few hundred bases means the guides missed the boundary; tens of
+    kilobases means the library never targeted the element at all.
+    """
+    if sites is None or untiled.empty or not len(sites):
+        return []
+    import pyranges1 as pr
+
+    near = pd.DataFrame(
+        pr.PyRanges(
+            untiled[["Chromosome", "Start", "End"]].reset_index(drop=True)
+        ).nearest_ranges(
+            pr.PyRanges(
+                {
+                    "Chromosome": sites["chr"].to_numpy(),
+                    "Start": sites["start"].to_numpy().astype("int64"),
+                    "End": sites["end"].to_numpy().astype("int64"),
+                }
+            ),
+            strand_behavior="ignore",
+            dist_col="_d",
+            ties="first",
+        )
+    )
+    if near.empty:
+        return []
+    far = near["_d"].to_numpy()
+    return [
+        ("untiled_elements", "median_bases_to_nearest_guide", int(np.median(far))),
+        ("untiled_elements", "within_1kb_of_a_guide", int((far < 1_000).sum())),
+        ("untiled_elements", "beyond_10kb_of_any_guide", int((far >= 10_000).sum())),
+    ]
+
+
+def _round(value: float) -> float | int:
+    """A number for the QC table, without a pointless decimal."""
+    value = float(value)
+    return int(value) if value == int(value) else round(value, 1)
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
@@ -479,6 +603,7 @@ def run(
         )
         write_mapping_tsv(outdir / RESULTS_DIR / TABLE, mapping)
         write_columns_yaml(outdir / RESULTS_DIR / "columns.yaml")
+        write_qc_tsv(outdir / RESULTS_DIR / "qc.tsv", mapping, regions, sites)
 
         state["counts"] = counts(mapping)
         state["complete"] = True
@@ -524,10 +649,10 @@ def _read_alignment(
 
 def _truthy(value: object) -> bool:
     """TRUE, true and True all mean the same; an empty cell does not."""
-    if value is None or (isinstance(value, float) and value != value):
-        return False
     if isinstance(value, str):
         return value.strip().upper() == "TRUE"
+    if value is None or pd.isna(value):
+        return False
     return bool(value)
 
 

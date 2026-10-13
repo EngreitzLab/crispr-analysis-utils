@@ -4,7 +4,7 @@
 `--outdir` gets three folders and nothing loose:
 
 ```text
-elements/        guide_element_mapping.tsv  columns.yaml
+elements/        guide_element_mapping.tsv  columns.yaml  qc.tsv
 run_metadata/    element_mapping_<UTC timestamp>.json
 logs/            element_mapping.log
 ```
@@ -45,6 +45,28 @@ threshold here. Threshold it yourself, and say which threshold you used.
 It follows that an incomplete element list inflates `safe_targeting`: every
 guide for a missing element lands there. Check the count against the library
 design before believing it.
+
+## `qc.tsv`
+
+Three columns, `section`, `name`, `value`: how the library covers the
+elements, which is the question the mapping table cannot answer by itself.
+
+| Section | Says |
+| --- | --- |
+| `classes` | How many guides, and how many sites in each class |
+| `elements` | Total, how many have a guide, how many have none, and how many are below half the median density |
+| `guides_per_element` | Median, min, max, and the median per 100 bases |
+| `category` | The same per element category, so a thinly covered kind of element stands out |
+| `untiled_elements` | How far the elements with no guide are from the nearest mapped one |
+
+Two of these earn their place:
+
+- **Density, not count.** A wide element collects more guides without being
+  better covered, so `median_per_100bp` and `below_half_median_density` are
+  what find the elements that are actually thin.
+- **Distance for the untiled ones.** An element a few hundred bases from the
+  nearest guide was missed at its boundary; one tens of kilobases away was
+  never targeted at all. Only the second is a hole in the design.
 
 ### `element_id`
 

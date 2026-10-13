@@ -58,7 +58,9 @@ so check it against what the user expects before believing the table.
 ## Reading the result
 
 `--outdir` gets `elements/`, `run_metadata/` and `logs/`. The results are one
-table, `guide_element_mapping.tsv`, and the `columns.yaml` that describes it.
+table, `guide_element_mapping.tsv`, the `columns.yaml` that describes it, and
+`qc.tsv`. See [`references/outputs.md`](references/outputs.md) for the columns
+in full.
 
 - **One row per site per element.** Elements may overlap each other, so a
   single site can appear against two of them.
