@@ -96,8 +96,10 @@ Every environment is native on all three platforms, since the genome scan is
 the package's own Rust core. uv locks `uv.lock`, builds, and runs the CI jobs
 that need no conda: the `test-pip` matrix, `build` and `docs-build`.
 
-Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14; the pixi environments
-use 3.13.
+Python 3.12+ (`requires-python`). CI tests 3.12 to 3.14; the pixi environments
+use 3.13. The floor is 3.12 because `pyranges1` has never shipped for 3.11.
+The Rust core stays `abi3-py311`: that wheel serves every supported Python,
+and narrowing it would buy nothing.
 
 ## Conventions
 

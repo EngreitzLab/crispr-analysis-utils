@@ -9,7 +9,7 @@ name = "crispr-analysis-utils"
 version = "0.1.0"
 description = "Python utilities and command-line tools for analysing CRISPR perturbation screens."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -28,7 +28,6 @@ classifiers = [
     "Operating System :: MacOS",
     "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
@@ -38,6 +37,10 @@ dependencies = [
     "numpy>=1.23",
     "pandas>=1.5",
     "pysam>=0.22",
+    # Gene annotation: interval joins over GENCODE, on a Rust backend.
+    "pyranges1>=1.4",
+    # pandas writes and reads the annotation store as parquet.
+    "pyarrow>=16",
 ]
 
 [project.scripts]
