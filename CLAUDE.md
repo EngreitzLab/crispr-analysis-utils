@@ -241,6 +241,9 @@ use 3.13.
     - classes count sites whose genomic PAM matches. A site whose PAM does not
       stays in `sites.tsv` with `pam_class` `none` and counts nowhere, so a
       spacer matching twice with one PAM is `unique`;
+    - `run` writes only inside `outdir`, and only three folders: the results
+      in `alignments/`, this invocation's record in `run_metadata/` and the
+      log in `logs/`. Nothing of the run's own sits beside an input;
     - orientation is decided from both readings, held in the same scan: an
       entry is `reverse_complement` only when its reversed reading has a
       PAM-bearing site and the sequence as given does not. A `CCN` 5' of a

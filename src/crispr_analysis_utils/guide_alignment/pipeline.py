@@ -6,9 +6,10 @@ aligner, no index and no error budget: a guide is designed, not sequenced, so
 its own site is an exact match, and everything the tables report follows from
 that.
 
-`outdir` receives ``guides_metadata.tsv``, ``sites.tsv``, ``orientation.tsv``,
-``guides.bed``, ``cut_sites.bed`` and ``qc.tsv``, with this invocation's
-record under ``run_metadata/`` and the log under ``logs/``.
+`outdir` gets three folders and nothing else: ``alignments/`` with the
+results (``guides_metadata.tsv``, ``sites.tsv``, ``orientation.tsv``,
+``guides.bed``, ``cut_sites.bed``, ``qc.tsv``), ``run_metadata/`` with this
+invocation's record, and ``logs/``.
 """
 
 from __future__ import annotations
@@ -45,6 +46,8 @@ from .summary import (
 
 logger = logging.getLogger(__name__)
 
+RESULTS_DIR = "alignments"
+"""Where the step's results go, so nothing of its own sits beside the inputs."""
 METADATA_DIR = "run_metadata"
 """Where each invocation leaves its metadata, one file per invocation."""
 STEP = "guide_alignment"
@@ -162,6 +165,7 @@ def run(
     outdir.mkdir(parents=True, exist_ok=True)
     (outdir / "logs").mkdir(exist_ok=True)
     (outdir / METADATA_DIR).mkdir(exist_ok=True)
+    (outdir / RESULTS_DIR).mkdir(exist_ok=True)
     record = outdir / METADATA_DIR / f"{STEP}_{_stamp()}.json"
 
     parameters = {
@@ -265,13 +269,14 @@ def _run(
             pam=parameters["pam"],
             max_mismatches=0,
         )
-        write_guides_tsv(outdir / "guides_metadata.tsv", summaries, max_mismatches=0)
-        write_sites_tsv(outdir / "sites.tsv", library, scan.sites)
+        tables = outdir / RESULTS_DIR
+        write_guides_tsv(tables / "guides_metadata.tsv", summaries, max_mismatches=0)
+        write_sites_tsv(tables / "sites.tsv", library, scan.sites)
         if scan.verdicts:
-            write_orientation_tsv(outdir / "orientation.tsv", library, scan)
-        write_guides_bed(outdir / "guides.bed", summaries)
-        write_cut_sites_bed(outdir / "cut_sites.bed", summaries)
-        write_qc_tsv(outdir / "qc.tsv", summaries, counts=state["counts"])
+            write_orientation_tsv(tables / "orientation.tsv", library, scan)
+        write_guides_bed(tables / "guides.bed", summaries)
+        write_cut_sites_bed(tables / "cut_sites.bed", summaries)
+        write_qc_tsv(tables / "qc.tsv", summaries, counts=state["counts"])
 
     state["classes"] = _ordered((summary.site_class for summary in summaries), CLASSES)
     state["orientation"] = _ordered(

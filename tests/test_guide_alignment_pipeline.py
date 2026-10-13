@@ -128,13 +128,16 @@ def test_run_writes_every_output(setup):
     result = go(setup)
     out = setup["outdir"]
 
-    for name in (*OUTPUTS, "logs/guide_alignment.log"):
-        assert (out / name).is_file(), name
-    assert not (out / "alignments").exists()
+    # Results, metadata and logs each get their own folder, so nothing the run
+    # produced is left sitting beside the inputs.
+    for name in OUTPUTS:
+        assert (out / "alignments" / name).is_file(), name
+    assert (out / "logs" / "guide_alignment.log").is_file()
     records = list((out / METADATA_DIR).glob(f"{STEP}_*.json"))
     assert len(records) == 1
+    assert sorted(p.name for p in out.iterdir()) == ["alignments", "logs", METADATA_DIR]
 
-    guides = by_alias(table(out / "guides_metadata.tsv"))
+    guides = by_alias(table(out / "alignments" / "guides_metadata.tsv"))
     chrom, a_start, _ = setup["sites"]["g_a"]
     assert guides["g_a"]["site_class"] == "unique"
     assert (guides["g_a"]["guide_chr"], guides["g_a"]["guide_start"]) == (
@@ -175,11 +178,14 @@ def test_run_writes_every_output(setup):
         "unique",
     ]
 
-    bed = (out / "cut_sites.bed").read_text().splitlines()
+    bed = (out / "alignments" / "cut_sites.bed").read_text().splitlines()
     assert f"chr1\t{a_start + 17}\t{a_start + 18}\tg_a\t0\t+" in bed
     assert len(bed) == 3
 
-    qc = {(r["section"], r["name"]): r["value"] for r in table(out / "qc.tsv")}
+    qc = {
+        (r["section"], r["name"]): r["value"]
+        for r in table(out / "alignments" / "qc.tsv")
+    }
     assert qc[("guides", "n_entries")] == "5"
     assert qc[("guides", "n_guides")] == "4"
     assert qc[("class", "unique")] == "3"
@@ -215,9 +221,9 @@ def test_the_scan_is_exact_so_a_mismatched_site_is_never_reported(setup):
     go(setup)
 
     _, nag_start, _ = setup["sites"]["g_c_nag"]
-    sites = table(setup["outdir"] / "sites.tsv")
+    sites = table(setup["outdir"] / "alignments" / "sites.tsv")
     assert str(nag_start) not in {row["start"] for row in sites}
-    guides = by_alias(table(setup["outdir"] / "guides_metadata.tsv"))
+    guides = by_alias(table(setup["outdir"] / "alignments" / "guides_metadata.tsv"))
     assert guides["g_c"]["n_sites_0mm"] == "1"
     assert guides["g_c"]["min_mismatches"] == "0"
     assert {row["n_mismatches"] for row in sites} == {"0"}
@@ -226,10 +232,10 @@ def test_the_scan_is_exact_so_a_mismatched_site_is_never_reported(setup):
 def test_entries_sharing_a_sequence_are_scanned_and_written_once(setup):
     result = go(setup)
 
-    sites = table(setup["outdir"] / "sites.tsv")
+    sites = table(setup["outdir"] / "alignments" / "sites.tsv")
     assert [row["guide_id"] for row in sites].count(SPACER_A + "NGG") == 1
     # orientation.tsv keeps a row per entry, so the duplicate shows up there.
-    orientation = table(setup["outdir"] / "orientation.tsv")
+    orientation = table(setup["outdir"] / "alignments" / "orientation.tsv")
     assert [row["alias"] for row in orientation].count("g_dup") == 1
     assert result.guides[4].duplicate_of == "g_a"
 
@@ -237,14 +243,14 @@ def test_entries_sharing_a_sequence_are_scanned_and_written_once(setup):
 def test_add_leading_g_records_the_base_under_the_g(setup):
     go(setup, add_leading_g=True)
 
-    sites = table(setup["outdir"] / "sites.tsv")
+    sites = table(setup["outdir"] / "alignments" / "sites.tsv")
     bases = {(row["guide_id"], row["start"]): row["added_g_base"] for row in sites}
     _, a_start, _ = setup["sites"]["g_a"]
     _, c_start, _ = setup["sites"]["g_c"]
     # TTT precedes g_a on +; TTT follows g_c's site on +, so A in guide orientation.
     assert bases[("G" + SPACER_A + "NGG", str(a_start))] == "T"
     assert bases[("G" + SPACER_C + "NGG", str(c_start))] == "A"
-    guides = by_alias(table(setup["outdir"] / "guides_metadata.tsv"))
+    guides = by_alias(table(setup["outdir"] / "alignments" / "guides_metadata.tsv"))
     assert guides["g_a"]["g_added"] == "TRUE"
     assert guides["g_a"]["guide_id"] == "G" + SPACER_A + "NGG"
     # The G is dropped from mapped_sequence because the genome has a T there.
@@ -256,7 +262,7 @@ def test_add_leading_g_records_the_base_under_the_g(setup):
 def test_contigs_keep_only_their_hits(setup):
     result = go(setup, contigs=["chr1"])
 
-    guides = by_alias(table(setup["outdir"] / "guides_metadata.tsv"))
+    guides = by_alias(table(setup["outdir"] / "alignments" / "guides_metadata.tsv"))
     assert guides["g_g"]["site_class"] == "unique"
     assert guides["g_g"]["guide_chr"] == "chr1"
     assert result.metadata["parameters"]["contigs"] == ["chr1"]
@@ -286,7 +292,7 @@ def test_a_pam_running_off_a_contig_end_is_counted_not_reported(tmp_path):
         2,
         0,
     )
-    assert table(result.outdir / "sites.tsv") == []
+    assert table(result.outdir / "alignments" / "sites.tsv") == []
     assert result.summaries[0].site_class == "no_site"
     assert result.summaries[0].orientation == "no_perfect_hit"
 
@@ -297,7 +303,7 @@ def test_a_match_without_a_pam_is_kept_as_pam_class_none(tmp_path):
         write_guides(tmp_path / "g.tsv", [("g_a", SPACER_A)]), reference, "out"
     )
 
-    (row,) = table(result.outdir / "sites.tsv")
+    (row,) = table(result.outdir / "alignments" / "sites.tsv")
     assert (row["pam"], row["pam_class"]) == ("TTT", "none")
     assert result.scan.counts()["n_no_pam"] == 1
     assert result.scan.counts()["n_sites"] == 1
@@ -385,7 +391,7 @@ def test_a_run_stops_only_when_reversed_entries_outnumber_forward_ones(setup, tm
         outdir=tmp_path / "tie",
     )
     assert [s.orientation for s in tie.summaries] == ["reverse_complement", "forward"]
-    assert (tmp_path / "tie" / "guides_metadata.tsv").is_file()
+    assert (tmp_path / "tie" / "alignments" / "guides_metadata.tsv").is_file()
 
 
 def test_a_reversed_library_under_error_leaves_a_failed_record(setup, tmp_path):
@@ -400,7 +406,7 @@ def test_a_reversed_library_under_error_leaves_a_failed_record(setup, tmp_path):
     out = setup["outdir"]
     # The tables are written after the check, so a stopped run leaves none.
     for name in OUTPUTS:
-        assert not (out / name).exists(), name
+        assert not (out / "alignments" / name).exists(), name
     state = record(setup)
     assert state["complete"] is False
     assert state["error"].startswith("OrientationError")
@@ -421,7 +427,7 @@ def test_a_reversed_library_is_only_logged_when_the_check_is_warn(
     assert "3 of 3 entries read 3' to 5'" in caplog.text
     assert {s.orientation for s in result.summaries} == {"reverse_complement"}
     assert {s.orientation_evidence for s in result.summaries} == {"ambiguous"}
-    assert (setup["outdir"] / "guides_metadata.tsv").is_file()
+    assert (setup["outdir"] / "alignments" / "guides_metadata.tsv").is_file()
     assert result.metadata["orientation_fixed"] == 0
 
 
@@ -439,7 +445,7 @@ def test_orientation_check_off_reports_no_verdict_at_all(setup, tmp_path, caplog
     # that is reversed throughout neither warns nor stops.
     assert {s.orientation for s in result.summaries} == {"not_checked"}
     assert {s.orientation_evidence for s in result.summaries} == {None}
-    assert not (setup["outdir"] / "orientation.tsv").exists()
+    assert not (setup["outdir"] / "alignments" / "orientation.tsv").exists()
     assert "read 3' to 5'" not in caplog.text
     assert result.metadata["complete"] is True
     assert result.metadata["orientation"]["not_checked"] == 3

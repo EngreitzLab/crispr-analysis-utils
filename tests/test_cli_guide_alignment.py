@@ -161,7 +161,7 @@ def test_run_end_to_end(tmp_path, capsys):
     # Nothing is logged to the console: the run's log is a file in outdir.
     assert captured.err == ""
     assert "Done in" in (tmp_path / "out" / "logs" / "guide_alignment.log").read_text()
-    rows = (tmp_path / "out" / "guides.bed").read_text().splitlines()
+    rows = (tmp_path / "out" / "alignments" / "guides.bed").read_text().splitlines()
     assert rows == [f"chr1\t{start}\t{start + 20}\tg1\t0\t+"]
     records = (tmp_path / "out" / "run_metadata").glob("guide_alignment_*.json")
     state = json.loads(sorted(records)[-1].read_text())
@@ -195,7 +195,7 @@ def test_column_positions_are_read_as_numbers(tmp_path, capsys):
 
     assert status == 0
     assert capsys.readouterr().out.startswith("1 guides: 1 unique")
-    rows = (tmp_path / "out" / "guides.bed").read_text().splitlines()
+    rows = (tmp_path / "out" / "alignments" / "guides.bed").read_text().splitlines()
     assert rows == [f"chr1\t{start}\t{start + 20}\tg1\t0\t+"]
 
 
@@ -321,7 +321,7 @@ def test_fix_orientation_turns_a_reversed_entry_round(tmp_path, capsys):
 
     assert status == 0
     assert capsys.readouterr().out.startswith("1 guides: 1 unique")
-    rows = (tmp_path / "out" / "guides.bed").read_text().splitlines()
+    rows = (tmp_path / "out" / "alignments" / "guides.bed").read_text().splitlines()
     assert rows == [f"chr1\t{start}\t{start + 20}\tg1\t0\t+"]
 
 
