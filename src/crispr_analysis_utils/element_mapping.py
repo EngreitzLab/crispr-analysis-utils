@@ -1,10 +1,13 @@
 """Map guides to the elements a screen targets.
 
-A site is `targeting` when the protospacer overlaps an element, and
-`safe_targeting` when it overlaps none and lies further than the safe
-distance from any protein-coding TSS. A site that overlaps no element but
-sits nearer than that is `unassigned`: it maps, but to none of the elements
-given. A guide that matches nowhere is `non_targeting` and has no site.
+A site is `targeting` when the protospacer overlaps an element and
+`safe_targeting` when it overlaps none. A guide that matches nowhere is
+`non_targeting` and has no site.
+
+How safe a safe-targeting site really is depends on what the screen reads
+out, so that is left as `distance_to_tss` rather than decided by a threshold
+here. The column is filled for every site, since it is worth having for a
+targeting one too.
 
 The class is per site, not per guide, so a guide whose sites disagree reports
 each of them.
@@ -30,12 +33,8 @@ logger = logging.getLogger(__name__)
 TARGETING = "targeting"
 NON_TARGETING = "non_targeting"
 SAFE_TARGETING = "safe_targeting"
-UNASSIGNED = "unassigned"
-CLASSES = (TARGETING, SAFE_TARGETING, NON_TARGETING, UNASSIGNED)
+CLASSES = (TARGETING, SAFE_TARGETING, NON_TARGETING)
 """Every class, in the order the counts report them."""
-
-SAFE_DISTANCE = 1_000_000
-"""How far from any protein-coding TSS a site must be to count as safe."""
 
 SITE_COLUMNS = ("guide_id", "chr", "start", "end", "strand")
 """What `map_to_elements` needs of every site."""
@@ -56,9 +55,15 @@ COLUMNS = {
     "element_category": "The BED's fifth column, when it has one.",
     "target_class": (
         "targeting: the protospacer overlaps this element. safe_targeting:"
-        " it overlaps none and is further than the safe distance from any"
-        " protein-coding TSS. unassigned: it overlaps none but is nearer than"
-        " that. non_targeting: the guide matches nowhere in the genome."
+        " it maps but overlaps no element. non_targeting: the guide matches"
+        " nowhere in the genome."
+    ),
+    "distance_to_tss": (
+        "Bases from the cut site to the nearest protein-coding TSS, signed in"
+        " that gene's orientation. How far a safe-targeting site has to be to"
+        " be safe depends on the screen, so threshold this yourself rather"
+        " than trusting the class alone. From guides_gene_annotation.tsv, so"
+        " empty without it."
     ),
 }
 """Every column of the mapping table, and what it holds."""
@@ -132,8 +137,6 @@ def map_to_elements(
     elements: pd.DataFrame,
     guides: pd.Series | None = None,
     distances: pd.DataFrame | None = None,
-    *,
-    safe_distance: int = SAFE_DISTANCE,
 ) -> pd.DataFrame:
     """Map every site to the elements it overlaps, and classify it.
 
@@ -148,10 +151,7 @@ def map_to_elements(
         classified too. Defaults to the guides the sites name.
     distances
         ``guides_gene_annotation.tsv``, for its ``distance_to_tss``. Without
-        it nothing can be called safe, and a site that overlaps no element is
-        `unassigned`.
-    safe_distance
-        How far from a protein-coding TSS a site must be to count as safe.
+        it that column is empty; the classes do not depend on it.
 
     Returns
     -------
@@ -169,8 +169,6 @@ def map_to_elements(
     missing = set(SITE_COLUMNS) - set(sites.columns)
     if missing:
         raise ElementError(f"The sites are missing {', '.join(sorted(missing))}.")
-    if safe_distance < 0:
-        raise ValueError(f"safe_distance must not be negative, got {safe_distance}.")
 
     sites = sites[list(SITE_COLUMNS)].drop_duplicates().reset_index(drop=True)
     if len(sites):
@@ -179,11 +177,10 @@ def map_to_elements(
     hits = _overlaps(sites, elements, pr)
     targeting = set(hits["_row"]) if len(hits) else set()
 
-    far = _far_from_a_tss(sites, distances, safe_distance)
     plain = sites[~sites.index.isin(targeting)].copy()
     plain["element_id"] = ""
     plain["element_category"] = ""
-    plain["target_class"] = np.where(plain.index.isin(far), SAFE_TARGETING, UNASSIGNED)
+    plain["target_class"] = SAFE_TARGETING
 
     rows = [plain]
     if len(hits):
@@ -226,6 +223,7 @@ def map_to_elements(
     frame = frame.sort_values(["_order", "chr", "start", "element_id"])
     for column in ("start", "end"):
         frame[column] = frame[column].astype("Float64").astype("Int64")
+    frame = _add_distance(frame, distances)
     return frame.reset_index(drop=True).reindex(columns=list(COLUMNS))
 
 
@@ -263,10 +261,15 @@ def counts(mapping: pd.DataFrame) -> dict:
 
 
 def write_mapping_tsv(path: str | os.PathLike[str], mapping: pd.DataFrame) -> None:
-    """Write the guide-to-element mapping."""
-    mapping.reindex(columns=list(COLUMNS)).to_csv(
-        path, sep="\t", index=False, na_rep=""
-    )
+    """Write the guide-to-element mapping.
+
+    Coordinates and distances are whole numbers, so they are written without
+    the trailing .0 that a merge against an absent row leaves behind.
+    """
+    frame = mapping.reindex(columns=list(COLUMNS))
+    for column in ("start", "end", "distance_to_tss"):
+        frame[column] = frame[column].astype("Float64").astype("Int64")
+    frame.to_csv(path, sep="\t", index=False, na_rep="")
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
@@ -308,22 +311,26 @@ def _overlaps(sites: pd.DataFrame, elements: pd.DataFrame, pr) -> pd.DataFrame:
     )
 
 
-def _far_from_a_tss(
-    sites: pd.DataFrame, distances: pd.DataFrame | None, safe_distance: int
-) -> set[int]:
-    """The site rows further than `safe_distance` from any protein-coding TSS."""
+def _add_distance(frame: pd.DataFrame, distances: pd.DataFrame | None) -> pd.DataFrame:
+    """Carry each site's distance to the nearest protein-coding TSS across."""
     if distances is None or "distance_to_tss" not in getattr(distances, "columns", ()):
-        return set()
+        return frame.assign(
+            distance_to_tss=pd.Series(pd.NA, index=frame.index, dtype="Int64")
+        )
     key = list(SITE_COLUMNS)
-    near = (
-        distances.assign(_d=distances["distance_to_tss"].abs())
-        .groupby(key, dropna=False)["_d"]
-        .min()
+    per_site = (
+        distances.drop_duplicates(key)[[*key, "distance_to_tss"]]
+        .dropna(subset=["chr"])
+        .copy()
     )
-    joined = sites.merge(
-        near.rename("_d").reset_index(), on=key, how="left", validate="one_to_one"
+    for column in ("start", "end"):
+        per_site[column] = per_site[column].astype("Float64").astype("Int64")
+    merged = frame.merge(per_site, on=key, how="left")
+    merged["distance_to_tss"] = (
+        merged["distance_to_tss"].astype("Float64").astype("Int64")
     )
-    return set(joined.index[(joined["_d"] >= safe_distance).fillna(False)])
+    merged.index = frame.index
+    return merged
 
 
 def _check_contigs(sites: pd.DataFrame, elements: pd.DataFrame) -> None:
@@ -384,7 +391,6 @@ def run(
     outdir: str | os.PathLike[str],
     *,
     annotation: str | os.PathLike[str] | pd.DataFrame | None = None,
-    safe_distance: int = SAFE_DISTANCE,
 ) -> RunResult:
     """Map a library to the elements a screen targets, and write the table.
 
@@ -400,10 +406,8 @@ def run(
         Where the table goes. Created if it does not exist; nothing is ever
         written outside it.
     annotation
-        ``guides_gene_annotation.tsv`` from `guide_annotation.run`. Without
-        it no site can be called safe.
-    safe_distance
-        How far from a protein-coding TSS a site must be to count as safe.
+        ``guides_gene_annotation.tsv`` from `guide_annotation.run`, which
+        fills the ``distance_to_tss`` column.
 
     Returns
     -------
@@ -425,7 +429,7 @@ def run(
         "finished": None,
         "cau_version": __version__,
         "inputs": {},
-        "parameters": {"safe_distance": safe_distance},
+        "parameters": {},
         "counts": {},
     }
     handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
@@ -465,16 +469,13 @@ def run(
                 "DataFrame" if isinstance(annotation, pd.DataFrame) else str(annotation)
             )
         else:
-            logger.warning(
-                "No annotation given, so no site can be called %s.", SAFE_TARGETING
-            )
+            logger.warning("No annotation given, so distance_to_tss will be empty.")
 
         mapping = map_to_elements(
             sites,
             regions,
             guides=library,
             distances=distances,
-            safe_distance=safe_distance,
         )
         write_mapping_tsv(outdir / RESULTS_DIR / TABLE, mapping)
         write_columns_yaml(outdir / RESULTS_DIR / "columns.yaml")

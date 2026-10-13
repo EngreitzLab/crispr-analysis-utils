@@ -33,27 +33,27 @@ cau element-mapping run \
   guide for a missing element comes back `unassigned`, which looks like a
   result rather than a missing input. Check the `unassigned` count against
   what the user expects before believing the table.
-- **Is `--annotation` available?** Without it nothing can be called
-  `safe_targeting`, and those guides land in `unassigned` instead. The
-  command warns but still runs.
-- **What safe distance?** `--safe-distance` is 1 Mb by default. Ask: a
-  library's own safe-targeting controls are often much closer than that, so
-  the default can disagree with the design on purpose.
+- **Is `--annotation` available?** Without it `distance_to_tss` is empty.
+  The classes do not depend on it, so the command warns but still runs.
 
-## The four classes
+## The three classes
 
 Per **site**, not per guide, so a guide whose sites disagree reports each one.
 
 | Class | Means |
 | --- | --- |
 | `targeting` | The protospacer overlaps this element |
-| `safe_targeting` | Overlaps no element, and further than `--safe-distance` from any protein-coding TSS |
+| `safe_targeting` | The guide maps, but overlaps no element |
 | `non_targeting` | The guide matches nowhere in the genome |
-| `unassigned` | Maps, overlaps no element, but is nearer than the safe distance |
 
-`unassigned` is the honest answer for "maps, but to none of the elements you
-gave me". A large count means the element list was incomplete, the safe
-distance is too strict, or the library targets more than this screen.
+**`safe_targeting` is not a promise.** It says only that the site is outside
+every element given. How far from a gene it has to be before it is safe
+depends on what the screen reads out, so that is left as `distance_to_tss`
+rather than fixed by a threshold here. Threshold it yourself, and say which
+threshold you used.
+
+A large `safe_targeting` count can also mean the element list was incomplete,
+so check it against what the user expects before believing the table.
 
 ## Reading the result
 
@@ -75,8 +75,8 @@ and report it rather than smoothing it over:
 
 - a guide the design calls non-targeting that lands inside an element is a
   real finding, not a bug;
-- a guide the design calls safe-targeting that is `unassigned` here usually
-  means the design's idea of safe was a shorter distance than
-  `--safe-distance`, not that either is wrong.
+- a guide the design calls safe-targeting whose `distance_to_tss` is small
+  usually means the design measured safety against its own readout genes, not
+  against every promoter. Report the distance rather than the label.
 
 Say which is which, with counts, instead of reporting only the totals.

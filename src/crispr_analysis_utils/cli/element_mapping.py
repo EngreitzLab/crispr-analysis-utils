@@ -39,17 +39,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--annotation",
         default=None,
         help=(
-            "guides_gene_annotation.tsv from `cau guide-annotation run`. "
-            "Without it no site can be called safe_targeting."
-        ),
-    )
-    run_parser.add_argument(
-        "--safe-distance",
-        type=int,
-        default=1_000_000,
-        help=(
-            "How far from a protein-coding TSS a site must be to count as "
-            "safe_targeting (default: 1000000)."
+            "guides_gene_annotation.tsv from `cau guide-annotation run`, "
+            "which fills the distance_to_tss column."
         ),
     )
 
@@ -65,7 +56,6 @@ def run(args: argparse.Namespace) -> int:
             args.elements,
             args.outdir,
             annotation=args.annotation,
-            safe_distance=args.safe_distance,
         )
     except (FileNotFoundError, ElementError, ValueError, OSError, KeyError) as error:
         raise CommandError(str(error)) from error
