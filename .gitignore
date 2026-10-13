@@ -16,3 +16,10 @@ logs/
 *.fasta.gz
 *.gem
 *.bam
+
+# Rust build output
+target/
+
+# The compiled core, built in place by an editable install
+src/crispr_analysis_utils/_core*.so
+src/crispr_analysis_utils/_core*.pyd

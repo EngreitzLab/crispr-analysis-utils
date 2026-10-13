@@ -88,12 +88,6 @@ jobs:
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref_name == github.event.repository.default_branch }}
       - run: pixi run -e dev test
-      # The unit tests mock the GEM binaries. This checks that the bioconda build runs
-      # here, with the same probes as its recipe.
-      - name: GEM binaries run
-        run: |
-          pixi run -e dev bash -c 'gem-mapper 2>&1 | grep -q -- "-I <index_file.gem>"'
-          pixi run -e dev bash -c 'gem-indexer -h 2>&1 | grep -q -- "-i <input_file>"'
       - name: Tests left the working tree clean
         run: test -z "$(git status --porcelain)" || { git status --porcelain; exit 1; }
 

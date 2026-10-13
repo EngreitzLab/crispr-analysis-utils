@@ -7,11 +7,9 @@
 | Skill | Covers |
 | --- | --- |
 | `cau-normalization` | `cau.counts_per_million` |
-| `cau-guide-qc` | `cau.guide_qc`: guide FASTQs and filtering guide alignments |
-| `cau-gem-mapper` | `cau.gem_mapper`: GEM3 indexing and mapping |
+| `cau-guide-alignment` | `cau.guide_alignment` and the `cau guide-alignment` command: finding every guide's genomic site, and reading the outputs |
 
 `cau install-skills --list` prints the same list from the installed package.
-No module needs an agent yet.
 
 ## Skill or agent
 

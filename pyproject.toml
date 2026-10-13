@@ -1,7 +1,8 @@
 [build-system]
-# 1.27 is the first hatchling that writes the PEP 639 license expression by default.
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
+# The package ships a compiled Rust core, so maturin builds it rather than
+# hatchling. Cargo.toml at the root holds the crate; rust/ holds its sources.
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
 
 [project]
 name = "crispr-analysis-utils"
@@ -36,11 +37,6 @@ classifiers = [
 dependencies = [
     "numpy>=1.23",
     "pandas>=1.5",
-]
-
-[project.optional-dependencies]
-# SAM/BAM filtering in guide_qc. Imported lazily, so the rest of the package works without it.
-alignment = [
     "pysam>=0.22",
 ]
 
@@ -58,7 +54,6 @@ Issues = "https://github.com/EngreitzLab/crispr-analysis-utils/issues"
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "pysam>=0.22",
     "pyyaml>=6",
     "pre-commit>=4",
 ]
@@ -68,15 +63,14 @@ docs = [
     "mkdocstrings[python]>=1.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/crispr_analysis_utils"]
-
-# Hatchling otherwise puts the whole tree in the sdist, untracked files included.
-[tool.hatch.build.targets.sdist]
-include = [
-    "/src",
-    "/tests",
-]
+[tool.maturin]
+# The Python package stays where it is; the extension lands inside it.
+python-source = "src"
+module-name = "crispr_analysis_utils._core"
+# One abi3 wheel serves every supported Python, so the matrix is per platform.
+features = ["pyo3/extension-module"]
+# maturin would otherwise leave the tests out of the sdist.
+include = [{ path = "tests/**/*", format = "sdist" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -90,24 +84,25 @@ required-version = ">=0.12,<0.13"
 # Python packages still resolve from PyPI. pixi locks to pixi.lock, uv to uv.lock.
 [tool.pixi.workspace]
 channels = ["conda-forge", "bioconda"]
-platforms = ["linux-64", "osx-arm64"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
 requires-pixi = ">=0.81"
 
 [tool.pixi.dependencies]
 python = "3.13.*"
-
-# bioconda builds gem3-mapper for linux-64 and osx-64 only.
-[tool.pixi.target.linux-64.dependencies]
-gem3-mapper = ">=3.6.1"
+# The editable install builds the Rust core, so every environment needs them.
+rust = ">=1.80"
+maturin = ">=1.9,<2"
 
 # pixi does not install the project by itself.
 [tool.pixi.pypi-dependencies]
 crispr-analysis-utils = { path = ".", editable = true }
 
-# The `alignment` extra and the `dev` and `docs` groups become features of the same name.
+# The `dev` and `docs` groups become features of the same name. Every environment is
+# native on all three platforms: the genome scan is the package's own Rust core, so
+# nothing pulls in an x86-64-only aligner any more.
 [tool.pixi.environments]
-default = { features = ["alignment"], solve-group = "default" }
-dev = { features = ["alignment", "dev"], solve-group = "default" }
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
 [tool.pixi.feature.dev.tasks]

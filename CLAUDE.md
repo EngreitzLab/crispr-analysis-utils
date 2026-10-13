@@ -20,52 +20,79 @@ duplicate the README here, point at it.
 ## Layout
 
 src layout: the package is importable only once installed, and editable is
-fine (`uv sync` and `pixi install` both do it).
+fine (`pixi install` does it, building the Rust core as it goes).
+
+The build backend is **maturin**, not hatchling, because the package ships a
+compiled extension. `Cargo.toml` at the root declares the crate, its sources
+are in `rust/`, and `[tool.maturin]` keeps `python-source = "src"` so the
+Python layout is unchanged. The wheel is **abi3** (`abi3-py311`), so one wheel
+per platform serves every supported Python rather than one per version.
 
 - `src/crispr_analysis_utils/` -- the package, **and the Claude Code plugin
   root**: `.claude-plugin/marketplace.json` points its one plugin here.
     - `normalization.py`  -- `counts_per_million`.
-    - `guide_qc.py`       -- `guides_to_fastq` and `filter_guide_alignments`
-                             (pysam, imported inside the function).
-    - `gem_mapper.py`     -- GEM3 indexing and mapping, through `run_shell_cmd`.
+    - `guide_alignment/`  -- maps a guide library to its genomic sites with
+                             an exact scan: `library` (the guide table),
+                             `scan` (the genome pass, over `_core`), `sites`
+                             (the `Site` record), `orientation` (the
+                             verdicts), `summary` (classes, tables),
+                             `pipeline` (`run`), `iupac`. One analysis module,
+                             one skill.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
+    - `_core.abi3.so`     -- the compiled Rust core, built in place by an
+                             editable install and gitignored. Its sources are
+                             in `rust/src/`.
+    - `_version.py`       -- `__version__`. Import it from here: `__init__`
+                             imports `guide_alignment` first, so `from ..
+                             import __version__` inside a subpackage is a
+                             circular import.
     - `cli/`              -- the `cau` console script, one module per
-                             subcommand (`install_skills.py`). Infrastructure:
-                             no skill.
+                             subcommand (`guide_alignment.py`,
+                             `install_skills.py`). Infrastructure: no skill.
     - `skills/<name>/`    -- one skill per analysis module: `SKILL.md`, plus
                              `references/` for detail. Data, not packages.
-    - `agents/<name>.md`  -- subagents. The directory does not exist until the
-                             first agent.
+    - `agents/`           -- subagents, each preloading the skill of the
+                             module it runs. Empty: no module's use is long
+                             enough to need one.
+- `Cargo.toml`, `rust/` -- the Rust crate behind `_core`, and its sources.
+                           `Cargo.lock` is committed, like the other two
+                           lockfiles.
 - `tests/`              -- pytest. `conftest.py` runs every test inside its
-                           own `tmp_path`.
+                           own `tmp_path`. `test_core_scan.py` checks the Rust
+                           scan against a naive Python scan of every position
+                           on every strand; that oracle is what makes the scan
+                           trustworthy.
 - `docs/`               -- the MkDocs-Material site, published to GitHub Pages
                            by `.github/workflows/docs.yml`.
-- `scripts/`            -- the guide-alignment pipeline script and its sbatch
-                           template. Not shipped in the wheel or the sdist.
 - `.claude-plugin/marketplace.json` -- makes the repository a Claude Code
   plugin marketplace.
 
 ## Commands
 
 ```bash
-uv sync                          # .venv with the dev group, editable install
-uv run pytest
-
-pixi install -e dev              # conda + PyPI; gem3-mapper on linux-64
+pixi install -e dev              # conda + PyPI: the package, its Rust core and the dev tools
 pixi run -e dev test
 pixi run -e dev lint             # every pre-commit hook on every tracked file
 pixi run -e dev install-hooks    # once per clone: commit and push hooks
+pixi run -e dev cau guide-alignment run --help
 pixi run -e docs docs            # serve the site locally
 pixi run -e docs docs-build      # mkdocs build --strict, as CI runs it
 
-uv build && uvx twine check --strict dist/*
 uv lock && pixi lock             # after any dependency change; commit both
+uv build && uvx twine check --strict dist/*
 
-cau install-skills --list
+pixi run -e dev cau install-skills --list
 claude plugin validate --strict . && claude plugin validate --strict src/crispr_analysis_utils
 ```
 
-Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
+pixi is the default, and its `dev` environment is the one environment for
+everything: run the tests, the linters and `cau` there, not in a uv `.venv`.
+Every environment is native on all three platforms, since the genome scan is
+the package's own Rust core. uv locks `uv.lock`, builds, and runs the CI jobs
+that need no conda: the `test-pip` matrix, `build` and `docs-build`.
+
+Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14; the pixi environments
+use 3.13.
 
 ## Conventions
 
@@ -96,8 +123,8 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   `REWRITE`, `RELEASE`, `REMOVE`.
 - **Docs accuracy is a hard rule.** Every concrete detail (defaults, column
   meanings, versions, flags) must be confirmable from source. If you can't
-  verify it, omit it. The guide-QC output tables in the docs drifted from the
-  code from their first version until the Python-only setup, because the code
+  verify it, omit it. The old guide-QC output tables drifted from the code
+  from their first version until the Python-only setup, because the code
   changes that followed left the docs alone.
 - **Docstrings: NumPy style** (`docstring_style: numpy` in `mkdocs.yml`). A
   docstring says what a function does, takes, returns and raises. Design
@@ -105,13 +132,14 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   one-line pointer in the source.
 - **The docs include, they don't copy.** `docs/` pages pull `README.md`
   sections through `pymdownx.snippets` markers (`<!-- --8<-- [start:name] -->`),
-  and `docs/python/guide-qc.md` pulls its output tables from the
-  `cau-guide-qc` skill's `references/outputs.md`. Don't delete a marker. Links
+  and `docs/guide-alignment.md` pulls its output tables and its migration
+  note from the `cau-guide-alignment` skill's `references/outputs.md` and
+  `references/migration.md`. Don't delete a marker. Links
   inside a marked section must be absolute URLs: a relative one resolves
   differently on GitHub and in the site, and `mkdocs build --strict` fails.
 - **Tests never write outside `tmp_path`.** `tests/conftest.py` changes into
-  it because `filter_guide_alignments` writes "auto" outputs to the working
-  directory. CI fails if a test leaves files in the checkout.
+  it, so a test that writes to a relative path stays inside it. CI fails if a
+  test leaves files in the checkout.
 - **Plots must be colorblind-safe**: Okabe-Ito for categories, `cividis` for
   continuous scales, never `jet` or `rainbow`. Nothing plots yet; this applies
   to whatever does first.
@@ -166,19 +194,16 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   runtime dependency. `tests/test_skills.py` checks the reader against PyYAML
   on every bundled file. Write frontmatter in the shapes it handles:
   `key: value`, folded `key: >-` blocks, and `[a, b]` or `- item` lists.
-- **Hatchling ships every file under `src/crispr_analysis_utils/` that the
-  root `.gitignore` does not exclude, tracked or not.** It ignores
-  `.git/info/exclude`, nested `.gitignore` files and global excludes, so keep
-  scratch files out of the package directory. CI builds from a clean checkout
-  and checks that the wheel holds no `tests/`, `scripts/` or stray scripts, and
-  that it holds every skill file; a local `uv build` has no such guard.
-- **gem3-mapper is linux-64 only here.** bioconda builds it for linux-64 and
-  osx-64, not Apple silicon, so the pixi environments include it only on
-  linux-64. The unit tests mock the binaries; CI's `test` job checks that they
-  run.
-- **pysam is optional** (the `alignment` extra) and imported inside
-  `filter_guide_alignments`. Keep it out of module-level imports. The dev group
-  installs it for the tests.
+- **maturin ships every file under `src/crispr_analysis_utils/` that the root
+  `.gitignore` does not exclude, tracked or not** (checked, not assumed). So
+  keep scratch files out of the package directory. CI builds from a clean
+  checkout and checks that the wheel holds no `tests/`, `scripts/` or stray
+  scripts, and that it holds every skill file; a local `uv build` has no such
+  guard.
+- **pysam is a core dependency, imported inside functions.** The modules that
+  read SAM, BAM and FASTA import it where they open a file, never at module
+  level, so `import crispr_analysis_utils` and `cau --help` do not load it.
+  Keep it that way.
 - **Tool versions are pinned in one place each.** uv: `[tool.uv]
   required-version` (setup-uv reads it in CI). pixi: `requires-pixi`, plus
   `PIXI_VERSION` in `.github/workflows/ci.yml`, where setup-pixi needs the
@@ -193,25 +218,40 @@ Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14.
   `mkdocs<2`, and that cap matters: MkDocs 2.0, in development, is a rewrite
   without plugins. The successor, Zensical, is still alpha; moving to it is a
   separate change.
-- **`guide_qc` behaviour that trips readers up** (may change in the
-  guide-alignment redesign; the `cau-guide-qc` skill states it for users too):
-    - per-guide counts are keyed by read name (QNAME), not by sequence;
-    - inside `filter_guide_alignments`, `guide_id` is the read's sequence
-      recovered 5' to 3' (reverse-complemented for reverse-strand records);
-    - a secondary record with `SEQ='*'` reuses the sequence seen earlier for the
-      same QNAME;
-    - BED column 4 is the protospacer (the read minus the PAM and any
-      soft-clipped leading base) since 81c6db4;
-    - on the reverse strand the PAM is at the start of the read as SAM stores
-      it, and the rules are mirrored except at the spacer's two ends: a deletion
-      between spacer and PAM passes on `+` but fails on `-`, and one right after
-      the read's first base fails on `+` but passes on `-`;
-    - the "auto" outputs go next to the unique SAM, else the multi SAM, else the
-      working directory, and the SAM outputs are written only when both are
-      given;
-    - `alias_by_guide_id` is looked up by that full read sequence, PAM included,
-      not by the spacer.
-- **`test_filter_guide_alignments_reports_sequence_5prime_to_3prime` is a
-  strict xfail.** It has been stale since f3ba75e, and its input stores the
-  PAM-first orientation as SAM SEQ. Fix or replace it in the guide-alignment
-  redesign; being strict, it fails loudly if it starts passing.
+- **`guide_alignment` behaviour that trips readers up** (the
+  `cau-guide-alignment` skill states the user-facing part):
+    - a guide is designed, not sequenced, so its site is an **exact** match of
+      the spacer. There is no aligner, no index and no error budget. The three
+      questions are where the spacer matches, what sits 3' of it (the PAM) and
+      what sits 5' of it;
+    - `guide_id` is the sequence that is aligned plus the PAM, and `alias` is
+      the table's name for the entry. Two entries of one sequence are one
+      guide; `duplicate_of` only records that, and is not an output column;
+    - `g_added` comes from the length (`n_extra = len(aligned) - spacer_length`),
+      never from whether the first base is G. The old rule dropped the real
+      added G of a `GG` 21-mer and then called it a duplicate;
+    - `mapped_sequence` is the guide's own bases that pair with the genome:
+      the spacer, keeping a base 5' of it only where the genome holds the
+      same base. The coordinates stay on the declared protospacer, so a G that
+      pairs by chance never shifts a start;
+    - coordinates are 0-based half-open protospacers, without the PAM or the
+      added base, and `cut_site` is the boundary `b` (`end - 3` on `+`,
+      `start + 3` on `-`), written `[b, b + 1)` in `cut_sites.bed`. The
+      IGVF-named columns keep these definitions, which differ from the lab's
+      DC_TAP tables (the guide page has the comparison);
+    - classes count sites whose genomic PAM matches. A site whose PAM does not
+      stays in `sites.tsv` with `pam_class` `none` and counts nowhere, so a
+      spacer matching twice with one PAM is `unique`;
+    - `run` writes only inside `outdir`, and only three folders: the results
+      in `alignments/`, this invocation's record in `run_metadata/` and the
+      log in `logs/`. Nothing of the run's own sits beside an input;
+    - the results are four files, and only two carry anything of their own:
+      `sites.tsv` is one row per match, `guides_metadata.tsv` one row per
+      library entry. `guides.bed` is a subset of the latter, for a browser,
+      and `qc.tsv` is counts. The chosen site's coordinates are copied into
+      `guides_metadata.tsv` on purpose, so the common question needs no join;
+    - orientation is decided from both readings, held in the same scan: an
+      entry is `reverse_complement` only when its reversed reading has a
+      PAM-bearing site and the sequence as given does not. A `CCN` 5' of a
+      match is not evidence; it falls there by chance one time in sixteen.
+      Only a table reversed throughout stops a run.

@@ -226,17 +226,12 @@ dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "pandas" },
-]
-
-[package.optional-dependencies]
-alignment = [
     { name = "pysam" },
 ]
 
 [package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
-    { name = "pysam" },
     { name = "pytest" },
     { name = "pyyaml" },
 ]
@@ -249,14 +244,12 @@ docs = [
 requires-dist = [
     { name = "numpy", specifier = ">=1.23" },
     { name = "pandas", specifier = ">=1.5" },
-    { name = "pysam", marker = "extra == 'alignment'", specifier = ">=0.22" },
+    { name = "pysam", specifier = ">=0.22" },
 ]
-provides-extras = ["alignment"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "pre-commit", specifier = ">=4" },
-    { name = "pysam", specifier = ">=0.22" },
     { name = "pytest", specifier = ">=8" },
     { name = "pyyaml", specifier = ">=6" },
 ]

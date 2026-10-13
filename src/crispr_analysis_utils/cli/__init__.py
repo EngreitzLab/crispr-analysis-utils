@@ -18,10 +18,14 @@ import importlib
 from collections.abc import Sequence
 from types import ModuleType
 
-from .. import __version__
+from .._version import __version__
 
 # Subcommand name -> (module under crispr_analysis_utils.cli, one-line help).
 COMMANDS: dict[str, tuple[str, str]] = {
+    "guide-alignment": (
+        "guide_alignment",
+        "Find every guide's genomic site in a reference.",
+    ),
     "install-skills": (
         "install_skills",
         "Install the bundled Claude Code skills and agents.",
