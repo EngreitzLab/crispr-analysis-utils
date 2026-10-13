@@ -20,6 +20,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, TextIO
 
+from ..accession import guide_accession
 from .iupac import validate_pams
 from .library import Guide
 from .orientation import NOT_CHECKED, VERDICTS
@@ -265,7 +266,7 @@ def fan_out_sites(
 
 
 GROUPS = (
-    ("from the guide table, before anything is aligned", 3),
+    ("from the guide table, before anything is aligned", 4),
     ("about the whole guide, repeated on each of its rows", 5),
     ("about this row's match; empty when the guide matches nowhere", 7),
 )
@@ -278,6 +279,10 @@ COLUMNS = {
         " Identifies the guide."
     ),
     "alias": "Name for the guide from the input table.",
+    "accession": (
+        "A stable id for the protospacer, the same wherever that target is"
+        " used. Two guides differing only 5' of the protospacer share it."
+    ),
     "spacer": (
         "The protospacer: guide_id without the PAM pattern or any base 5' of it."
     ),
@@ -382,6 +387,7 @@ def write_guides_tsv(
             head = [
                 summary.guide_id,
                 summary.alias,
+                guide_accession(summary.spacer),
                 summary.spacer,
                 summary.site_class,
                 summary.n_matches,

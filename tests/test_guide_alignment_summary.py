@@ -12,6 +12,7 @@ from guide_alignment_fixtures import (
     write_fasta,
 )
 
+from crispr_analysis_utils.accession import guide_accession
 from crispr_analysis_utils.guide_alignment import (
     Site,
     fan_out_sites,
@@ -56,6 +57,7 @@ EVIDENCE = {3: "ambiguous"}
 COLUMN_NAMES = [
     "guide_id",
     "alias",
+    "accession",
     "spacer",
     "site_class",
     "n_matches",
@@ -70,7 +72,7 @@ COLUMN_NAMES = [
     "pam_matches",
     "mapped_sequence",
 ]
-SITE_COLUMN_NAMES = COLUMN_NAMES[8:]
+SITE_COLUMN_NAMES = COLUMN_NAMES[9:]
 
 
 def site(spacer, start, strand="+", mismatches=0, pam_class="NGG", pam="TGG"):
@@ -305,7 +307,7 @@ def test_max_mismatches_sets_the_count_columns(guides):
     assert summaries[0].n_sites == (1,)
 
 
-def test_the_columns_are_the_fifteen_the_data_dictionary_names(guides):
+def test_the_columns_are_the_ones_the_data_dictionary_names(guides):
     assert guide_columns() == COLUMN_NAMES
     assert guide_columns() == list(COLUMNS)
     # Every column belongs to exactly one documented group.
@@ -338,12 +340,13 @@ def test_guides_tsv(tmp_path, guides, sites):
     )
     assert lines[0].split("\t") == COLUMN_NAMES
     assert lines[1].split("\t") == (
-        [SPACER_A + "NGG", "uniq", SPACER_A, "unique", "2", "1", "forward", ""]
+        [SPACER_A + "NGG", "uniq", guide_accession(SPACER_A), SPACER_A]
+        + ["unique", "2", "1", "forward", ""]
         + ["chr1", "100", "120", "+", "117", "TRUE", SPACER_A + "TGG"]
     )
     # The guide's own columns repeat on its second row; only the site changes.
-    assert lines[2].split("\t")[:8] == lines[1].split("\t")[:8]
-    assert lines[2].split("\t")[8:] == (
+    assert lines[2].split("\t")[:9] == lines[1].split("\t")[:9]
+    assert lines[2].split("\t")[9:] == (
         ["chr1", "500", "520", "+", "517", "FALSE", SPACER_A + "TTT"]
     )
     # One row per entry per site, so the 11 sites of the library are 11 rows.

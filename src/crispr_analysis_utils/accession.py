@@ -1,116 +1,112 @@
-"""Accession ids for SpCas9 guides, encoded from the guide's own sequence.
+"""Accession ids for guides, encoded from the protospacer.
 
-A guide is written ``G...NGG``. Its accession is ``GU`` followed by the bases
-before the PAM, packed two bits each behind a leading 1 bit and written in
-Crockford's base 32. The packing is reversible, so two guides never share an
-accession.
+An accession is ``GU`` followed by the protospacer packed two bits per base
+behind a leading 1 bit, in Crockford's base 32. The packing is reversible, so
+two different protospacers can never share an accession -- not in a library,
+and not among every guide the lab will ever order.
+
+The protospacer is the key, not the ordered sequence, so the same target gets
+the same accession whatever a lab adds at the 5' end for its promoter and
+whatever it calls the guide. The exact sequence that was ordered is
+`guide_alignment`'s ``guide_id``; this answers the other question, which is
+whether two guides hit the same place.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-PAM = "NGG"
-"""The PAM every accessioned guide ends with."""
-
 _PREFIX = "GU"
 _BASES = "ACGT"
+# Crockford's base 32: the digits and the capitals, without I, L, O and U.
 _ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _VALUES = {character: value for value, character in enumerate(_ALPHABET)}
+# Crockford reads these as the digits they look like.
 _VALUES.update({"I": 1, "L": 1, "O": 0})
 
 
-def normalize_guide_sequence(sequence: str) -> str:
-    """Strip and uppercase a guide sequence, and check it is a whole guide.
+def normalize_spacer(spacer: str) -> str:
+    """Strip and uppercase a protospacer, and check it is one.
 
     Parameters
     ----------
-    sequence
-        A guide, 5' to 3': a G, the rest of the protospacer, then ``NGG``.
+    spacer
+        The protospacer, 5' to 3', without the PAM and without any base added
+        5' of it for the promoter.
 
     Returns
     -------
     str
-        `sequence` stripped and in uppercase.
+        `spacer` stripped and in uppercase.
 
     Raises
     ------
     TypeError
-        If `sequence` is not a string.
+        If `spacer` is not a string, such as the NaN pandas reads for an empty
+        cell.
     ValueError
-        If `sequence` is empty, holds a base other than A, C, G and T outside
-        the PAM's N, does not begin with G, or does not end with ``NGG``.
-    """
-    if not isinstance(sequence, str):
-        raise TypeError(
-            f"A guide sequence must be a string, not {type(sequence).__name__} "
-            f"({sequence!r})."
-        )
-    stripped = sequence.strip()
-    if not stripped:
-        raise ValueError("A guide sequence must not be empty.")
-    normalized = stripped.upper()
+        If `spacer` is empty or holds anything but A, C, G and T.
 
-    unknown = "".join(sorted(set(normalized) - set(_BASES + "N")))
+    Notes
+    -----
+    The PAM is genomic, so it is not part of a protospacer and must not be
+    passed here. A sequence ending in its PAM is accepted and gives a
+    different accession, silently: one spacer in sixteen ends in ``GG``, so
+    there is no way to tell from the sequence alone. Decide which bases are
+    the protospacer before calling this.
+    """
+    if not isinstance(spacer, str):
+        raise TypeError(
+            f"A protospacer must be a string, not {type(spacer).__name__} ({spacer!r})."
+        )
+    stripped = spacer.strip()
+    if not stripped:
+        raise ValueError("A protospacer must not be empty.")
+    normalized = stripped.upper()
+    unknown = "".join(sorted(set(normalized) - set(_BASES)))
     if unknown:
         raise ValueError(
-            f"Guide sequence {sequence!r} holds {unknown!r}: a guide is written "
-            f"with A, C, G and T, and the N of its {PAM} PAM."
-        )
-    if not normalized.endswith(PAM):
-        raise ValueError(
-            f"Guide sequence {sequence!r} does not end with the PAM {PAM!r}. "
-            "Write the PAM as 'NGG' itself, not as the bases the genome holds "
-            "there."
-        )
-    spacer = normalized[: -len(PAM)]
-    if "N" in spacer:
-        raise ValueError(
-            f"Guide sequence {sequence!r} holds an N before the PAM: only the "
-            "PAM's first base may be N."
-        )
-    if not spacer.startswith("G"):
-        raise ValueError(
-            f"Guide sequence {sequence!r} does not start with G. Write the whole "
-            "guide, including the 5' G it carries or is cloned with."
+            f"Protospacer {spacer!r} holds {unknown!r}: a protospacer is written "
+            "with A, C, G and T."
         )
     return normalized
 
 
-def guide_accession(sequence: str) -> str:
-    """Return a guide's accession.
+def guide_accession(spacer: str) -> str:
+    """Return the accession of a protospacer.
 
     Parameters
     ----------
-    sequence
-        A guide, ``G...NGG``, as `normalize_guide_sequence` takes it.
+    spacer
+        The protospacer, as `normalize_spacer` takes it.
 
     Returns
     -------
     str
-        ``GU`` and the encoded bases: 9 characters for a guide of 20 to 22
-        bases before the PAM, 8 for 19.
+        ``GU`` and the encoded bases: 9 characters for a 20-nt protospacer,
+        8 for 19.
 
     Raises
     ------
     TypeError
-        If `sequence` is not a string.
+        If `spacer` is not a string.
     ValueError
-        If `sequence` is not a whole guide written ``G...NGG``.
+        If `spacer` is empty or holds anything but A, C, G and T.
 
     See Also
     --------
-    guide_sequence : The inverse.
+    spacer_of : The inverse.
+    guide_accessions : Accession a whole library.
 
     Examples
     --------
-    >>> guide_accession("GAAAAGCCAACATGAATGCAGNGG")
-    'GU602A170WJ'
+    >>> guide_accession("AAAAGCCAACATGAATGCAG")
+    'GU102A170WJ'
+    >>> guide_accession(" aaaagccaacatgaatgcag ")
+    'GU102A170WJ'
     """
-    spacer = normalize_guide_sequence(sequence)[: -len(PAM)]
-    # The leading 1 distinguishes a guide from the same bases after an A.
     packed = 1
-    for base in spacer:
+    for base in normalize_spacer(spacer):
         packed = packed * 4 + _BASES.index(base)
 
     characters = ""
@@ -120,8 +116,8 @@ def guide_accession(sequence: str) -> str:
     return _PREFIX + characters
 
 
-def guide_sequence(accession: str) -> str:
-    """Return the guide an accession encodes.
+def spacer_of(accession: str) -> str:
+    """Return the protospacer an accession encodes.
 
     Parameters
     ----------
@@ -132,7 +128,7 @@ def guide_sequence(accession: str) -> str:
     Returns
     -------
     str
-        The guide, ``G...NGG``.
+        The protospacer, 5' to 3'.
 
     Raises
     ------
@@ -140,12 +136,12 @@ def guide_sequence(accession: str) -> str:
         If `accession` is not a string.
     ValueError
         If `accession` does not begin with ``GU`` and base 32 characters, or
-        encodes no guide.
+        encodes nothing.
 
     Examples
     --------
-    >>> guide_sequence("GU602A170WJ")
-    'GAAAAGCCAACATGAATGCAGNGG'
+    >>> spacer_of("GU102A170WJ")
+    'AAAAGCCAACATGAATGCAG'
     """
     if not isinstance(accession, str):
         raise TypeError(
@@ -172,36 +168,39 @@ def guide_sequence(accession: str) -> str:
     while packed > 1:
         packed, remainder = divmod(packed, 4)
         spacer = _BASES[remainder] + spacer
-    if packed != 1 or not spacer.startswith("G"):
-        raise ValueError(f"Accession {accession!r} encodes no guide.")
-    return spacer + PAM
+    if packed != 1 or not spacer:
+        raise ValueError(f"Accession {accession!r} encodes no protospacer.")
+    return spacer
 
 
-def guide_accessions(sequences: Iterable[str]) -> list[str]:
-    """Return every guide's accession, in order.
+def guide_accessions(spacers: Iterable[str]) -> list[str]:
+    """Return every protospacer's accession, in order.
+
+    Repeats of one protospacer share an accession; different ones never do.
 
     Parameters
     ----------
-    sequences
-        Guides, as `guide_accession` takes them.
+    spacers
+        Protospacers, as `guide_accession` takes them: a list, or a pandas
+        Series.
 
     Returns
     -------
     list of str
-        One accession per sequence.
+        One accession per protospacer.
 
     Raises
     ------
     TypeError
-        If a sequence is not a string. The message names its position.
+        If a protospacer is not a string. The message names its position.
     ValueError
-        If a sequence is not a whole guide written ``G...NGG``. The message
-        names its position.
+        If a protospacer is empty or holds anything but A, C, G and T. The
+        message names its position.
     """
     accessions = []
-    for position, sequence in enumerate(sequences):
+    for position, spacer in enumerate(spacers):
         try:
-            accessions.append(guide_accession(sequence))
+            accessions.append(guide_accession(spacer))
         except (TypeError, ValueError) as error:
-            raise type(error)(f"Sequence at position {position}: {error}") from None
+            raise type(error)(f"Spacer at position {position}: {error}") from None
     return accessions

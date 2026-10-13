@@ -1,30 +1,34 @@
 # crispr_analysis_utils.accession
 
-A guide's accession encodes the guide itself, so it is the same in every
-library and table, and two guides can never share one. `guide_sequence`
-decodes it back.
+A guide's accession encodes its **protospacer**, so the same target gets the
+same id in every library and table, and two different protospacers can never
+share one. `spacer_of` decodes it back.
 
-The guide is written `G...NGG`, 5' to 3'. `guide_accession` refuses anything
-else rather than guess where the PAM ends or whether a G was added: both
-answers belong to whoever designed the library. The PAM is always spelled
-`NGG`, whatever the genome holds at the N, so a guide keeps one accession
-across its genomic sites.
+The protospacer is the key, not the ordered sequence. Two guides differing
+only 5' of the protospacer — one lab prepends a G for the U6 promoter, another
+does not — are two oligos aimed at one site, so they share an accession and
+differ in `guide_alignment`'s `guide_id`. The accession answers "same
+target?"; `guide_id` answers "same oligo?".
+
+Nothing in a sequence says where the protospacer ends, so a sequence with its
+PAM still attached is accepted and gets a different accession, silently. One
+spacer in sixteen ends in `GG`. Decide which bases are the protospacer first;
+`guides_alignment_metadata.tsv`'s `spacer` column already has.
 
 ## The encoding
 
-For an uppercase guide:
+For an uppercase protospacer:
 
-1. Drop the three PAM characters.
-2. Start from 1, and for each remaining base multiply by 4 and add 0 for A,
-   1 for C, 2 for G or 3 for T. The leading 1 keeps `GAA` apart from `GA`.
-3. Write the result in Crockford's base 32, alphabet
+1. Start from 1, and for each base multiply by 4 and add 0 for A, 1 for C,
+   2 for G or 3 for T. The leading 1 keeps `AAA` apart from `AA`.
+2. Write the result in Crockford's base 32, alphabet
    `0123456789ABCDEFGHJKMNPQRSTVWXYZ`, after `GU`.
 
-Decoding ignores case and reads I and L as 1 and O as 0. A guide with 20 to 22
-bases before the PAM gets 9 characters after `GU`; one with 19 gets 8.
+Decoding ignores case and reads I and L as 1 and O as 0. A 20-nt protospacer
+gives 9 characters after `GU`; a 19-nt one gives 8.
 
-`GACGTNGG` drops `NGG` and packs `GACGT` as `0b1_10_00_01_10_11`, which is
-1563, which is 1, 16, 27 in base 32: the accession is `GU1GV`.
+`ACGT` packs as `0b1_00_01_10_11`, which is 283, which is 8, 27 in base 32:
+the accession is `GU8V`.
 
 ::: crispr_analysis_utils.accession
     options:
