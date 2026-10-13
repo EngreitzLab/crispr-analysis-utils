@@ -43,7 +43,14 @@ per platform serves every supported Python rather than one per version.
                              verdicts), `summary` (classes, tables),
                              `pipeline` (`run`), `iupac`. One analysis module,
                              one skill.
+    - `guide_annotation/` -- places those sites in genes: `db` (the GENCODE
+                             store), `promoters` (the TSS file), `annotate`
+                             (the interval work), `summary` (columns, the
+                             table), `pipeline` (`run`). One analysis module,
+                             one skill.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
+    - `_files.py`         -- checksums, gzip sniffing, atomic JSON. Shared by
+                             both pipelines.
     - `_core.abi3.so`     -- the compiled Rust core, built in place by an
                              editable install and gitignored. Its sources are
                              in `rust/src/`.
@@ -96,8 +103,10 @@ Every environment is native on all three platforms, since the genome scan is
 the package's own Rust core. uv locks `uv.lock`, builds, and runs the CI jobs
 that need no conda: the `test-pip` matrix, `build` and `docs-build`.
 
-Python 3.11+ (`requires-python`). CI tests 3.11 to 3.14; the pixi environments
-use 3.13.
+Python 3.12+ (`requires-python`). CI tests 3.12 to 3.14; the pixi environments
+use 3.13. The floor is 3.12 because `pyranges1` has never shipped for 3.11.
+The Rust core stays `abi3-py311`: that wheel serves every supported Python,
+and narrowing it would buy nothing.
 
 ## Conventions
 
@@ -226,6 +235,33 @@ use 3.13.
   `mkdocs<2`, and that cap matters: MkDocs 2.0, in development, is a rewrite
   without plugins. The successor, Zensical, is still alpha; moving to it is a
   separate change.
+- **`guide_annotation` behaviour that trips readers up** (the
+  `cau-guide-annotation` skill states the user-facing part):
+    - **`pr.read_gtf(duplicate_attr=True)` is not optional.** A GENCODE row
+      carries several `tag` keys, and the default reader keeps one: 4,290 of
+      19,077 MANE_Select transcripts survive. It is also the only slow step
+      (55 s against 5 s), which is what the prebuilt store buys back;
+    - **every interval join passes `strand_behavior="ignore"`.** pyranges
+      defaults to `auto`, which means same-strand when both frames have a
+      Strand column, and a guide on one strand targets a gene on either;
+    - `join_overlaps` suffixes only the names that clash, `nearest_ranges`
+      suffixes all of them, so `_joined` reads a column either way;
+    - a genes-only GTF has no `exon` rows and so cannot say exon, intron or
+      transcript. `build_store` refuses one rather than call everything
+      intergenic, and a chr-naming mismatch raises instead of returning a
+      table of `intergenic`;
+    - one transcript per gene is chosen for `enst`, `exon_number` and the CDS
+      position: MANE Select, else Ensembl canonical, else the longest CDS,
+      ordered down to the id so a rebuild picks the same one;
+    - overlaps are decided on the protospacer, distances and the CDS position
+      from the cut site. `location` and `promoter` are separate columns
+      because a cut in exon 1 is usually both;
+    - the table keys back to `guides_alignment_metadata.tsv` on `guide_id`
+      plus the four site columns, and repeats nothing else. A guide with two
+      sites needs all five to join unambiguously;
+    - **pandas reads a written `TRUE`/`FALSE` column back as bool.** Both of
+      this module's own verification scripts compared `== "TRUE"` and found
+      hundreds of phantom mismatches. Compare the value, not the string.
 - **`guide_alignment` behaviour that trips readers up** (the
   `cau-guide-alignment` skill states the user-facing part):
     - a guide is designed, not sequenced, so its site is an **exact** match of

@@ -26,6 +26,10 @@ COMMANDS: dict[str, tuple[str, str]] = {
         "guide_alignment",
         "Find every guide's genomic site in a reference.",
     ),
+    "guide-annotation": (
+        "guide_annotation",
+        "Place every aligned site in a gene.",
+    ),
     "install-skills": (
         "install_skills",
         "Install the bundled Claude Code skills and agents.",

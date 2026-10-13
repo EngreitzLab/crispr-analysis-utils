@@ -26,8 +26,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from .._files import check_plain_fasta, file_md5, write_json
 from .._version import __version__
-from ._files import check_plain_fasta, file_md5, write_json
 from .iupac import reverse_complement, validate_pams
 from .library import Guide, read_guides
 from .orientation import FORWARD, REVERSE_COMPLEMENT, VERDICTS

@@ -9,6 +9,7 @@
 | `cau-accession` | `cau.accession`: accession ids for SpCas9 guides, encoded from the guide's own sequence |
 | `cau-normalization` | `cau.counts_per_million` |
 | `cau-guide-alignment` | `cau.guide_alignment` and the `cau guide-alignment` command: finding every guide's genomic site, and reading the outputs |
+| `cau-guide-annotation` | `cau.guide_annotation` and the `cau guide-annotation` command: building the GENCODE store, placing sites in genes, and reading the output |
 
 `cau install-skills --list` prints the same list from the installed package.
 

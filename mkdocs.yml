@@ -47,6 +47,7 @@ nav:
   - Getting started: getting-started.md
   - Guides:
       - Guide alignment: guide-alignment.md
+      - Gene annotation: guide-annotation.md
   - Agents and skills: agents-and-skills.md
   - API reference:
       - Overview: reference/index.md
@@ -58,6 +59,12 @@ nav:
           - Orientation: reference/guide-alignment-orientation.md
           - Classes and tables: reference/guide-alignment-summary.md
           - IUPAC codes: reference/guide-alignment-iupac.md
+      - Gene annotation:
+          - run: reference/guide-annotation-run.md
+          - Annotation store: reference/guide-annotation-db.md
+          - Promoters: reference/guide-annotation-promoters.md
+          - Placing sites in genes: reference/guide-annotation-annotate.md
+          - Columns and tables: reference/guide-annotation-summary.md
       - Accession: reference/accession.md
       - Normalization:
           - counts_per_million: reference/counts-per-million.md
