@@ -334,7 +334,7 @@ def _add_distance(frame: pd.DataFrame, distances: pd.DataFrame | None) -> pd.Dat
 
 
 def _check_contigs(sites: pd.DataFrame, elements: pd.DataFrame) -> None:
-    """Fail when nothing could ever overlap, rather than call everything unassigned."""
+    """Fail when nothing could ever overlap, rather than call every guide safe."""
     shared = set(sites["chr"].unique()) & set(elements["Chromosome"].unique())
     if not shared:
         raise ElementError(
