@@ -228,7 +228,13 @@ def _read_sites(alignment: str | os.PathLike[str] | pd.DataFrame) -> pd.DataFram
 
 
 def _truthy(value: object) -> bool:
-    """TRUE, true and True all mean the same in a written table."""
+    """TRUE, true and True all mean the same in a written table.
+
+    An empty cell is not a PAM. It arrives as NaN, which is truthy, so it has
+    to be rejected before `bool`.
+    """
+    if value is None or (isinstance(value, float) and value != value):
+        return False
     if isinstance(value, str):
         return value.strip().upper() == "TRUE"
     return bool(value)

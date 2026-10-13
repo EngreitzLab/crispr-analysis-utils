@@ -185,10 +185,14 @@ def _exon_calls(spacers, store: Store, pr) -> pd.DataFrame:
         strand_behavior=_IGNORE,
         suffix="_exon",
     )
+    # exon_number comes off the GTF as a string, where "10" sorts before "2".
+    best = pd.DataFrame(hits)[["_row", "ensg", "enst", "exon_number"]].assign(
+        _order=lambda frame: pd.to_numeric(frame["exon_number"], errors="coerce")
+    )
     best = (
-        pd.DataFrame(hits)[["_row", "ensg", "enst", "exon_number"]]
-        .sort_values(["_row", "ensg", "exon_number"])
+        best.sort_values(["_row", "ensg", "_order"])
         .drop_duplicates(["_row", "ensg"])
+        .drop(columns="_order")
     )
 
     every = store.rows("exon")

@@ -43,13 +43,16 @@ def read_promoters(path: str | os.PathLike[str]) -> pd.DataFrame:
 
     with open(path, encoding="utf-8") as handle:
         first = handle.readline()
-    frame = pd.read_csv(
-        path,
-        sep="\t",
-        header=None,
-        skiprows=1 if first.startswith("#") else 0,
-        dtype={0: str},
-    )
+    try:
+        frame = pd.read_csv(
+            path,
+            sep="\t",
+            header=None,
+            skiprows=1 if first.startswith("#") else 0,
+            dtype={0: str},
+        )
+    except pd.errors.EmptyDataError as error:
+        raise PromoterError(f"{path} holds no transcription start site.") from error
     if frame.shape[1] < len(_BED6):
         raise PromoterError(
             f"{path} has {frame.shape[1]} columns; a TSS BED needs at least"
@@ -83,7 +86,11 @@ def promoters_from_store(store, *, reference_only: bool = True) -> pd.DataFrame:
     pandas.DataFrame
         The same columns `read_promoters` returns, each TSS one base wide.
     """
-    rows = store.rows("transcript", reference_only=reference_only)
+    rows = (
+        store.rows("transcript", reference_only=True)
+        if reference_only
+        else store.rows("gene")
+    )
     if rows.empty:
         rows = store.rows("gene")
     forward = rows["Strand"] == "+"

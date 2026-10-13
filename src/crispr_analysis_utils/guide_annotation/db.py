@@ -152,7 +152,8 @@ def build_store(
 
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    table = frame[list(COLUMNS)].reset_index(drop=True)
+    # A plain DataFrame, so a built store and a loaded one are the same type.
+    table = pd.DataFrame(frame[list(COLUMNS)]).reset_index(drop=True)
     _write_parquet(table, out, provenance)
     return Store(features=table, provenance=provenance)
 
