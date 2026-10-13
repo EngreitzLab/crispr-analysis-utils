@@ -1,92 +1,67 @@
-# Coming from `guide_qc` and `gem_mapper`
+# Coming from the GEM version
 
 <!-- --8<-- [start:migration] -->
-`cau guide-alignment` replaced an earlier three-step workflow, since removed
-from the package: `guide_qc.guides_to_fastq`, `gem_mapper.build_gem_index`
-and `gem_mapper.map_guides_with_gem`, then
-`guide_qc.filter_guide_alignments`, chained by the repository's
-`scripts/run_guide_alignment_qc.py`.
+The tool used to align guides with GEM3. It now scans the reference directly:
+a guide is designed, not sequenced, so its site is an **exact** match of the
+protospacer, and the only other questions are what sits 3' of it (the PAM) and
+what sits 5' of it. There is no aligner, no index and no error budget.
 
-## Why the numbers change
+## What went away
 
-- **More multi-mapping guides.** gem-mapper's default reports at most 5
-  matches per read, and its default `fast` mapping mode (like the
-  `sensitive` mode the old pipeline used) does not search completely. The new
-  options report every match of a complete search, so a guide with more than
-  5 sites, or with sites the incomplete search missed, now shows them all.
-- **Mismatches are counted, not ignored.** The old filter kept alignments
-  with any number of spacer mismatches, up to GEM's error budget, and called
-  a guide unique when it had one valid alignment. Now a site has at most
-  `--max-mismatches` spacer mismatches, recounted against the reference, and
-  a guide is `unique` when it has exactly one perfect site with the primary
-  PAM; its other sites are counted by mismatches.
-- **The PAM is read from the genome**, after the alignment, instead of being
-  judged from the CIGAR. The old rules differed between strands for a
-  deletion at either end of the spacer; the new alignments have no gaps.
-- **Old coordinates could include the added G.** The old interval started at
-  the leading G whenever GEM aligned it instead of soft-clipping it. The new
-  ones never include it.
-
-## The old files
-
-`valid_alignments.bed` (no header, one row per valid alignment) maps to
-`sites.tsv`, which has one row per site and a header:
-
-| Old column | Content | Now |
-| --- | --- | --- |
-| 1 | Contig | `chr` |
-| 2 | Protospacer start, 0-based | `start` |
-| 3 | Protospacer end, exclusive | `end` |
-| 4 | Protospacer sequence, from the read | `genomic_protospacer` holds the reference's bases; the guide's own spacer is `spacer` in `guides.tsv` |
-| 5 | Mapping quality | None: every site is checked against the reference instead |
-| 6 | Strand | `strand` |
-| 7 | `NM` tag | `n_mismatches`, the spacer mismatches only, with their `mismatch_positions`; `NM` also counted the PAM's `N` |
-| 8 | `AS` tag | None |
-| 9 | Alias, or the read name | `guide_id` |
-
-The unique guides' sites are also in `guides.tsv` (`guide_chr`,
-`guide_start`, `guide_end`, `strand`) and in `guides.bed`.
-
-`guide_alignment_log.tsv` (one row per read name) maps to `guides.tsv`:
-
-| Old column | Now |
+| Gone | Why |
 | --- | --- |
-| `guide_id` | `guide_id` |
-| `n_aligned` | `alignments_per_guide` in `run.json`: the alignment records GEM reported for the guide's reads |
-| `n_valid` | `n_ngg_0mm` to `n_ngg_3mm`, by spacer mismatches; the alternative-PAM counts, `n_alt_pam_*`, are new |
-| `n_discarded` | No per-guide count; the `site_search` rows of `summary.tsv` count the dropped alignments by reason |
-| `n_not_mapped` | `alignment_class` `no_site` |
+| `cau guide-alignment index`, `--index` | Nothing is indexed. Point `--reference` at the FASTA. |
+| `--max-mismatches` | Matching is exact. Off-target search is separate work. |
+| `--alt-pams` | Only `--pam` is searched. |
+| `--threads` | One pass, no aligner to parallelise. |
+| `alignments/*.bam`, `*.fastq` | No reads are written and nothing is aligned. |
+| GEM3 itself | No external tool, so every environment is native on Apple silicon. |
 
-`alignment_summary.tsv` (`metric count`) maps to the `class` rows of
-`summary.tsv`, with the meanings above:
+A whole library now takes seconds rather than an hour, and the four GEM
+defects the old version worked around — the `-M 5` search cap, the `N` of
+`NGG` eating the error budget, non-exhaustive search modes and garbage
+coordinates at contig ends — cannot arise.
 
-| Old metric | Now |
+## Renamed files
+
+| Was | Now |
 | --- | --- |
-| `guides_unique_valid` | `unique` |
-| `guides_multi_valid` | `multi` |
-| `guides_aligned_none_valid`, `guides_unmapped` | `off_target_only` or `no_site` |
-| `guides_one_valid_plus_invalid` | None |
+| `guides.tsv` and `sites.tsv` | one `guides_alignment_metadata.tsv` |
+| `guides.bed` | `guides_mapping.bed` |
+| `cut_sites.bed` | gone; `cut_site` is a column |
+| `orientation.tsv` | gone; its verdict and site are columns |
+| `summary.tsv` | `qc.tsv`, counts only |
+| `run.json` | `run_metadata/guide_alignment_<timestamp>.json` |
 
-`discarded_alignments.tsv`, `invalid_alignments.tsv` and `unmapped.tsv` have
-no successor: the dropped alignments are counted in `summary.tsv`, and the
-raw alignments stay in `alignments/`. Nor do the valid-unique and valid-multi
-SAM files.
+Everything now lives under `alignments/`, `run_metadata/` and `logs/`.
 
-## The old options
+## Renamed columns
 
-| `run_guide_alignment_qc.py` | `cau guide-alignment` |
+| Was | Now |
 | --- | --- |
-| `--guides-tsv` | `run --guides` (tab-separated without a header by default; see `--sep`, `--header`) |
-| `--reference-fasta` | `index REFERENCE PREFIX` once, then `run --reference` and `--index` |
-| `--chromsizes` | `run --contigs`, a comma-separated list of contig names (below) |
-| `--outdir`, `--threads`, `--pam`, `--add-leading-g` | The same names on `run` |
-| `--mapping-mode` | None: the GEM options are fixed |
-| `--allow-leading-g-softclip` | None: the added G is aligned, and a mismatch there never counts |
+| `guide_id` (the lab's name) | `alias` |
+| — | `guide_id` is now the aligned sequence |
+| `targeting` | gone; use `n_cut_sites` |
+| `alignment_class` | `site_class`, and `off_target_only` no longer exists |
+| `n_ngg_<m>mm` | `n_cut_sites`, exact matches only |
+| `min_ngg_mismatches` | gone |
+| `leading_g` | gone; compare the lengths of `guide_id` and `spacer` |
+| `pam_class` | `pam_matches`, `TRUE`/`FALSE` |
+| `site_pam`, `guide_chr/start/end` | `pam` folded into `mapped_sequence`; `chr`, `start`, `end` |
+| `no_perfect_hit` (orientation) | `no_match` |
 
-To keep the contigs a chrom.sizes file lists, join its first column and pass
-the result to `run` as `--contigs "$contigs"`:
+`input_sequence` and `genomic_protospacer` are gone: the first is in your
+input file and in `guide_id`, and the second is always identical to `spacer`
+when matching is exact.
 
-```bash
-contigs="$(cut -f1 hg38.chrom.sizes | paste -sd, -)"  # chr1,chr2,...
-```
+## What this changes in a result
+
+- **Guides are keyed by sequence.** Two entries differing only by a 5' G are
+  two guides, not duplicates. The old version truncated them to the same
+  spacer and collapsed them.
+- **`n_matches` is new and often surprising.** The old `multi` counted only
+  PAM-bearing sites and still does; `n_matches` counts every occurrence of the
+  protospacer, which is usually larger.
+- **Orientation is decided from both readings**, not from a `CCN` upstream.
+  A library reversed throughout stops the run; a handful of entries warns.
 <!-- --8<-- [end:migration] -->

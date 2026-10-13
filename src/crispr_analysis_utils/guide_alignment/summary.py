@@ -1,16 +1,13 @@
 """Per-guide classes, and the guide alignment's output tables.
 
-A guide's class is decided on its primary-PAM sites only (the ``ngg`` columns
-count those, whatever the primary PAM is): ``unique`` with exactly one perfect
-site, ``multi`` with more than one, ``off_target_only`` with none but at least
-one site with 1 to `max_mismatches` mismatches, and ``no_site`` otherwise.
-Alternative-PAM sites are counted but never decide the class, and sites whose
-genomic PAM matches no pattern are not counted at all. A guide that duplicates
-an earlier guide's spacer gets that guide's sites.
+A guide's class counts the matches whose genomic PAM matches: ``unique`` with
+exactly one, ``multi`` with more, ``no_site`` with none. A match whose PAM does
+not is still written, with ``pam_matches`` FALSE, and counted nowhere. An entry
+that duplicates an earlier one's sequence gets that entry's sites.
 
 Coordinates are 0-based and half-open on the reference's forward strand, and
-the protospacer excludes the PAM and the added G. The cut site is a boundary
-``b``: the cut lies between bases ``b - 1`` and ``b``, 3 bases 5' of the PAM
+the protospacer excludes the PAM and any base 5' of it. The cut site is a
+boundary ``b``: the cut lies between ``b - 1`` and ``b``, 3 bases 5' of the PAM
 (``end - 3`` on ``+``, ``start + 3`` on ``-``). In the tables, a value that
 does not apply is an empty field, and booleans are ``TRUE`` or ``FALSE``.
 """
@@ -19,58 +16,32 @@ from __future__ import annotations
 
 import os
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import TextIO
+from typing import TYPE_CHECKING, TextIO
 
-from ._alignment import check_max_mismatches
 from .iupac import validate_pams
 from .library import Guide
-from .orientation import NOT_CHECKED, VERDICTS, OrientationResult
+from .orientation import NOT_CHECKED, VERDICTS
 from .sites import NO_PAM_CLASS, Site
 
+if TYPE_CHECKING:
+    pass
+
 UNIQUE = "unique"
-"""Exactly one perfect primary-PAM site."""
+"""Exactly one perfect site with a matching PAM."""
 MULTI = "multi"
-"""More than one perfect primary-PAM site."""
-OFF_TARGET_ONLY = "off_target_only"
-"""No perfect primary-PAM site, but at least one with mismatches."""
+"""More than one perfect site with a matching PAM."""
 NO_SITE = "no_site"
-"""No primary-PAM site within `max_mismatches`."""
-CLASSES = (UNIQUE, MULTI, OFF_TARGET_ONLY, NO_SITE)
-"""Every alignment class, in report order."""
+"""No site with a matching PAM within `max_mismatches`."""
+CLASSES = (UNIQUE, MULTI, NO_SITE)
+"""Every site class, in report order."""
 
 CUT_OFFSET = 3
 """Bases between the cut and the PAM."""
 
-SITE_COLUMNS = (
-    "guide_id",
-    "chr",
-    "start",
-    "end",
-    "strand",
-    "pam",
-    "pam_class",
-    "n_mismatches",
-    "mismatch_positions",
-    "genomic_protospacer",
-    "leading_g_base",
-)
-"""The columns of sites.tsv, in order: the fields of `Site`."""
 
-ORIENTATION_COLUMNS = (
-    "guide_id",
-    "chr",
-    "start",
-    "end",
-    "strand",
-    "flank_5p",
-    "flank_3p",
-    "verdict",
-)
-"""The columns of orientation.tsv, in order."""
-
-_SUMMARY_SECTIONS = ("guides", "class", "orientation", "parameter")
+_QC_SECTIONS = ("guides", "class", "orientation")
 
 
 @dataclass(frozen=True)
@@ -80,14 +51,19 @@ class GuideSummary:
     Attributes
     ----------
     guide_id
-        The guide's id.
+        The sequence that was aligned: the input sequence and the PAM.
+    alias
+        The name the guide table gives this entry.
     spacer
         The spacer, 5' to 3'.
-    pam
+    mapped_sequence
+        The guide's bases that pair with the genome at the unique site, as in
+        `Site.mapped_sequence`; None unless the class is ``unique``.
+    site_pam
         The genomic PAM of the unique site, in guide orientation; None unless
         the class is ``unique``.
-    targeting
-        Whether the guide has at least one perfect primary-PAM site.
+    has_perfect_site
+        Whether the guide has at least one perfect site with a matching PAM.
     guide_chr
         The unique site's contig; None unless unique.
     guide_start
@@ -99,42 +75,48 @@ class GuideSummary:
     cut_site
         The unique site's cut boundary (see the module description); None
         unless unique.
-    alignment_class
-        ``unique``, ``multi``, ``off_target_only`` or ``no_site``.
+    site_class
+        ``unique``, ``multi`` or ``no_site``.
     orientation
         The orientation verdict, or ``not_checked``.
-    leading_g
+    orientation_evidence
+        For a ``reverse_complement`` guide, whether that reading was a
+        distinct sequence or only the spacer's reverse complement; None
+        otherwise.
+    extra_5p
         Whether the guide's site reads carry an added 5' G.
-    min_ngg_mismatches
-        The fewest spacer mismatches among primary-PAM sites; None without
-        any.
-    n_ngg
-        Primary-PAM sites by spacer mismatches: ``n_ngg[m]`` sites have ``m``,
-        for ``m`` from 0 to `max_mismatches`.
-    n_alt_pam
-        Alternative-PAM sites, counted the same way.
-    duplicate_of
-        The id of the first guide with the same spacer, or None.
+    min_mismatches
+        The fewest spacer mismatches among the sites with a matching PAM;
+        None without any.
+    n_matches
+        Every exact match of the spacer, whether or not a PAM sits beside it.
+        More than one means the spacer occurs more than once in the genome,
+        which `site_class` does not say: that counts cuttable sites only.
+    n_sites
+        Sites with a matching PAM by spacer mismatches: ``n_sites[m]`` sites
+        have ``m``, for ``m`` from 0 to `max_mismatches`.
     input_sequence
         The sequence as given in the guide table, uppercased.
     """
 
     guide_id: str
+    alias: str
     spacer: str
-    pam: str | None
-    targeting: bool
+    mapped_sequence: str | None
+    site_pam: str | None
+    has_perfect_site: bool
     guide_chr: str | None
     guide_start: int | None
     guide_end: int | None
     strand: str | None
     cut_site: int | None
-    alignment_class: str
+    site_class: str
     orientation: str
-    leading_g: bool
-    min_ngg_mismatches: int | None
-    n_ngg: tuple[int, ...]
-    n_alt_pam: tuple[int, ...]
-    duplicate_of: str | None
+    orientation_evidence: str | None
+    extra_5p: bool
+    min_mismatches: int | None
+    n_matches: int
+    n_sites: tuple[int, ...]
     input_sequence: str
 
 
@@ -143,8 +125,8 @@ def summarize(
     sites: Mapping[int, Sequence[Site]],
     orientation: Mapping[int, str] | None = None,
     *,
+    evidence: Mapping[int, str | None] | None = None,
     pam: str = "NGG",
-    alt_pams: Iterable[str] = ("NAG", "NGA"),
     max_mismatches: int = 3,
 ) -> list[GuideSummary]:
     """Classify every guide from its sites.
@@ -157,11 +139,9 @@ def summarize(
         The kept sites by guide row, as in `SiteResult.sites`.
     orientation
         The orientation verdicts by guide row, as in
-        `OrientationResult.verdicts`; None when the check did not run.
+        `ScanResult.verdicts`; None when the check did not run.
     pam
-        The primary PAM pattern the sites were classified with.
-    alt_pams
-        The alternative PAM patterns the sites were classified with.
+        The PAM pattern the sites were classified with.
     max_mismatches
         The mismatch limit the sites were kept with.
 
@@ -176,29 +156,28 @@ def summarize(
         If the PAM patterns fail `validate_pams`, `max_mismatches` is
         negative, a site has more mismatches than `max_mismatches` or a PAM
         class that is neither one of the patterns nor ``none``, a guide is a
-        duplicate of an id not in the library, or `orientation` lacks a
+        duplicate of an alias not in the library, or `orientation` lacks a
         guide's verdict.
     """
-    patterns = validate_pams([pam, *alt_pams])
-    check_max_mismatches(max_mismatches)
-    primary, alternatives = patterns[0], frozenset(patterns[1:])
+    patterns = validate_pams([pam])
+    _check_max_mismatches(max_mismatches)
+    primary = patterns[0]
     summaries = []
     for guide, source in zip(guides, _source_rows(guides), strict=True):
-        n_ngg = [0] * (max_mismatches + 1)
-        n_alt_pam = [0] * (max_mismatches + 1)
+        n_matches = 0
+        n_sites = [0] * (max_mismatches + 1)
         perfect = []
         for site in sites.get(source, ()):
+            n_matches += 1
             if site.n_mismatches > max_mismatches:
                 raise ValueError(
                     f"A site of guide {site.guide_id!r} has {site.n_mismatches} "
                     f"mismatches, more than max_mismatches={max_mismatches}."
                 )
             if site.pam_class == primary:
-                n_ngg[site.n_mismatches] += 1
+                n_sites[site.n_mismatches] += 1
                 if site.n_mismatches == 0:
                     perfect.append(site)
-            elif site.pam_class in alternatives:
-                n_alt_pam[site.n_mismatches] += 1
             elif site.pam_class != NO_PAM_CLASS:
                 raise ValueError(
                     f"A site of guide {site.guide_id!r} has PAM class "
@@ -211,38 +190,40 @@ def summarize(
         elif source in orientation:
             verdict = orientation[source]
         else:
-            raise ValueError(f"No orientation verdict for guide {guide.guide_id!r}.")
+            raise ValueError(f"No orientation verdict for guide {guide.alias!r}.")
 
         if len(perfect) == 1:
-            alignment_class = UNIQUE
+            site_class = UNIQUE
         elif perfect:
-            alignment_class = MULTI
-        elif any(n_ngg):
-            alignment_class = OFF_TARGET_ONLY
+            site_class = MULTI
         else:
-            alignment_class = NO_SITE
-        unique = perfect[0] if alignment_class == UNIQUE else None
+            site_class = NO_SITE
+        unique = perfect[0] if site_class == UNIQUE else None
 
         summaries.append(
             GuideSummary(
                 guide_id=guide.guide_id,
+                alias=guide.alias,
                 spacer=guide.spacer,
-                pam=unique.pam if unique else None,
-                targeting=bool(perfect),
+                mapped_sequence=unique.mapped_sequence if unique else None,
+                site_pam=unique.pam if unique else None,
+                has_perfect_site=bool(perfect),
                 guide_chr=unique.chr if unique else None,
                 guide_start=unique.start if unique else None,
                 guide_end=unique.end if unique else None,
                 strand=unique.strand if unique else None,
                 cut_site=_cut_site(unique) if unique else None,
-                alignment_class=alignment_class,
+                site_class=site_class,
                 orientation=verdict,
-                leading_g=guide.leading_g,
-                min_ngg_mismatches=next(
-                    (count for count, n in enumerate(n_ngg) if n), None
+                orientation_evidence=(
+                    None if evidence is None else evidence.get(source)
                 ),
-                n_ngg=tuple(n_ngg),
-                n_alt_pam=tuple(n_alt_pam),
-                duplicate_of=guide.duplicate_of,
+                extra_5p=guide.extra_5p,
+                min_mismatches=next(
+                    (count for count, n in enumerate(n_sites) if n), None
+                ),
+                n_matches=n_matches,
+                n_sites=tuple(n_sites),
                 input_sequence=guide.input_sequence,
             )
         )
@@ -264,11 +245,16 @@ def fan_out_sites(
     Returns
     -------
     list of Site
-        For each guide in turn, the sites of its row, or of the guide it
-        duplicates, with `Site.guide_id` set to the guide's own id.
+        For each distinct `Guide.guide_id` in turn, the sites of its row, or
+        of the entry it duplicates, with `Site.guide_id` set to it. Entries
+        that share a sequence are one guide, so their sites are written once.
     """
     fanned = []
+    seen = set()
     for guide, source in zip(guides, _source_rows(guides), strict=True):
+        if guide.guide_id in seen:
+            continue
+        seen.add(guide.guide_id)
         fanned.extend(
             site
             if site.guide_id == guide.guide_id
@@ -278,106 +264,156 @@ def fan_out_sites(
     return fanned
 
 
-def guide_columns(max_mismatches: int) -> list[str]:
-    """The columns of guides.tsv, in order.
+GROUPS = (
+    ("from the guide table, before anything is aligned", 3),
+    ("about the whole guide, repeated on each of its rows", 5),
+    ("about this row's match; empty when the guide matches nowhere", 7),
+)
+"""The column groups, in order, and how many columns each has."""
 
-    Parameters
-    ----------
-    max_mismatches
-        The mismatch limit, which sets the count columns:
-        ``n_ngg_0mm`` to ``n_ngg_<max_mismatches>mm``, then the same for
-        ``n_alt_pam``.
+COLUMNS = {
+    # from the guide table
+    "guide_id": (
+        "The sequence that was aligned, ending in the PAM pattern."
+        " Identifies the guide."
+    ),
+    "alias": "Name for the guide from the input table.",
+    "spacer": (
+        "The protospacer: guide_id without the PAM pattern or any base 5' of it."
+    ),
+    # about the whole guide
+    "site_class": "unique, multi or no_site: how many places this guide can cut.",
+    "n_matches": (
+        "How many places the protospacer matches, which is how many rows"
+        " this guide has below."
+    ),
+    "n_cut_sites": "How many of those have a PAM, so Cas9 could cut there.",
+    "orientation": (
+        "Whether the sequence reads 5' to 3': forward, reverse_complement,"
+        " no_pam, no_match, or not_checked."
+    ),
+    "orientation_evidence": (
+        "Only for reverse_complement. distinct: the reversed reading was a"
+        " different sequence. ambiguous: it was just the reverse complement,"
+        " which a chance CCN upstream looks identical to."
+    ),
+    # about this row's match
+    "chr": "Contig of this match.",
+    "start": "First base of the protospacer, 0-based.",
+    "end": "One past its last base, so the protospacer is [start, end).",
+    "strand": "Strand the protospacer reads 5' to 3' on.",
+    "cut_site": (
+        "Where Cas9 cuts: between cut_site - 1 and cut_site, 3 bases from the PAM."
+    ),
+    "pam_matches": (
+        "TRUE when the genomic PAM fits the pattern, so this match is cuttable."
+    ),
+    "mapped_sequence": (
+        "What the genome holds here, to compare against guide_id: the"
+        " protospacer and the real PAM, keeping the 5' base only where the"
+        " genome has that same base."
+    ),
+}
+"""Every column of guides_alignment_metadata.tsv, and what it holds."""
+
+BED_COLUMNS = {
+    "chr": "Contig of the match.",
+    "start": "First base of the protospacer, 0-based.",
+    "end": "One past its last base.",
+    "name": "The protospacer, as spacer in the metadata table.",
+    "score": "Always 0; BED6 wants the field.",
+    "strand": "Strand the protospacer reads 5' to 3' on.",
+}
+"""The six fields of guides_mapping.bed, which has no header of its own."""
+
+
+def guide_columns() -> list[str]:
+    """The columns of guides_alignment_metadata.tsv, in order.
+
+    One row per library entry per site, so the guide's own columns repeat on
+    every site it has, and an entry with no site gets one row whose site
+    columns are empty.
 
     Returns
     -------
     list of str
-        The column names. The first eight (``guide_id`` to ``strand``) follow
-        IGVF guide-metadata names; the rest are this tool's.
+        The column names: the guide, then what the whole guide is, then the
+        one site the row is about.
     """
-    check_max_mismatches(max_mismatches)
-    counts = range(max_mismatches + 1)
-    return [
-        "guide_id",
-        "spacer",
-        "pam",
-        "targeting",
-        "guide_chr",
-        "guide_start",
-        "guide_end",
-        "strand",
-        "cut_site",
-        "alignment_class",
-        "orientation",
-        "leading_g",
-        "min_ngg_mismatches",
-        *(f"n_ngg_{m}mm" for m in counts),
-        *(f"n_alt_pam_{m}mm" for m in counts),
-        "duplicate_of",
-        "input_sequence",
-    ]
+    return list(COLUMNS)
 
 
 def write_guides_tsv(
     path: str | os.PathLike[str],
+    guides: Sequence[Guide],
     summaries: Sequence[GuideSummary],
-    *,
-    max_mismatches: int,
+    sites: Mapping[int, Sequence[Site]],
 ) -> None:
-    """Write guides.tsv: one row per guide, with the columns of `guide_columns`.
+    """Write guides_alignment_metadata.tsv: every entry, a row per site.
 
     Parameters
     ----------
     path
         The file to write.
+    guides
+        The library, as returned by `read_guides`.
     summaries
-        The guides, as returned by `summarize`.
-    max_mismatches
-        The mismatch limit `summarize` ran with.
+        The guides, as returned by `summarize`, in the same order.
+    sites
+        The sites by guide row, as in `ScanResult.sites`.
 
     Raises
     ------
     ValueError
-        If a summary's count tuples do not have ``max_mismatches + 1`` entries.
+        If `summaries` is not one per guide.
+
+    Notes
+    -----
+    `write_guides_bed` writes the same sites as a BED.
+
+    ``n_matches`` is not ``site_class``: it counts every place the protospacer
+    occurs, while ``multi`` counts only the matches with a PAM beside them, so
+    a guide can match many places and still be cuttable at one.
     """
-    columns = guide_columns(max_mismatches)
-    with _open_table(path, columns) as handle:
-        for summary in summaries:
-            n_counts = max_mismatches + 1
-            if len(summary.n_ngg) != n_counts or len(summary.n_alt_pam) != n_counts:
-                raise ValueError(
-                    f"The counts of guide {summary.guide_id!r} do not match "
-                    f"max_mismatches={max_mismatches}."
+    if len(summaries) != len(guides):
+        raise ValueError(f"Got {len(summaries)} summaries for {len(guides)} guides.")
+    with _open_table(path, guide_columns()) as handle:
+        for summary, source in zip(summaries, _source_rows(guides), strict=True):
+            head = [
+                summary.guide_id,
+                summary.alias,
+                summary.spacer,
+                summary.site_class,
+                summary.n_matches,
+                summary.n_sites[0],
+                summary.orientation,
+                summary.orientation_evidence,
+            ]
+            found = sites.get(source, ())
+            if not found:
+                _write_row(handle, [*head, *[None] * 7])
+            for site in found:
+                _write_row(
+                    handle,
+                    [
+                        *head,
+                        site.chr,
+                        site.start,
+                        site.end,
+                        site.strand,
+                        _cut_site(site),
+                        site.pam_class != NO_PAM_CLASS,
+                        site.mapped_sequence,
+                    ],
                 )
-            _write_row(
-                handle,
-                [
-                    summary.guide_id,
-                    summary.spacer,
-                    summary.pam,
-                    summary.targeting,
-                    summary.guide_chr,
-                    summary.guide_start,
-                    summary.guide_end,
-                    summary.strand,
-                    summary.cut_site,
-                    summary.alignment_class,
-                    summary.orientation,
-                    summary.leading_g,
-                    summary.min_ngg_mismatches,
-                    *summary.n_ngg,
-                    *summary.n_alt_pam,
-                    summary.duplicate_of,
-                    summary.input_sequence,
-                ],
-            )
 
 
-def write_sites_tsv(
+def write_guides_bed(
     path: str | os.PathLike[str],
     guides: Sequence[Guide],
     sites: Mapping[int, Sequence[Site]],
 ) -> None:
-    """Write sites.tsv: every kept site of every guide, duplicates included.
+    """Write guides_mapping.bed: every site a guide could be cut at.
 
     Parameters
     ----------
@@ -386,134 +422,73 @@ def write_sites_tsv(
     guides
         The library, as returned by `read_guides`.
     sites
-        The kept sites by guide row, as in `SiteResult.sites`.
+        The sites by guide row, as in `ScanResult.sites`.
 
     Notes
     -----
-    The columns are `SITE_COLUMNS`, the fields of `Site`. Rows follow
-    `fan_out_sites`; ``mismatch_positions`` is comma-separated.
+    BED6 without a header, fields as in `BED_COLUMNS`, one row per site whose
+    genomic PAM matches, so a spacer that cuts in two places gets a row for
+    each. The name field is the protospacer, which is the same on every row
+    of a guide that matches more than once. Sorted by contig, then position.
+    A match with no PAM
+    is not somewhere anything can be cut, so it is left out;
+    guides_alignment_metadata.tsv has them all.
     """
-    with _open_table(path, SITE_COLUMNS) as handle:
-        for site in fan_out_sites(guides, sites):
-            _write_row(handle, [getattr(site, column) for column in SITE_COLUMNS])
+    # One row per distinct guide, not per entry: two entries of one sequence
+    # would otherwise give byte-identical rows and bedtools would count twice.
+    seen: set[str] = set()
+    rows = []
+    for guide, source in zip(guides, _source_rows(guides), strict=True):
+        if guide.guide_id in seen:
+            continue
+        seen.add(guide.guide_id)
+        rows.extend(
+            (site.chr, site.start, site.end, guide.spacer, site.strand)
+            for site in sites.get(source, ())
+            if site.pam_class != NO_PAM_CLASS
+        )
+    rows.sort()
+    with _open_table(path, None) as handle:
+        for chrom, start, end, name, strand in rows:
+            _write_row(handle, [chrom, start, end, name, 0, strand])
 
 
-def write_orientation_tsv(
-    path: str | os.PathLike[str],
-    guides: Sequence[Guide],
-    orientation: OrientationResult,
-) -> None:
-    """Write orientation.tsv: each guide's perfect hits, flanks and verdict.
+def write_columns_yaml(path: str | os.PathLike[str]) -> None:
+    """Write columns.yaml: what every column of the outputs holds.
 
     Parameters
     ----------
     path
         The file to write.
-    guides
-        The library, as returned by `read_guides`.
-    orientation
-        The result of `check_orientation`.
-
-    Raises
-    ------
-    ValueError
-        If `orientation` lacks a guide's verdict.
 
     Notes
     -----
-    The columns are `ORIENTATION_COLUMNS`. Each guide, duplicates included,
-    has one row per perfect hit, or a single row with empty hit fields when it
-    has none; ``verdict`` repeats on every row.
+    Generated from `COLUMNS` and `BED_COLUMNS`, so it cannot drift from the
+    tables themselves.
     """
-    with _open_table(path, ORIENTATION_COLUMNS) as handle:
-        for guide, source in zip(guides, _source_rows(guides), strict=True):
-            if source not in orientation.verdicts:
-                raise ValueError(
-                    f"No orientation verdict for guide {guide.guide_id!r}."
-                )
-            verdict = orientation.verdicts[source]
-            hits = orientation.hits.get(source, ())
-            if not hits:
-                _write_row(handle, [guide.guide_id, *[None] * 6, verdict])
-            for hit in hits:
-                _write_row(
-                    handle,
-                    [
-                        guide.guide_id,
-                        hit.chr,
-                        hit.start,
-                        hit.end,
-                        hit.strand,
-                        hit.flank_5p,
-                        hit.flank_3p,
-                        verdict,
-                    ],
-                )
+    lines = ["# What each column of this folder's outputs holds.", ""]
+    lines.append("guides_alignment_metadata.tsv:")
+    columns = iter(COLUMNS.items())
+    for heading, count in GROUPS:
+        lines.append(f"  # {heading}")
+        for _ in range(count):
+            column, description = next(columns)
+            lines.append(f'  {column}: "{_one_line(description)}"')
+    lines.append("")
+    lines.append("guides_mapping.bed:")
+    for column, description in BED_COLUMNS.items():
+        lines.append(f'  {column}: "{_one_line(description)}"')
+    lines.append("")
+    _write_text(path, "\n".join(lines))
 
 
-def write_guides_bed(
-    path: str | os.PathLike[str], summaries: Sequence[GuideSummary]
-) -> None:
-    """Write guides.bed: the protospacer of every unique guide.
-
-    Parameters
-    ----------
-    path
-        The file to write.
-    summaries
-        The guides, as returned by `summarize`.
-
-    Notes
-    -----
-    BED6 without a header: contig, start, end, guide id, score 0, strand,
-    sorted by contig name, then start, end and guide id.
-    """
-    _write_bed(
-        path,
-        (
-            (s.guide_chr, s.guide_start, s.guide_end, s.guide_id, s.strand)
-            for s in summaries
-            if s.alignment_class == UNIQUE
-        ),
-    )
-
-
-def write_cut_sites_bed(
-    path: str | os.PathLike[str], summaries: Sequence[GuideSummary]
-) -> None:
-    """Write cut_sites.bed: the cut site of every unique guide.
-
-    Parameters
-    ----------
-    path
-        The file to write.
-    summaries
-        The guides, as returned by `summarize`.
-
-    Notes
-    -----
-    BED6 without a header, one ``[b, b + 1)`` row per guide for its cut
-    boundary ``b``: contig, ``b``, ``b + 1``, guide id, score 0, strand,
-    sorted by contig name, then position and guide id.
-    """
-    _write_bed(
-        path,
-        (
-            (s.guide_chr, s.cut_site, s.cut_site + 1, s.guide_id, s.strand)
-            for s in summaries
-            if s.alignment_class == UNIQUE
-        ),
-    )
-
-
-def write_summary_tsv(
+def write_qc_tsv(
     path: str | os.PathLike[str],
     summaries: Sequence[GuideSummary],
     *,
     counts: Mapping[str, Mapping[str, int]] | None = None,
-    parameters: Mapping[str, object] | None = None,
 ) -> None:
-    """Write summary.tsv: library, class and orientation counts, and the run.
+    """Write qc.tsv: the counts worth checking on a run.
 
     Parameters
     ----------
@@ -524,8 +499,6 @@ def write_summary_tsv(
     counts
         Further counts by section name, such as
         ``{"site_search": SiteResult.counts()}``.
-    parameters
-        The run's parameters by name.
 
     Raises
     ------
@@ -535,38 +508,34 @@ def write_summary_tsv(
 
     Notes
     -----
-    Three columns, ``section``, ``name`` and ``value``, in this order:
-    section ``guides`` (``n_guides``, ``n_distinct_spacers``,
-    ``n_duplicates``); section ``class``, one row per alignment class; section
-    ``orientation``, one row per verdict, ``not_checked`` included; then each
-    `counts` section; then section ``parameter``. The class rows and the
-    orientation rows each sum to ``n_guides``. A list parameter is written
-    comma-separated.
+    Three columns, ``section``, ``name`` and ``value``. Section ``guides``
+    (``n_entries``, ``n_guides``, ``n_shared_spacers``); section ``class``,
+    one row per site class; section ``orientation``, one row per verdict,
+    ``not_checked`` included; then each `counts` section. The class rows and
+    the orientation rows each sum to ``n_entries``. The run's parameters are
+    not here: they belong to the step's metadata file.
     """
-    classes = Counter(s.alignment_class for s in summaries)
+    classes = Counter(s.site_class for s in summaries)
     verdicts = Counter(s.orientation for s in summaries)
     unknown = sorted(set(classes) - set(CLASSES)) + sorted(
         set(verdicts) - set(VERDICTS)
     )
     if unknown:
         raise ValueError(f"Unknown classes or verdicts: {', '.join(unknown)}.")
-    clashes = sorted(set(counts or {}) & set(_SUMMARY_SECTIONS))
+    clashes = sorted(set(counts or {}) & set(_QC_SECTIONS))
     if clashes:
         raise ValueError(f"counts reuses built-in section names: {', '.join(clashes)}.")
 
-    n_distinct = sum(s.duplicate_of is None for s in summaries)
+    n_spacers = len({s.spacer for s in summaries})
     rows = [
-        ("guides", "n_guides", len(summaries)),
-        ("guides", "n_distinct_spacers", n_distinct),
-        ("guides", "n_duplicates", len(summaries) - n_distinct),
+        ("guides", "n_entries", len(summaries)),
+        ("guides", "n_guides", len({s.guide_id for s in summaries})),
+        ("guides", "n_shared_spacers", len(summaries) - n_spacers),
         *(("class", name, classes[name]) for name in CLASSES),
         *(("orientation", name, verdicts[name]) for name in VERDICTS),
     ]
     for section, section_counts in (counts or {}).items():
         rows.extend((section, name, value) for name, value in section_counts.items())
-    rows.extend(
-        ("parameter", name, value) for name, value in (parameters or {}).items()
-    )
     with _open_table(path, ("section", "name", "value")) as handle:
         for row in rows:
             _write_row(handle, row)
@@ -574,7 +543,7 @@ def write_summary_tsv(
 
 def _source_rows(guides: Sequence[Guide]) -> list[int]:
     """For each guide, the row whose alignments it uses: its own, or the original's."""
-    row_of = {guide.guide_id: row for row, guide in enumerate(guides)}
+    row_of = {guide.alias: row for row, guide in enumerate(guides)}
     rows = []
     for row, guide in enumerate(guides):
         if guide.duplicate_of is None:
@@ -583,7 +552,7 @@ def _source_rows(guides: Sequence[Guide]) -> list[int]:
             rows.append(row_of[guide.duplicate_of])
         else:
             raise ValueError(
-                f"Guide {guide.guide_id!r} is a duplicate of "
+                f"Guide {guide.alias!r} is a duplicate of "
                 f"{guide.duplicate_of!r}, which is not in the library."
             )
     return rows
@@ -594,20 +563,12 @@ def _cut_site(site: Site) -> int:
     return site.end - CUT_OFFSET if site.strand == "+" else site.start + CUT_OFFSET
 
 
-def _open_table(path: str | os.PathLike[str], columns: Sequence[str]) -> TextIO:
-    """Open a tab-separated file for writing and write its header line."""
+def _open_table(path: str | os.PathLike[str], columns: Sequence[str] | None) -> TextIO:
+    """Open a tab-separated file for writing, with a header unless BED."""
     handle = open(path, "w", encoding="utf-8", newline="\n")
-    handle.write("\t".join(columns) + "\n")
+    if columns is not None:
+        handle.write("\t".join(columns) + "\n")
     return handle
-
-
-def _write_bed(
-    path: str | os.PathLike[str], rows: Iterable[tuple[str, int, int, str, str]]
-) -> None:
-    """Write sorted BED6 rows with a score of 0."""
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        for chrom, start, end, name, strand in sorted(rows):
-            handle.write(f"{chrom}\t{start}\t{end}\t{name}\t0\t{strand}\n")
 
 
 def _write_row(handle: TextIO, values: Sequence[object]) -> None:
@@ -626,3 +587,20 @@ def _cell(value: object) -> str:
     if isinstance(value, (list, tuple)):
         return ",".join(str(item) for item in value)
     return str(value)
+
+
+def _check_max_mismatches(value: object) -> None:
+    """A mismatch limit must be a non-negative integer."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("max_mismatches must be a non-negative integer.")
+
+
+def _write_text(path: str | os.PathLike[str], text: str) -> None:
+    """Write text with the newline the other writers use."""
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+
+
+def _one_line(text: str) -> str:
+    """A description as one line, safe inside a double-quoted YAML scalar."""
+    return " ".join(text.split()).replace('"', "'")

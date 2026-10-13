@@ -1,7 +1,8 @@
 [build-system]
-# 1.27 is the first hatchling that writes the PEP 639 license expression by default.
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
+# The package ships a compiled Rust core, so maturin builds it rather than
+# hatchling. Cargo.toml at the root holds the crate; rust/ holds its sources.
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
 
 [project]
 name = "crispr-analysis-utils"
@@ -62,23 +63,18 @@ docs = [
     "mkdocstrings[python]>=1.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/crispr_analysis_utils"]
-
-# Hatchling otherwise puts the whole tree in the sdist, untracked files included.
-[tool.hatch.build.targets.sdist]
-include = [
-    "/src",
-    "/tests",
-]
+[tool.maturin]
+# The Python package stays where it is; the extension lands inside it.
+python-source = "src"
+module-name = "crispr_analysis_utils._core"
+# One abi3 wheel serves every supported Python, so the matrix is per platform.
+features = ["pyo3/extension-module"]
+# maturin would otherwise leave the tests out of the sdist.
+include = [{ path = "tests/**/*", format = "sdist" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# No -m here: it would deselect the gem marker by default.
 addopts = "-ra --strict-markers"
-markers = [
-    "gem: needs the GEM3 binaries on the PATH (the pixi environments have them)",
-]
 
 [tool.uv]
 # The single uv pin: setup-uv in CI reads it, and the lockfile format is stable within a minor.
@@ -93,25 +89,20 @@ requires-pixi = ">=0.81"
 
 [tool.pixi.dependencies]
 python = "3.13.*"
-
-# bioconda builds gem3-mapper for linux-64 and osx-64, not osx-arm64. An environment
-# with this feature has only those two platforms; on Apple silicon pixi installs it as
-# osx-64, which runs under Rosetta.
-[tool.pixi.feature.gem]
-platforms = ["linux-64", "osx-64"]
-
-[tool.pixi.feature.gem.dependencies]
-gem3-mapper = ">=3.6.1"
+# The editable install builds the Rust core, so every environment needs them.
+rust = ">=1.80"
+maturin = ">=1.9,<2"
 
 # pixi does not install the project by itself.
 [tool.pixi.pypi-dependencies]
 crispr-analysis-utils = { path = ".", editable = true }
 
-# The `dev` and `docs` groups become features of the same name; `gem` is defined above.
-# docs has no GEM, so it stays native on all three platforms.
+# The `dev` and `docs` groups become features of the same name. Every environment is
+# native on all three platforms: the genome scan is the package's own Rust core, so
+# nothing pulls in an x86-64-only aligner any more.
 [tool.pixi.environments]
-default = { features = ["gem"], solve-group = "default" }
-dev = { features = ["dev", "gem"], solve-group = "default" }
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
 docs = { features = ["docs"], solve-group = "default" }
 
 [tool.pixi.feature.dev.tasks]

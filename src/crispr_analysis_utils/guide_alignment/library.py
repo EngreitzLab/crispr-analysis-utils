@@ -1,21 +1,17 @@
-"""The guide library: reading the guide table and writing the reads to align.
+"""The guide library: reading and validating the guide table.
 
-A guide is known by its row: its 0-based position in the list `read_guides`
-returns. Read names carry that row, so the alignments can be matched back to
-the guide without parsing ids.
+A guide is known by its row, its 0-based position in the list `read_guides`
+returns, and identified by `Guide.guide_id`: the sequence that is aligned,
+plus the PAM. The name the table gives it is `Guide.alias`.
 """
 
 from __future__ import annotations
 
-import gzip
-import io
 import logging
 import os
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TextIO
 
 import pandas as pd
 
@@ -24,6 +20,7 @@ from .iupac import validate_pams
 logger = logging.getLogger(__name__)
 
 _ACGT = frozenset("ACGT")
+_COMPLEMENT = str.maketrans("ACGT", "TGCA")
 _TABLE_BREAKS = frozenset("\t\r\n")
 _QUALITY = "I"
 _MAX_LISTED = 5
@@ -36,24 +33,44 @@ class Guide:
     Attributes
     ----------
     guide_id
-        The id from the guide table, as a string.
+        The sequence that is aligned, ending in the PAM pattern. It identifies
+        the guide, so two entries share it only when their sequences are
+        equal.
+    alias
+        The name the guide table gives this entry, as a string.
     input_sequence
         The sequence from the guide table, stripped of surrounding whitespace
         and uppercased.
+    aligned_sequence
+        What is aligned, without the PAM: `input_sequence`, after a 5' G when
+        `read_guides` was told to add one. Nothing is ever trimmed from it.
     spacer
-        The 3'-most `spacer_length` bases of `input_sequence`, 5' to 3'.
-    leading_g
-        Whether this guide's site reads carry an extra 5' G.
+        The 3'-most `spacer_length` bases of `aligned_sequence`, 5' to 3':
+        the protospacer the coordinates are reported for.
+    n_extra
+        The bases of `aligned_sequence` 5' of the spacer, so 1 for a guide
+        carrying an added G and 0 for one that does not. Their mismatches are
+        reported but never counted.
+    extra_5p
+        Whether `n_extra` is more than zero: the sequence carries a base 5'
+        of the protospacer, read from its length and not from any alignment.
     duplicate_of
-        The id of the first guide in the table with the same spacer, or None
-        for that first guide itself.
+        The alias of the first entry whose `guide_id` is the same, or None for
+        that first entry itself.
     """
 
     guide_id: str
+    alias: str
     input_sequence: str
+    aligned_sequence: str
     spacer: str
-    leading_g: bool
+    n_extra: int
     duplicate_of: str | None
+
+    @property
+    def extra_5p(self) -> bool:
+        """Whether the sequence carries a base 5' of the protospacer."""
+        return self.n_extra > 0
 
 
 def read_guides(
@@ -65,6 +82,7 @@ def read_guides(
     header: bool = False,
     spacer_length: int = 20,
     add_leading_g: bool = False,
+    pam: str = "NGG",
 ) -> list[Guide]:
     """Read and validate a guide table.
 
@@ -72,10 +90,11 @@ def read_guides(
     ----------
     source
         A delimited text file, or a pandas DataFrame. A file is read with every
-        column as a string, so an id such as ``0001`` stays ``0001`` and an id
+        column as a string, so an alias such as ``0001`` stays ``0001`` and one
         such as ``NA`` is not taken for a missing value.
     id_col
-        The guide id column: a 0-based position, or a column name.
+        The column of the name the table gives each guide, which becomes
+        `Guide.alias`: a 0-based position, or a column name.
     spacer_col
         The sequence column: a 0-based position, or a column name. Sequences
         are given 5' to 3'.
@@ -87,24 +106,30 @@ def read_guides(
     spacer_length
         The spacer is the 3'-most `spacer_length` bases of each sequence.
     add_leading_g
-        Mark a guide whose spacer does not start with G as carrying an extra
-        5' G in its site reads (`Guide.leading_g`).
+        Put a 5' G in front of every sequence, for a table that gives bare
+        protospacers while the construct adds a G. Leave it False when the
+        sequences already carry the G they were ordered with: whether a guide
+        has one then follows from its length, not from its first base.
+    pam
+        The PAM pattern, which ends `Guide.guide_id`.
 
     Returns
     -------
     list of Guide
         One guide per table row, in table order. A guide whose spacer equals
-        an earlier guide's has `duplicate_of` set to that earlier guide's id;
-        a warning is logged when there are any.
+        an earlier guide's has `duplicate_of` set to that earlier guide's
+        alias; a warning is logged when there are any.
 
     Raises
     ------
     ValueError
-        If the table has no rows; a column is missing; an id or a sequence is
-        missing; an id is empty or holds a tab or a line break; ids repeat; a
-        sequence, once stripped and uppercased, holds a character other than
-        A, C, G and T; or a sequence is shorter than `spacer_length`.
+        If the table has no rows; a column is missing; an alias or a sequence
+        is missing; an alias is empty or holds a tab or a line break; aliases
+        repeat; a sequence, once stripped and uppercased, holds a character
+        other than A, C, G and T; or a sequence is shorter than
+        `spacer_length`.
     """
+    pam = validate_pams([pam])[0]
     if (
         isinstance(spacer_length, bool)
         or not isinstance(spacer_length, int)
@@ -130,39 +155,41 @@ def read_guides(
     if table.empty:
         raise ValueError(f"No guides in {origin}.")
 
-    raw_ids = _column(table, id_col, "id_col", origin)
+    raw_aliases = _column(table, id_col, "id_col", origin)
     raw_sequences = _column(table, spacer_col, "spacer_col", origin)
-    _check_present(raw_ids, "guide id", origin)
+    _check_present(raw_aliases, "guide alias", origin)
     _check_present(raw_sequences, "guide sequence", origin)
 
-    ids = [str(value) for value in raw_ids]
+    ids = [str(value) for value in raw_aliases]
     sequences = [str(value).strip().upper() for value in raw_sequences]
 
-    empty = [str(row + 1) for row, guide_id in enumerate(ids) if guide_id == ""]
+    empty = [str(row + 1) for row, alias in enumerate(ids) if alias == ""]
     if empty:
         raise ValueError(
-            f"Guide ids must not be empty in {origin}: data rows "
+            f"Guide aliases must not be empty in {origin}: data rows "
             f"{_listing(empty)} (counted from 1)."
         )
 
-    unsafe = [repr(guide_id) for guide_id in ids if _TABLE_BREAKS & set(guide_id)]
+    unsafe = [repr(alias) for alias in ids if _TABLE_BREAKS & set(alias)]
     if unsafe:
         raise ValueError(
-            f"Guide ids must not hold tabs or line breaks in {origin}: "
+            f"Guide aliases must not hold tabs or line breaks in {origin}: "
             f"{_listing(unsafe)}."
         )
 
     repeated = [
-        f"{guide_id!r} ({count} times)"
-        for guide_id, count in Counter(ids).items()
+        f"{alias!r} ({count} times)"
+        for alias, count in Counter(ids).items()
         if count > 1
     ]
     if repeated:
-        raise ValueError(f"Guide ids must be unique in {origin}: {_listing(repeated)}.")
+        raise ValueError(
+            f"Guide aliases must be unique in {origin}: {_listing(repeated)}."
+        )
 
     invalid = [
-        f"{guide_id!r} ({''.join(sorted(set(sequence) - _ACGT))!r})"
-        for guide_id, sequence in zip(ids, sequences, strict=True)
+        f"{alias!r} ({''.join(sorted(set(sequence) - _ACGT))!r})"
+        for alias, sequence in zip(ids, sequences, strict=True)
         if not set(sequence) <= _ACGT
     ]
     if invalid:
@@ -172,8 +199,8 @@ def read_guides(
         )
 
     short = [
-        f"{guide_id!r} ({len(sequence)} bases)"
-        for guide_id, sequence in zip(ids, sequences, strict=True)
+        f"{alias!r} ({len(sequence)} bases)"
+        for alias, sequence in zip(ids, sequences, strict=True)
         if len(sequence) < spacer_length
     ]
     if short:
@@ -182,119 +209,39 @@ def read_guides(
             f"{origin}: {_listing(short)}."
         )
 
-    first_by_spacer: dict[str, str] = {}
+    first_by_id: dict[str, str] = {}
     guides = []
-    for guide_id, sequence in zip(ids, sequences, strict=True):
-        spacer = sequence[-spacer_length:]
-        first = first_by_spacer.setdefault(spacer, guide_id)
+    for alias, sequence in zip(ids, sequences, strict=True):
+        aligned = "G" + sequence if add_leading_g else sequence
+        guide_id = aligned + pam
+        first = first_by_id.setdefault(guide_id, alias)
         guides.append(
             Guide(
                 guide_id=guide_id,
+                alias=alias,
                 input_sequence=sequence,
-                spacer=spacer,
-                leading_g=add_leading_g and not spacer.startswith("G"),
-                duplicate_of=None if first == guide_id else first,
+                aligned_sequence=aligned,
+                spacer=aligned[-spacer_length:],
+                n_extra=len(aligned) - spacer_length,
+                duplicate_of=None if first == alias else first,
             )
         )
 
     duplicates = [
-        f"{guide.guide_id!r} (same spacer as {guide.duplicate_of!r})"
+        f"{guide.alias!r} (same sequence as {guide.duplicate_of!r})"
         for guide in guides
         if guide.duplicate_of is not None
     ]
     if duplicates:
         logger.warning(
-            "%d guides in %s share their spacer with an earlier guide; each "
-            "spacer is aligned once and its results are copied to every id "
-            "(see duplicate_of): %s",
+            "%d entries in %s repeat an earlier entry's sequence under another "
+            "name; the sequence is aligned once and its results are copied to "
+            "every entry: %s",
             len(duplicates),
             origin,
             _listing(duplicates),
         )
     return guides
-
-
-def write_spacer_reads(guides: Sequence[Guide], path: str | os.PathLike[str]) -> int:
-    """Write the orientation-check reads: one bare spacer per distinct spacer.
-
-    Parameters
-    ----------
-    guides
-        The library, as returned by `read_guides`.
-    path
-        The FASTQ to write. A path ending in ``.gz`` is gzip-compressed.
-
-    Returns
-    -------
-    int
-        The number of reads written.
-
-    Notes
-    -----
-    Each guide without `duplicate_of` gives one read: its name is the guide's
-    row, its sequence the spacer (no PAM, no added G), and every quality is
-    ``I``.
-    """
-    n_reads = 0
-    with _open_fastq(path) as handle:
-        for row, guide in enumerate(guides):
-            if guide.duplicate_of is None:
-                _write_read(handle, str(row), guide.spacer)
-                n_reads += 1
-    return n_reads
-
-
-def write_site_reads(
-    guides: Sequence[Guide],
-    path: str | os.PathLike[str],
-    *,
-    pams: Iterable[str],
-    leading_g: bool,
-) -> int:
-    """Write the site-search reads: one read per guide and PAM.
-
-    Parameters
-    ----------
-    guides
-        The library, as returned by `read_guides`.
-    path
-        The FASTQ to write. A path ending in ``.gz`` is gzip-compressed.
-    pams
-        The PAM patterns, primary first, as IUPAC codes (for example
-        ``["NGG", "NAG", "NGA"]``). They must share one length.
-    leading_g
-        Write the guides whose `Guide.leading_g` is this value: True for the
-        reads that carry an extra 5' G, False for those that do not.
-
-    Returns
-    -------
-    int
-        The number of reads written.
-
-    Raises
-    ------
-    ValueError
-        If the PAM patterns fail `validate_pams`.
-
-    Notes
-    -----
-    Only guides without `duplicate_of` are written. A guide's reads are
-    consecutive, one per PAM in the order given. Each read is named
-    ``<row>:<pam>`` and its sequence is ``G`` (when `leading_g` is True), the
-    spacer, then the PAM pattern; the PAM is uppercased in both, and
-    otherwise written as given, IUPAC codes included. Every quality is ``I``.
-    """
-    patterns = validate_pams(pams)
-    prefix = "G" if leading_g else ""
-    n_reads = 0
-    with _open_fastq(path) as handle:
-        for row, guide in enumerate(guides):
-            if guide.duplicate_of is not None or guide.leading_g != leading_g:
-                continue
-            for pam in patterns:
-                _write_read(handle, f"{row}:{pam}", f"{prefix}{guide.spacer}{pam}")
-                n_reads += 1
-    return n_reads
 
 
 def _column(
@@ -331,18 +278,3 @@ def _listing(items: Sequence[str]) -> str:
     if len(items) > _MAX_LISTED:
         shown += f", and {len(items) - _MAX_LISTED} more"
     return shown
-
-
-def _open_fastq(path: str | os.PathLike[str]) -> TextIO:
-    """Open a FASTQ for writing; gzip-compressed when the path ends in .gz."""
-    path = Path(path)
-    if path.suffix == ".gz":
-        return io.TextIOWrapper(
-            gzip.GzipFile(path, mode="wb", mtime=0), encoding="ascii", newline="\n"
-        )
-    return path.open("w", encoding="ascii", newline="\n")
-
-
-def _write_read(handle: TextIO, name: str, sequence: str) -> None:
-    """Write one FASTQ record with a constant quality."""
-    handle.write(f"@{name}\n{sequence}\n+\n{_QUALITY * len(sequence)}\n")
