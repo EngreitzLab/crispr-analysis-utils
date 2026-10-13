@@ -18,6 +18,11 @@ names, such as `guide_alignment.run`. Module by module:
 - [`summary`](guide-alignment-summary.md): the classes, and the output tables.
 - [`iupac`](guide-alignment-iupac.md): IUPAC codes and PAM patterns.
 
+## Accession
+
+- [`accession`](accession.md): accession ids for SpCas9 guides, encoded
+  from the guide's own sequence.
+
 ## Normalization
 
 - [`counts_per_million`](counts-per-million.md)
