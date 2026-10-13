@@ -28,6 +28,7 @@ COVERAGE = {
     "cau-guide-alignment": ("guide_alignment",),
     "cau-guide-annotation": ("guide_annotation",),
     "cau-element-mapping": ("element_mapping",),
+    "cau-igvf-export": ("igvf_export",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.

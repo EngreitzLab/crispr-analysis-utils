@@ -9,6 +9,7 @@
 | `cau-accession` | `cau.accession`: accession ids for SpCas9 guides, encoded from the guide's own sequence |
 | `cau-normalization` | `cau.counts_per_million` |
 | `cau-guide-alignment` | `cau.guide_alignment` and the `cau guide-alignment` command: finding every guide's genomic site, and reading the outputs |
+| `cau-igvf-export` | `cau.igvf_export` and the `cau igvf-export` command: writing a guide design in the IGVF per-guide metadata format |
 | `cau-element-mapping` | `cau.element_mapping` and the `cau element-mapping` command: mapping guides to a screen's elements, and checking a design's control sets |
 | `cau-guide-annotation` | `cau.guide_annotation` and the `cau guide-annotation` command: building the GENCODE store, placing sites in genes, and reading the output |
 
