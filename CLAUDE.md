@@ -51,6 +51,9 @@ per platform serves every supported Python rather than one per version.
     - `element_mapping.py` -- which element of a screen each guide tests, and
                              which guides are controls. One module, no
                              package: it is overlap and bookkeeping.
+    - `igvf_export.py`    -- the guide design in the IGVF per-guide metadata
+                             format, for submission or for the CRISPR
+                             Perturb-seq pipeline.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
     - `_files.py`         -- checksums, gzip sniffing, atomic JSON. Shared by
                              both pipelines.
@@ -238,6 +241,23 @@ and narrowing it would buy nothing.
   `mkdocs<2`, and that cap matters: MkDocs 2.0, in development, is a rewrite
   without plugins. The successor, Zensical, is still alpha; moving to it is a
   separate change.
+- **`igvf_export` decides what a guide targets from the genome**, never from
+  the design's label for the element, with one exception:
+    - a validated enhancer keeps its label, since that an element regulates a
+      particular gene is experimental knowledge no annotation supplies;
+    - everything else follows the format's own wording: within 2 kb of a
+      protein-coding TSS is a promoter, then exon, then intron, then
+      `distal element`, which the format defines as lying more than 2 kb from
+      any TSS;
+    - `type` has to agree with `genomic_element`: `positive control` means a
+      known measurable effect, so a row claiming it while the element is an
+      exon contradicts itself;
+    - `guide_id` must be unique, so a guide inside two overlapping elements
+      gets one row, for the element sharing the most bases with its
+      protospacer. `putative_target_genes` keeps every gene, so a
+      bidirectional promoter loses neither;
+    - `pam` is the genome's own bases. A file with `NGG` in every row has not
+      reported a PAM, and a released IGVF file does exactly that.
 - **`element_mapping` is where a design's own labels get tested**, so
   disagreement is the output, not a bug:
     - the classes are decided per site, not per guide, because a guide whose

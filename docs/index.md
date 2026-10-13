@@ -7,6 +7,7 @@ screens, imported as `import crispr_analysis_utils as cau`.
 - [Guide alignment](guide-alignment.md): find every guide's genomic site.
 - [Gene annotation](guide-annotation.md): place those sites in genes.
 - [Element mapping](element-mapping.md): map guides to the elements a screen targets.
+- [IGVF export](igvf-export.md): write the design in the IGVF per-guide format.
 - [Agents and skills](agents-and-skills.md): use the package from Claude Code.
 - [API reference](reference/index.md): every public function, from its
   docstring.
