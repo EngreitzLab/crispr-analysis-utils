@@ -254,6 +254,41 @@ def test_the_line_is_the_threshold_and_the_colour_changes_at_it():
     assert f"{high:,.2f}" in caption
 
 
+def test_every_line_is_labelled_with_the_rule_and_the_value_it_drew():
+    from crispr_analysis_utils.qc import mad_bounds, metric_distributions
+
+    rng = np.random.default_rng(0)
+    values = np.r_[rng.normal(1.0, 0.1, 50), 9.0]
+    figure, _, _ = metric_distributions(
+        pd.DataFrame({"pct_counts_mito": values}), nmads=3.0, bins=4
+    )
+
+    _, high = mad_bounds(values, nmads=3.0, side="upper")
+    labels = [t.get_text() for t in figure.axes[0].texts]
+    assert labels == [f"3 MAD  {high:.3g}"]
+
+
+def test_the_panel_says_how_many_it_put_beyond_the_band():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame({"pct_counts_mito": np.r_[rng.normal(1.0, 0.1, 50), 9.0, 9.1]})
+    figure, numbers, _ = metric_distributions(frame, bins=4)
+
+    assert figure.axes[0].get_title(loc="right") == "2 of 52 beyond"
+    assert int(numbers["n_removed"].sum()) == 2
+
+
+def test_a_panel_with_one_layer_carries_no_legend_naming_it():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    # Nothing is beyond the band, so a legend would name only the blue.
+    figure, _, _ = metric_distributions(
+        pd.DataFrame({"pct_counts_mito": [1.0, 1.1, 1.2, 1.3]}), bins=4
+    )
+    assert all(axis.get_legend() is None for axis in figure.axes)
+
+
 def test_a_metric_with_no_spread_loses_its_threshold_not_the_whole_figure():
     from crispr_analysis_utils.qc import metric_distributions
 
@@ -263,6 +298,7 @@ def test_a_metric_with_no_spread_loses_its_threshold_not_the_whole_figure():
     figure, numbers, caption = metric_distributions(frame, bins=4)
 
     assert len(figure.axes) >= 2
+    assert figure.axes[0].get_title(loc="right") == "no threshold"
     flat = numbers[numbers["metric"] == "pct_counts_mito"]
     assert not np.isfinite(flat["threshold_high"]).any()
     assert "pct_counts_mito" in caption.split("No threshold is drawn for")[1]

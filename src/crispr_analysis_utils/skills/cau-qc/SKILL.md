@@ -109,6 +109,10 @@ scanpy's plotting.
   (`qc.KEPT`) within the band, grey (`qc.REMOVED`) beyond it. The line and
   the cut are one computation, so the figure cannot disagree with the
   table.
+- **Each line is labelled with the rule and the value it drew**, and each
+  panel is titled with how many cells it put beyond the band. A cut that
+  removes a handful leaves no grey tall enough to see, so without the count
+  a one-colour panel looks like a panel that failed to say anything.
 - **Counts are two-sided and go on a log axis**, fractions are upper-tail
   only and linear (`LOG_METRICS`, overridable with `sides`).
 - **The grey bars do not sum to the cells a filter drops.** Each panel

@@ -327,6 +327,11 @@ def mad_bounds(
     )
 
 
+def _label(value: float) -> str:
+    """A number short enough to sit on a threshold line."""
+    return f"{value:,.0f}" if abs(value) >= 100 else f"{value:.3g}"
+
+
 KEPT = OKABE_ITO[4]
 """Blue, for what a threshold keeps: the cells the analysis goes on with."""
 
@@ -446,9 +451,34 @@ def metric_distributions(
                 color=REMOVED,
                 label="removed",
             )
-        for threshold in (low, high):
-            if np.isfinite(threshold):
-                axis.axvline(threshold, color="black", linewidth=1.0, linestyle="--")
+        for threshold, upper in ((low, False), (high, True)):
+            if not np.isfinite(threshold):
+                continue
+            axis.axvline(threshold, color="black", linewidth=1.0, linestyle="--")
+            # A line nobody can read is a line nobody can check. The label
+            # sits inside the band, so it never leaves the panel.
+            axis.annotate(
+                f"{nmads:g} MAD  {_label(threshold)}",
+                xy=(threshold, 1.0),
+                xycoords=axis.get_xaxis_transform(),
+                xytext=(3 if upper else -3, -3),
+                textcoords="offset points",
+                rotation=90,
+                ha="left" if upper else "right",
+                va="top",
+                fontsize="x-small",
+                clip_on=True,
+            )
+        # The panel's own result, since a cut this small leaves no grey
+        # tall enough to see: with no count, one colour says nothing.
+        axis.set_title(
+            f"{int((~within).sum()):,} of {len(values):,} beyond"
+            if metric not in unthresholded
+            else "no threshold",
+            loc="right",
+            fontsize="small",
+            color="0.35",
+        )
         axis.set(xlabel=metric, ylabel="cells")
         axis.grid(which="major", color="0.85", linewidth=0.6)
         axis.set_axisbelow(True)
@@ -469,7 +499,6 @@ def metric_distributions(
 
     for axis in axes.ravel()[len(metrics) :]:
         axis.set_visible(False)
-    axes.ravel()[0].legend(frameon=False, fontsize="small")
     figure.tight_layout()
 
     numbers = pd.concat(records, ignore_index=True)
