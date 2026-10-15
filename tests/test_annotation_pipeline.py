@@ -202,7 +202,8 @@ def test_the_record_says_the_run_finished_and_what_it_found(store, tmp_path):
     assert state["complete"] is True
     assert state["error"] is None
     assert state["counts"]["rows"] == len(result.annotated)
-    assert state["counts"]["location"] == {"exon": 2, "intron": 1, "intergenic": 1}
+    assert state["counts"]["location"] == {"genic": 3, "intergenic": 1}
+    assert state["counts"]["feature"] == {"exon": 2, "intron": 1}
     assert state["counts"]["sites"] == 3
     assert state["counts"]["genes"] == 2
 
@@ -214,7 +215,11 @@ def test_the_record_carries_the_inputs_and_the_stores_provenance(store, tmp_path
     assert state["inputs"]["alignment"] == str(alignment)
     assert len(state["inputs"]["alignment_md5"]) == 32
     assert state["store"]["gene_types"] == ["protein_coding"]
-    assert state["parameters"] == {"promoters": None, "promoter_window": 1000}
+    assert state["parameters"] == {
+        "promoters": None,
+        "promoter_window": 1000,
+        "distance_from": "midpoint",
+    }
     assert set(state["seconds"]) >= {"store", "sites", "promoters", "annotate", "total"}
 
 
@@ -229,8 +234,10 @@ def test_a_store_handed_over_in_memory_is_recorded_as_such(store, tmp_path):
 
 def test_without_a_promoter_file_the_store_supplies_the_tss(store, tmp_path):
     run(write_alignment(tmp_path / "aln.tsv"), store, tmp_path / "out")
+    # One per transcript now, not one per gene. Transcripts sharing a start
+    # stay as separate sites, which is what lets promoter_enst name them all.
     assert (
-        "4 TSS from the store"
+        "9 TSS from the store"
         in (tmp_path / "out" / "logs" / "guide_annotation.log").read_text()
     )
 
@@ -246,7 +253,11 @@ def test_a_promoter_file_is_read_and_recorded(store, tmp_path):
         promoter_window=50,
     )
     state = record_of(tmp_path / "out")
-    assert state["parameters"] == {"promoters": str(bed), "promoter_window": 50}
+    assert state["parameters"] == {
+        "promoters": str(bed),
+        "promoter_window": 50,
+        "distance_from": "midpoint",
+    }
     assert len(state["inputs"]["promoters_md5"]) == 32
     # Every distance is now measured from the one TSS the file gives.
     assert set(result.annotated["nearest_tss_gene"]) == {"XXX"}
@@ -306,6 +317,7 @@ def test_a_column_annotate_sites_never_made_is_written_empty(tmp_path):
             "end": [30],
             "strand": ["+"],
             "location": ["intergenic"],
+            "feature": [""],
             "region": [""],
             "sense": [""],
             "ensg": [None],
@@ -424,7 +436,8 @@ def test_build_db_then_run_from_the_command_line(tmp_path, capsys):
 
     assert status == 0
     assert capsys.readouterr().out.splitlines() == [
-        "4 rows for 3 sites in 2 genes: 2 exon, 1 intron, 1 intergenic, 0 in a promoter",
+        "4 rows for 3 sites in 2 genes: 3 genic (2 exon, 1 intron),"
+        " 1 intergenic, 0 in a promoter",
         "Outputs in out",
     ]
     assert matches(written(tmp_path / "out"), EXPECTED_FILES)

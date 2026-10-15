@@ -23,7 +23,7 @@ site and no element.
 | `element_id` | The element this site overlaps. Empty unless targeting. |
 | `element_category` | The elements BED's fifth column, when it has one. |
 | `target_class` | `targeting`, `safe_targeting` or `non_targeting`. |
-| `distance_to_tss` | Signed bases from the cut site to the nearest protein-coding TSS, carried from the annotation. |
+| `distance_to_tss` | Signed bases from the target site to the nearest protein-coding TSS, carried from the annotation. |
 
 ### The classes are per site
 

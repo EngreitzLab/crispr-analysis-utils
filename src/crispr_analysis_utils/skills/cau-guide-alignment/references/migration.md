@@ -28,7 +28,7 @@ coordinates at contig ends — cannot arise.
 | --- | --- |
 | `guides.tsv` and `sites.tsv` | one `guide_genome_annotation.tsv` |
 | `guides.bed` | `guide_mapping.bed` |
-| `cut_sites.bed` | gone; `cut_site` is a column |
+| `target_sites.bed` | gone; `target_site` is a column |
 | `orientation.tsv` | gone; its verdict and site are columns |
 | `summary.tsv` | `qc.tsv`, counts only |
 | `run.json` | `run_metadata/guide_alignment_<timestamp>.json` |
@@ -41,9 +41,9 @@ Everything now lives under `alignments/`, `run_metadata/` and `logs/`.
 | --- | --- |
 | `guide_id` (the lab's name) | `alias` |
 | — | `guide_id` is now the aligned sequence |
-| `targeting` | gone; use `n_cut_sites` |
+| `targeting` | gone; use `n_target_sites` |
 | `alignment_class` | `site_class`, and `off_target_only` no longer exists |
-| `n_ngg_<m>mm` | `n_cut_sites`, exact matches only |
+| `n_ngg_<m>mm` | `n_target_sites`, exact matches only |
 | `min_ngg_mismatches` | gone |
 | `leading_g` | gone; compare the lengths of `guide_id` and `spacer` |
 | `pam_class` | `pam_matches`, `TRUE`/`FALSE` |

@@ -61,14 +61,14 @@ COLUMN_NAMES = [
     "spacer",
     "site_class",
     "n_matches",
-    "n_cut_sites",
+    "n_target_sites",
     "orientation",
     "orientation_evidence",
     "chr",
     "start",
     "end",
     "strand",
-    "cut_site",
+    "target_site",
     "pam_matches",
     "mapped_sequence",
 ]
@@ -196,7 +196,7 @@ def test_classes_counts_and_coordinates(guides, sites):
         "dup": "unique",
     }
     uniq = by_alias["uniq"]
-    # The PAM-less match counts as a match, but neither as a cut site nor
+    # The PAM-less match counts as a match, but neither as a target site nor
     # towards multi.
     assert (uniq.n_matches, uniq.n_sites) == (2, (1, 0, 0, 0))
     assert (uniq.guide_chr, uniq.guide_start, uniq.guide_end, uniq.strand) == (
@@ -205,15 +205,19 @@ def test_classes_counts_and_coordinates(guides, sites):
         120,
         "+",
     )
-    assert (uniq.site_pam, uniq.cut_site, uniq.has_perfect_site) == ("TGG", 117, True)
+    assert (uniq.site_pam, uniq.target_site, uniq.has_perfect_site) == (
+        "TGG",
+        117,
+        True,
+    )
     assert (uniq.mapped_sequence, uniq.input_sequence) == (SPACER_A + "TGG", SPACER_A)
-    assert by_alias["uniq_minus"].cut_site == 203
+    assert by_alias["uniq_minus"].target_site == 203
     assert by_alias["uniq_minus"].site_pam == "AGG"
     multi = by_alias["multi"]
     assert (
         multi.has_perfect_site,
         multi.guide_chr,
-        multi.cut_site,
+        multi.target_site,
         multi.site_pam,
         multi.mapped_sequence,
     ) == (True, None, None, None, None)
@@ -281,7 +285,7 @@ def test_a_duplicate_gets_the_first_guide_s_sites_and_verdict(guides, sites):
     assert guides[6].duplicate_of == "uniq"
     assert guides[0].duplicate_of is None
     assert dup.orientation == uniq.orientation == "forward"
-    for field in ("site_class", "guide_start", "cut_site", "n_sites", "site_pam"):
+    for field in ("site_class", "guide_start", "target_site", "n_sites", "site_pam"):
         assert getattr(dup, field) == getattr(uniq, field)
 
 
@@ -363,7 +367,7 @@ def test_guides_tsv(tmp_path, guides, sites):
         ("700", "-"),
     ]
     assert {row["site_class"] for row in multi} == {"multi"}
-    assert {row["n_cut_sites"] for row in multi} == {"2"}
+    assert {row["n_target_sites"] for row in multi} == {"2"}
 
 
 def test_a_protospacer_matching_twice_with_one_pam_is_unique(tmp_path, guides, sites):
@@ -375,7 +379,7 @@ def test_a_protospacer_matching_twice_with_one_pam_is_unique(tmp_path, guides, s
     assert (uniq.n_matches, uniq.n_sites[0], uniq.site_class) == (2, 1, "unique")
     rows = rows_by_alias(table)["uniq"]
     assert [
-        (row["n_matches"], row["n_cut_sites"], row["site_class"]) for row in rows
+        (row["n_matches"], row["n_target_sites"], row["site_class"]) for row in rows
     ] == [("2", "1", "unique")] * 2
     assert [row["pam_matches"] for row in rows] == ["TRUE", "FALSE"]
 
@@ -388,7 +392,7 @@ def test_two_pam_bearing_matches_are_multi_with_a_bed_row_each(tmp_path, guides,
     multi = summaries[2]
     assert (multi.site_class, multi.n_sites[0], multi.n_matches) == ("multi", 2, 2)
     rows = rows_by_alias(table)["multi"]
-    assert [row["n_cut_sites"] for row in rows] == ["2", "2"]
+    assert [row["n_target_sites"] for row in rows] == ["2", "2"]
     named = [row for row in bed if row[3] == SPACER_G]
     assert named == [
         ["chr1", "600", "620", SPACER_G, "0", "+"],
@@ -405,7 +409,7 @@ def test_a_guide_matching_nowhere_gets_one_row_with_empty_site_columns(
 
     (row,) = rows_by_alias(table)["nothing"]
     assert [row[name] for name in SITE_COLUMN_NAMES] == [""] * 7
-    assert (row["n_matches"], row["n_cut_sites"]) == ("0", "0")
+    assert (row["n_matches"], row["n_target_sites"]) == ("0", "0")
     assert (row["site_class"], row["orientation"]) == ("no_site", "no_match")
     assert row["spacer"] == SPACER_NOTHING
     assert not [line for line in bed if line[3] == SPACER_NOTHING]
@@ -476,7 +480,7 @@ def test_guides_tsv_rejects_summaries_that_are_not_one_per_guide(
         write_guides_tsv(tmp_path / "guides.tsv", guides, summaries[:-1], sites)
 
 
-def test_the_cut_site_column_is_three_bases_from_the_pam(tmp_path, guides, sites):
+def test_the_target_site_column_is_three_bases_from_the_pam(tmp_path, guides, sites):
     # The boundary is end - 3 on + and start + 3 on -, counted from the PAM
     # either way.
     summaries = summarized(guides, sites)
@@ -485,12 +489,15 @@ def test_the_cut_site_column_is_three_bases_from_the_pam(tmp_path, guides, sites
     rows = rows_by_alias(table)
 
     assert by_alias["uniq"].strand == "+"
-    assert by_alias["uniq"].guide_end - by_alias["uniq"].cut_site == 3
+    assert by_alias["uniq"].guide_end - by_alias["uniq"].target_site == 3
     assert by_alias["uniq_minus"].strand == "-"
-    assert by_alias["uniq_minus"].cut_site - by_alias["uniq_minus"].guide_start == 3
-    assert (by_alias["uniq"].cut_site, by_alias["uniq_minus"].cut_site) == (117, 203)
-    assert rows["uniq"][0]["cut_site"] == "117"
-    assert rows["uniq_minus"][0]["cut_site"] == "203"
+    assert by_alias["uniq_minus"].target_site - by_alias["uniq_minus"].guide_start == 3
+    assert (by_alias["uniq"].target_site, by_alias["uniq_minus"].target_site) == (
+        117,
+        203,
+    )
+    assert rows["uniq"][0]["target_site"] == "117"
+    assert rows["uniq_minus"][0]["target_site"] == "203"
 
 
 def test_qc_tsv_counts_sum_to_the_entries(tmp_path, guides, sites):
@@ -545,7 +552,7 @@ def test_qc_tsv_rejects_a_clashing_section(tmp_path, guides, sites):
         )
 
 
-def test_coordinates_and_cut_sites_from_a_hand_built_reference(tmp_path):
+def test_coordinates_and_target_sites_from_a_hand_built_reference(tmp_path):
     guides, contig, fasta = planted(tmp_path)
     assert [guide.extra_5p for guide in guides] == [True] * 4
 
@@ -556,7 +563,7 @@ def test_coordinates_and_cut_sites_from_a_hand_built_reference(tmp_path):
     # - : PAM [150, 153), protospacer [153, 173), b = 156.
     # + with the added G on a C: protospacer [201, 221), b = 218.
     # + with the added G on a G: protospacer [235, 255), b = 252.
-    assert [(s.guide_start, s.guide_end, s.cut_site) for s in summaries] == [
+    assert [(s.guide_start, s.guide_end, s.target_site) for s in summaries] == [
         (100, 120, 117),
         (153, 173, 156),
         (201, 221, 218),
@@ -578,7 +585,10 @@ def test_coordinates_and_cut_sites_from_a_hand_built_reference(tmp_path):
 
     table, bed = write_tables(tmp_path, guides, summaries, scan.sites)
     rows = rows_by_alias(table)
-    assert [rows[alias][0]["cut_site"] for alias in ("plus", "minus")] == ["117", "156"]
+    assert [rows[alias][0]["target_site"] for alias in ("plus", "minus")] == [
+        "117",
+        "156",
+    ]
     assert sorted(line[1] for line in bed) == ["100", "153", "201", "235"]
 
 

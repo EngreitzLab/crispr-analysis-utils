@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 
+from ..guide_annotation.annotate import DISTANCE_FROM, MIDPOINT
 from . import CommandError
 
 
@@ -75,6 +76,17 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=1000,
         help="How far either side of a TSS counts as its promoter (default: 1000).",
     )
+    parser.add_argument(
+        "--distance-from",
+        choices=DISTANCE_FROM,
+        default=MIDPOINT,
+        help=(
+            "Where distance_to_tss and distance_to_gene_start are measured"
+            " from. The protospacer midpoint by default, since dCas9 occupies"
+            " the whole protospacer; target_site is the boundary 3 bases 5'"
+            " of the PAM, where a nuclease cuts."
+        ),
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -111,7 +123,7 @@ def _annotate(args: argparse.Namespace) -> int:
     """Annotate the aligned sites."""
     from ..guide_annotation import AnnotationError, PromoterError, StoreError
     from ..guide_annotation import run as annotate
-    from ..guide_annotation.annotate import LOCATIONS
+    from ..guide_annotation.annotate import FEATURES, GENIC, INTERGENIC
 
     try:
         result = annotate(
@@ -120,6 +132,7 @@ def _annotate(args: argparse.Namespace) -> int:
             args.outdir,
             promoters=args.promoters,
             promoter_window=args.promoter_window,
+            distance_from=args.distance_from,
         )
     except (
         FileNotFoundError,
@@ -132,9 +145,13 @@ def _annotate(args: argparse.Namespace) -> int:
         raise CommandError(str(error)) from error
 
     found = result.metadata["counts"]
+    # Both axes, because one no longer implies the other: genic says a gene is
+    # there, exon and intron say where inside it.
+    inside = ", ".join(f"{found['feature'][name]} {name}" for name in FEATURES)
     print(
         f"{found['rows']} rows for {found['sites']} sites in {found['genes']} genes: "
-        + ", ".join(f"{found['location'][name]} {name}" for name in LOCATIONS)
+        + f"{found['location'][GENIC]} genic ({inside})"
+        + f", {found['location'][INTERGENIC]} intergenic"
         + f", {found['promoter']} in a promoter"
     )
     print(f"Outputs in {result.outdir}")

@@ -59,7 +59,7 @@ COLUMNS = {
         " nowhere in the genome."
     ),
     "distance_to_tss": (
-        "Bases from the cut site to the nearest protein-coding TSS, signed in"
+        "Bases from the target site to the nearest protein-coding TSS, signed in"
         " that gene's orientation. How far a safe-targeting site has to be to"
         " be safe depends on the screen, so threshold this yourself rather"
         " than trusting the class alone. From guide_gene_annotation.tsv, so"

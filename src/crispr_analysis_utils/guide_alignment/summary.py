@@ -6,9 +6,10 @@ not is still written, with ``pam_matches`` FALSE, and counted nowhere. An entry
 that duplicates an earlier one's sequence gets that entry's sites.
 
 Coordinates are 0-based and half-open on the reference's forward strand, and
-the protospacer excludes the PAM and any base 5' of it. The cut site is a
-boundary ``b``: the cut lies between ``b - 1`` and ``b``, 3 bases 5' of the PAM
-(``end - 3`` on ``+``, ``start + 3`` on ``-``). In the tables, a value that
+the protospacer excludes the PAM and any base 5' of it. The target site is a
+boundary ``b`` 3 bases 5' of the PAM (``end - 3`` on ``+``, ``start + 3`` on
+``-``). A nuclease cuts between ``b - 1`` and ``b``; a dCas9 only sits there,
+so the name says where the site is, not what happens to it. In the tables, a value that
 does not apply is an empty field, and booleans are ``TRUE`` or ``FALSE``.
 """
 
@@ -38,8 +39,8 @@ NO_SITE = "no_site"
 CLASSES = (UNIQUE, MULTI, NO_SITE)
 """Every site class, in report order."""
 
-CUT_OFFSET = 3
-"""Bases between the cut and the PAM."""
+PAM_OFFSET = 3
+"""Bases between the target site and the PAM."""
 
 
 _QC_SECTIONS = ("guides", "class", "orientation")
@@ -73,8 +74,8 @@ class GuideSummary:
         The unique site's protospacer end; None unless unique.
     strand
         The unique site's strand; None unless unique.
-    cut_site
-        The unique site's cut boundary (see the module description); None
+    target_site
+        The unique site's target boundary (see the module description); None
         unless unique.
     site_class
         ``unique``, ``multi`` or ``no_site``.
@@ -92,7 +93,7 @@ class GuideSummary:
     n_matches
         Every exact match of the spacer, whether or not a PAM sits beside it.
         More than one means the spacer occurs more than once in the genome,
-        which `site_class` does not say: that counts cuttable sites only.
+        which `site_class` does not say: that counts PAM-bearing sites only.
     n_sites
         Sites with a matching PAM by spacer mismatches: ``n_sites[m]`` sites
         have ``m``, for ``m`` from 0 to `max_mismatches`.
@@ -110,7 +111,7 @@ class GuideSummary:
     guide_start: int | None
     guide_end: int | None
     strand: str | None
-    cut_site: int | None
+    target_site: int | None
     site_class: str
     orientation: str
     orientation_evidence: str | None
@@ -213,7 +214,7 @@ def summarize(
                 guide_start=unique.start if unique else None,
                 guide_end=unique.end if unique else None,
                 strand=unique.strand if unique else None,
-                cut_site=_cut_site(unique) if unique else None,
+                target_site=_target_site(unique) if unique else None,
                 site_class=site_class,
                 orientation=verdict,
                 orientation_evidence=(
@@ -287,12 +288,14 @@ COLUMNS = {
         "The protospacer: guide_id without the PAM pattern or any base 5' of it."
     ),
     # about the whole guide
-    "site_class": "unique, multi or no_site: how many places this guide can cut.",
+    "site_class": (
+        "unique, multi or no_site: how many PAM-bearing places this guide matches."
+    ),
     "n_matches": (
         "How many places the protospacer matches, which is how many rows"
         " this guide has below."
     ),
-    "n_cut_sites": "How many of those have a PAM, so Cas9 could cut there.",
+    "n_target_sites": "How many of those have a PAM, so Cas9 can act there.",
     "orientation": (
         "Whether the sequence reads 5' to 3': forward, reverse_complement,"
         " no_pam, no_match, or not_checked."
@@ -307,11 +310,12 @@ COLUMNS = {
     "start": "First base of the protospacer, 0-based.",
     "end": "One past its last base, so the protospacer is [start, end).",
     "strand": "Strand the protospacer reads 5' to 3' on.",
-    "cut_site": (
-        "Where Cas9 cuts: between cut_site - 1 and cut_site, 3 bases from the PAM."
+    "target_site": (
+        "Where Cas9 acts: the boundary 3 bases from the PAM. A nuclease cuts"
+        " between target_site - 1 and target_site; dCas9 binds without cutting."
     ),
     "pam_matches": (
-        "TRUE when the genomic PAM fits the pattern, so this match is cuttable."
+        "TRUE when the genomic PAM fits the pattern, so Cas9 can act here."
     ),
     "mapped_sequence": (
         "What the genome holds here, to compare against guide_id: the"
@@ -378,7 +382,7 @@ def write_guides_tsv(
 
     ``n_matches`` is not ``site_class``: it counts every place the protospacer
     occurs, while ``multi`` counts only the matches with a PAM beside them, so
-    a guide can match many places and still be cuttable at one.
+    a guide can match many places and still bear a PAM at one.
     """
     if len(summaries) != len(guides):
         raise ValueError(f"Got {len(summaries)} summaries for {len(guides)} guides.")
@@ -407,7 +411,7 @@ def write_guides_tsv(
                         site.start,
                         site.end,
                         site.strand,
-                        _cut_site(site),
+                        _target_site(site),
                         site.pam_class != NO_PAM_CLASS,
                         site.mapped_sequence,
                     ],
@@ -419,7 +423,7 @@ def write_guides_bed(
     guides: Sequence[Guide],
     sites: Mapping[int, Sequence[Site]],
 ) -> None:
-    """Write guide_mapping.bed: every site a guide could be cut at.
+    """Write guide_mapping.bed: every site a guide could act at.
 
     Parameters
     ----------
@@ -433,11 +437,11 @@ def write_guides_bed(
     Notes
     -----
     BED6 without a header, fields as in `BED_COLUMNS`, one row per site whose
-    genomic PAM matches, so a spacer that cuts in two places gets a row for
+    genomic PAM matches, so a spacer with two PAM-bearing sites gets a row for
     each. The name field is the protospacer, which is the same on every row
     of a guide that matches more than once. Sorted by contig, then position.
     A match with no PAM
-    is not somewhere anything can be cut, so it is left out;
+    is not somewhere Cas9 can act, so it is left out;
     guide_genome_annotation.tsv has them all.
     """
     # One row per distinct guide, not per entry: two entries of one sequence
@@ -564,9 +568,9 @@ def _source_rows(guides: Sequence[Guide]) -> list[int]:
     return rows
 
 
-def _cut_site(site: Site) -> int:
-    """The cut boundary of a site, `CUT_OFFSET` bases 5' of its PAM."""
-    return site.end - CUT_OFFSET if site.strand == "+" else site.start + CUT_OFFSET
+def _target_site(site: Site) -> int:
+    """The target boundary of a site, `PAM_OFFSET` bases 5' of its PAM."""
+    return site.end - PAM_OFFSET if site.strand == "+" else site.start + PAM_OFFSET
 
 
 def _open_table(path: str | os.PathLike[str], columns: Sequence[str] | None) -> TextIO:

@@ -52,21 +52,38 @@ def test_the_store_holds_the_five_features_and_their_columns(store):
     assert set(store.features["Feature"].unique()) == set(FEATURES)
 
 
-def test_only_the_asked_for_gene_types_survive(store):
-    # DDD is lncRNA, so the default protein_coding store knows nothing of it.
-    assert sorted(store.features["gene_symbol"].unique()) == [
+def test_only_the_asked_for_gene_types_are_annotated_against(store):
+    # DDD is lncRNA. It is kept, so an overlap with it can be reported, but
+    # only as a gene row: nothing of it can decide where a guide sits.
+    assert sorted(store.rows("gene")["gene_symbol"].unique()) == [
         "AAA",
         "BBB",
         "CCC",
         "EEE",
     ]
+    assert sorted(store.other_genes()["gene_symbol"].unique()) == ["DDD"]
     assert store.provenance["genes"] == 4
+    assert store.provenance["other_genes"] == 1
     assert store.contigs == {"chr1", "chr2"}
 
 
-def test_another_gene_type_keeps_what_the_default_drops(gtf, tmp_path):
+def test_a_gene_of_another_type_keeps_no_feature_but_its_own_row(store):
+    ddd = store.features[store.features["gene_symbol"] == "DDD"]
+    assert ddd["Feature"].tolist() == ["gene"]
+    # So it can never reach the exon, intron or promoter calls.
+    for feature in ("transcript", "exon", "CDS", "UTR"):
+        assert "DDD" not in set(store.rows(feature, primary=False)["gene_symbol"])
+
+
+def test_another_gene_type_swaps_which_genes_are_annotated_against(gtf, tmp_path):
     store = build_store(gtf, tmp_path / "lnc.parquet", gene_types=("lncRNA",))
-    assert sorted(store.features["gene_symbol"].unique()) == ["DDD"]
+    assert sorted(store.rows("gene")["gene_symbol"].unique()) == ["DDD"]
+    assert sorted(store.other_genes()["gene_symbol"].unique()) == [
+        "AAA",
+        "BBB",
+        "CCC",
+        "EEE",
+    ]
     assert store.provenance["gene_types"] == ["lncRNA"]
 
 
@@ -92,7 +109,9 @@ def test_the_counts_in_the_provenance_are_the_rows_kept(store):
     counts = store.provenance["counts"]
     for feature, count in counts.items():
         assert count == int((store.features["Feature"] == feature).sum())
-    assert counts == {"gene": 4, "transcript": 9, "exon": 21, "CDS": 13, "UTR": 23}
+    # Five genes, because the lncRNA keeps its one row; every other feature
+    # count is of the annotated types alone.
+    assert counts == {"gene": 5, "transcript": 9, "exon": 21, "CDS": 13, "UTR": 23}
 
 
 def test_exons_are_numbered_from_the_transcripts_own_5_prime_end(store):
@@ -272,11 +291,13 @@ def test_a_six_column_bed_is_read_with_no_gene_id(tmp_path):
         "Strand",
         "gene_symbol",
         "ensg",
+        "enst",
     ]
     assert frame["Start"].tolist() == [1000, 4499]
     assert frame["gene_symbol"].tolist() == ["AAA", "BBB"]
     assert frame["Strand"].tolist() == ["+", "-"]
     assert frame["ensg"].tolist() == ["", ""]
+    assert frame["enst"].tolist() == ["", ""]
 
 
 def test_a_leading_hash_line_is_a_header_and_not_a_site(tmp_path):
@@ -286,13 +307,25 @@ def test_a_leading_hash_line_is_a_header_and_not_a_site(tmp_path):
     assert_frame_equal(with_header, without)
 
 
-def test_a_seventh_column_is_the_gene_id_and_an_eighth_is_ignored(tmp_path):
+def test_a_seventh_column_is_the_gene_id_and_an_eighth_the_transcript(tmp_path):
     bed = write_bed(
         tmp_path / "tss8.bed",
-        [("chr1", "1000", "1001", "AAA", "0", "+", "ENSG00000000001.5", "note")],
+        [
+            (
+                "chr1",
+                "1000",
+                "1001",
+                "AAA",
+                "0",
+                "+",
+                "ENSG00000000001.5",
+                "ENST00000000011.2",
+            )
+        ],
     )
     frame = read_promoters(bed)
     assert frame["ensg"].tolist() == ["ENSG00000000001"]
+    assert frame["enst"].tolist() == ["ENST00000000011"]
     assert list(frame.columns) == [
         "Chromosome",
         "Start",
@@ -300,6 +333,7 @@ def test_a_seventh_column_is_the_gene_id_and_an_eighth_is_ignored(tmp_path):
         "Strand",
         "gene_symbol",
         "ensg",
+        "enst",
     ]
 
 
@@ -323,8 +357,17 @@ def test_too_few_columns_names_the_six_a_tss_bed_needs(tmp_path, width):
 # --- promoters from the store ---------------------------------------------
 
 
-def test_the_store_gives_one_tss_per_gene_at_the_reference_start(store):
+def test_the_store_gives_a_tss_for_every_transcript(store):
     frame = promoters_from_store(store)
+    # EEE has a second transcript starting at 5500, and a guide at that
+    # promoter is invisible to a one-site-per-gene file.
+    assert sorted(frame[frame["ensg"] == "ENSG00000000005"]["Start"]) == [5000, 5500]
+    assert len(frame) == len(store.rows("transcript"))
+    assert (frame["End"] - frame["Start"]).unique().tolist() == [1]
+
+
+def test_reference_only_gives_back_one_tss_per_gene(store):
+    frame = promoters_from_store(store, reference_only=True)
     assert dict(zip(frame["ensg"], frame["Start"], strict=True)) == TSS
     assert (frame["End"] - frame["Start"]).tolist() == [1, 1, 1, 1]
 
@@ -347,5 +390,7 @@ def test_promoters_from_the_store_carry_the_gene_columns(store):
         "Strand",
         "gene_symbol",
         "ensg",
+        "enst",
     ]
-    assert frame["gene_symbol"].tolist() == ["AAA", "BBB", "CCC", "EEE"]
+    assert sorted(set(frame["gene_symbol"])) == ["AAA", "BBB", "CCC", "EEE"]
+    assert frame["enst"].str.startswith("ENST").all()

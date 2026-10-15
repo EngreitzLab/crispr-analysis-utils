@@ -8,12 +8,21 @@ from pathlib import Path
 
 import pandas as pd
 
-from .annotate import ANTISENSE, CDS, INTERGENIC, LOCATIONS, SENSE, UTR
+from .annotate import (
+    ANTISENSE,
+    CDS,
+    FEATURES,
+    INTERGENIC,
+    LOCATIONS,
+    SENSE,
+    UTR,
+)
 
 GROUPS = (
     ("which site this row is about, and the key back to the alignment table", 5),
-    ("the gene it falls in; empty when it falls in none", 10),
-    ("the nearest protein-coding promoter", 4),
+    ("the gene it falls in; empty when it falls in none", 12),
+    ("the genes of other types it overlaps", 2),
+    ("the promoters it sits in, and the nearest one", 7),
     ("the protospacer itself", 2),
 )
 """The column groups, in order, and how many columns each has."""
@@ -41,8 +50,13 @@ COLUMNS = {
         " longest CDS. Empty unless the protospacer overlaps one of its exons."
     ),
     "location": (
-        "exon, intron or intergenic, from whether the protospacer overlaps an"
-        " exon of the reference transcript. Independent of promoter."
+        "genic when the protospacer overlaps a gene of an annotated type,"
+        " intergenic when it overlaps none. Independent of feature and"
+        " promoter: a guide can be all three at once."
+    ),
+    "feature": (
+        "exon or intron, from whether the protospacer overlaps an exon of the"
+        " reference transcript. Empty on an intergenic row."
     ),
     "exonic_any_transcript": (
         "TRUE when any transcript of this gene has an exon here, so a row"
@@ -51,26 +65,47 @@ COLUMNS = {
     "region": "CDS or UTR for an exonic row, which is what decides a frameshift.",
     "exon_number": "Which exon of the reference transcript, counting from its 5' end.",
     "cds_position": (
-        "How many coding bases precede the cut in the reference transcript,"
+        "How many coding bases precede the target site in the reference"
+        " transcript,"
         " so a small number is an early truncation."
     ),
     "cds_fraction": "cds_position as a fraction of the whole CDS, 0 to 1.",
+    "distance_to_gene_start": (
+        "Bases from the target site to this gene's annotated 5' end, signed in"
+        " the gene's orientation: negative upstream of it, positive inside."
+        " Near zero is the canonical promoter; a large positive distance in a"
+        " promoter window is an alternative one."
+    ),
     "sense": (
         "sense when the protospacer reads on the gene's own strand,"
         " antisense otherwise."
     ),
-    # the nearest promoter
+    # the genes of other types
+    "other_gene_types": (
+        "Semicolon-separated types of the genes the protospacer overlaps that"
+        " are not of an annotated type, such as lncRNA. Empty when none. A"
+        " guide here sits where a read cannot be assigned unambiguously."
+    ),
+    "other_genes": "Semicolon-separated Ensembl ids of those genes.",
+    # the promoters
     "promoter": (
         "TRUE when the protospacer falls within the promoter window of any"
         " protein-coding TSS, whichever gene it belongs to."
     ),
     "distance_to_tss": (
-        "Bases from the cut site (end - 3 on +, start + 3 on -) to the"
+        "Bases from the target site (end - 3 on +, start + 3 on -) to the"
         " nearest protein-coding TSS, signed in that gene's orientation:"
         " negative upstream, positive downstream."
     ),
     "nearest_tss_gene": "The gene whose TSS that is; not always this row's gene.",
     "nearest_tss_ensg": "That gene's Ensembl id.",
+    "promoter_enst": (
+        "Semicolon-separated transcripts whose promoter window the"
+        " protospacer overlaps. Empty when the TSS file carries no transcript"
+        " id, which a BED of six or seven columns does not."
+    ),
+    "promoter_ensg": "Semicolon-separated gene ids of those transcripts.",
+    "promoter_gene": "Semicolon-separated gene symbols of those transcripts.",
     # the protospacer
     "gc_percent": "The protospacer's GC content, as a percentage.",
     "max_polyt_run": (
@@ -103,7 +138,13 @@ def write_annotation_tsv(path: str | os.PathLike[str], annotated: pd.DataFrame) 
     frame = annotated.reindex(columns=annotation_columns())
     for column in ("promoter", "exonic_any_transcript"):
         frame[column] = frame[column].map({True: "TRUE", False: "FALSE"})
-    for column in ("exon_number", "cds_position", "distance_to_tss", "max_polyt_run"):
+    for column in (
+        "exon_number",
+        "cds_position",
+        "distance_to_tss",
+        "distance_to_gene_start",
+        "max_polyt_run",
+    ):
         frame[column] = _whole_numbers(frame[column])
     frame.to_csv(path, sep="\t", index=False, na_rep="")
 
@@ -159,6 +200,9 @@ def counts(annotated: pd.DataFrame) -> dict:
         else 0,
         "genes": int(annotated["ensg"].nunique()),
         "location": {name: int(location.get(name, 0)) for name in LOCATIONS},
+        "feature": {
+            name: int(Counter(annotated["feature"]).get(name, 0)) for name in FEATURES
+        },
         "region": {name: int(region.get(name, 0)) for name in (CDS, UTR)},
         "promoter": int(annotated["promoter"].sum()),
         "sense": {name: int(sense.get(name, 0)) for name in (SENSE, ANTISENSE)},
