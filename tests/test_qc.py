@@ -530,3 +530,20 @@ def test_a_categorical_sets_its_own_legend_order():
         marginals=False,
     )
     assert [t.get_text() for t in figure.axes[0].get_legend().get_texts()] == wanted
+
+
+def test_a_grouped_point_is_drawn_solid_and_the_background_is_not():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame({"reference_upm": [10.0, 20.0], "mean_umi": [1.0, 2.0]})
+    figure, _, _ = metric_scatter(
+        frame,
+        x="reference_upm",
+        y="mean_umi",
+        log=("reference_upm", "mean_umi"),
+        groups=[None, "Day 4"],
+        marginals=False,
+    )
+    background, named = figure.axes[0].collections
+    assert background.get_alpha() < 1.0
+    assert named.get_alpha() == 1.0

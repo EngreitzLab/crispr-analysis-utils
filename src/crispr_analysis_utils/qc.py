@@ -588,7 +588,10 @@ def metric_scatter(
         top = right = None
 
     if groups is None:
-        layers = [(kept & drawn, KEPT, "kept"), (~kept & drawn, REMOVED, "removed")]
+        layers = [
+            (kept & drawn, KEPT, "kept", alpha),
+            (~kept & drawn, REMOVED, "removed", alpha),
+        ]
     else:
         labels = pd.Series(groups, index=frame.index).reindex(measured.index)
         # Deterministic, so a label keeps its colour across figures. A
@@ -599,22 +602,30 @@ def metric_scatter(
             if isinstance(labels.dtype, pd.CategoricalDtype)
             else sorted(str(name) for name in pd.unique(labels.dropna()))
         )
-        # Unlabelled first, so the classes being compared sit on top of it.
-        layers = [(labels.isna().to_numpy() & drawn, REMOVED, None)]
+        # Unlabelled first and see-through, so the classes being compared
+        # sit on top of it. Those are drawn solid: a handful of points at
+        # the alpha that keeps a cloud of ten thousand readable is barely
+        # visible.
+        layers = [(labels.isna().to_numpy() & drawn, REMOVED, None, alpha)]
         layers += [
-            ((labels == name).to_numpy() & drawn, OKABE_ITO[i % len(OKABE_ITO)], name)
+            (
+                (labels == name).to_numpy() & drawn,
+                OKABE_ITO[i % len(OKABE_ITO)],
+                name,
+                1.0,
+            )
             for i, name in enumerate(named)
         ]
 
     # Rasterised: one point per cell stays a vector object otherwise, and a
     # channel of 10,000 cells turns into a PDF nobody can open.
-    for mask, colour, label in layers:
+    for mask, colour, label, opacity in layers:
         if mask.any():
             axis.scatter(
                 xs[mask],
                 ys[mask],
                 s=size,
-                alpha=alpha,
+                alpha=opacity,
                 linewidths=0,
                 color=colour,
                 label=label,

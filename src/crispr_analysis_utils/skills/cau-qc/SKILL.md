@@ -141,7 +141,9 @@ on its margin, and the quadrant counts in the caption.
   nothing is being filtered, calling the points below a line "removed" is
   wrong: the lines then only mark where things were expected to fall, and
   the colour is free to carry what the point is. A point with no label is
-  grey and drawn behind the rest.
+  grey, see-through and drawn behind the rest; a labelled one is solid,
+  since the alpha that keeps a cloud of ten thousand readable makes a
+  handful of points invisible.
 
 ## Does the panel dominate?
 
