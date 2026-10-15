@@ -18,6 +18,8 @@ cau element-mapping run \
     --outdir results/
 ```
 
+`--genes` is optional and fills `putative_target_genes` from the same pairs
+table `cau igvf-export` takes, so the two tables name the same genes.
 `--annotation` is optional and fills `distance_to_tss`; the classes do not
 depend on it. Nothing is written outside `--outdir`.
 

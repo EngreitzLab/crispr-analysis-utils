@@ -21,6 +21,11 @@ cau mudata-builder run \
     --outdir results/
 ```
 
+`--channel NAME=VALUE` is repeatable and says what the channel is: replicate,
+day, chip, batch. It joins every cell's `obs` and is kept in `uns['channel']`.
+`--guide-annotation` and `--element-mapping` carry those tables whole into
+`mod['guide'].uns`, since neither is one row per guide.
+
 Nothing is written outside `--outdir`.
 
 ## What it assembles

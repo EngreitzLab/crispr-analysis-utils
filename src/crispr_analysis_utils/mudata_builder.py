@@ -279,6 +279,7 @@ def build(
     reference: dict | None = None,
     covariates: pd.DataFrame | None = None,
     tables: dict[str, pd.DataFrame] | None = None,
+    metadata: dict[str, str] | None = None,
 ):
     """Assemble the two matrices into one MuData.
 
@@ -297,6 +298,11 @@ def build(
     covariates
         One row per cell, indexed by barcode. Its columns join the root
         ``obs``. Nothing is computed; whatever is given is carried.
+    metadata
+        What this channel is, as name to value: replicate, day, chip, batch,
+        whatever the screen records. One value for the whole channel, so it
+        joins every cell's ``obs`` and is also kept in ``uns`` for anything
+        reading the object rather than the table.
     tables
         Whole tables to carry in ``mod['guide'].uns``, by name. The gene
         annotation is one row per guide per site per gene, so it cannot go in
@@ -349,6 +355,9 @@ def build(
     data = md.MuData({"gene": rna, "guide": guide})
     data.uns["reference"] = dict(reference or {})
     data.uns["measurement_set"] = measurement_set
+    data.uns["channel"] = dict(metadata or {})
+    for name, value in (metadata or {}).items():
+        data.obs[name] = value
 
     if covariates is not None and not covariates.empty:
         joined = covariates.reindex(
@@ -393,6 +402,7 @@ def run(
     covariates: str | os.PathLike[str] | None = None,
     guide_annotation: str | os.PathLike[str] | None = None,
     element_mapping: str | os.PathLike[str] | None = None,
+    metadata: dict[str, str] | None = None,
 ) -> RunResult:
     """Assemble one channel's matrices into a MuData, and write it.
 
@@ -443,7 +453,10 @@ def run(
         "finished": None,
         "cau_version": __version__,
         "inputs": {},
-        "parameters": {"measurement_set": measurement_set},
+        "parameters": {
+            "measurement_set": measurement_set,
+            "channel": dict(metadata or {}),
+        },
         "counts": {},
     }
     handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
@@ -510,6 +523,7 @@ def run(
             reference=reference,
             covariates=covariate_table,
             tables=tables,
+            metadata=metadata,
         )
         data.write(outdir / RESULTS_DIR / TABLE)
 

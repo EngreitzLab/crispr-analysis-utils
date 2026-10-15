@@ -56,6 +56,11 @@ COLUMNS = {
         "The protospacer adjacent motif as the genome holds it, 5' to 3' on"
         " the targeted strand, immediately 3' of the spacer."
     ),
+    "element_location": (
+        "genic when the element overlaps a protein-coding gene, intergenic"
+        " when it does not. Independent of genomic_element, which tests"
+        " promoter and enhancer before it ever looks at the gene body."
+    ),
     "genomic_element": (
         "What the targeted element is: promoter, enhancer, distal element,"
         " exon or intron. Decided from the genome."
@@ -82,6 +87,8 @@ ENHANCER = "enhancer"
 DISTAL = "distal element"
 EXON = "exon"
 INTRON = "intron"
+GENIC = "genic"
+INTERGENIC = "intergenic"
 ELEMENTS = (PROMOTER, ENHANCER, DISTAL, EXON, INTRON)
 """The `genomic_element` values this writes. The format allows more."""
 
@@ -192,6 +199,12 @@ def classify_elements(
         for row in frame.itertuples()
     ]
     frame["nearest_ensg"] = frame["element_id"].map(nearest_gene)
+    # Whether the element itself sits in a gene. genomic_element cannot say:
+    # promoter and enhancer win on precedence before the gene body is tested,
+    # so this is computed from the same overlap and kept beside it.
+    frame["element_location"] = np.where(
+        frame["element_id"].isin(in_gene), GENIC, INTERGENIC
+    )
 
     exon_ids = _exon_ids(ranges, store, pr)
     introns = _intron_spans(ranges, store, pr)
@@ -466,6 +479,7 @@ def build_table(
     )
 
     for column, source in (
+        ("element_location", "element_location"),
         ("genomic_element", "genomic_element"),
         ("intended_target_name", "intended_target_name"),
         ("intended_target_chr", "intended_target_chr"),

@@ -24,6 +24,7 @@ site and no element.
 | `element_category` | The elements BED's fifth column, when it has one. |
 | `target_class` | `targeting`, `safe_targeting` or `non_targeting`. |
 | `distance_to_tss` | Signed bases from the target site to the nearest protein-coding TSS, carried from the annotation. |
+| `putative_target_genes` | Semicolon-separated ENSEMBL ids measured against the element, from `--genes`. The same genes the IGVF export carries. |
 
 ### The classes are per site
 

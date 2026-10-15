@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 import os
 from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -64,6 +65,12 @@ COLUMNS = {
         " be safe depends on the screen, so threshold this yourself rather"
         " than trusting the class alone. From guide_gene_annotation.tsv, so"
         " empty without it."
+    ),
+    "putative_target_genes": (
+        "Semicolon-separated ENSEMBL ids of the genes measured against this"
+        " element, from the pairs table given to --genes. The same genes the"
+        " IGVF export carries, repeated here so the mapping stands alone."
+        " Empty for an element with no measured pair, and without --genes."
     ),
 }
 """Every column of the mapping table, and what it holds."""
@@ -137,6 +144,7 @@ def map_to_elements(
     elements: pd.DataFrame,
     guides: pd.Series | None = None,
     distances: pd.DataFrame | None = None,
+    genes: Mapping[str, list[str]] | None = None,
 ) -> pd.DataFrame:
     """Map every site to the elements it overlaps, and classify it.
 
@@ -224,6 +232,15 @@ def map_to_elements(
     for column in ("start", "end"):
         frame[column] = frame[column].astype("Float64").astype("Int64")
     frame = _add_distance(frame, distances)
+    # The same lookup the IGVF export uses, so the two tables cannot disagree
+    # about which gene an element was measured against.
+    from .igvf_export import _measured_genes
+
+    frame["putative_target_genes"] = (
+        [";".join(_measured_genes(genes, eid)) or pd.NA for eid in frame["element_id"]]
+        if genes
+        else pd.NA
+    )
     return frame.reset_index(drop=True).reindex(columns=list(COLUMNS))
 
 
@@ -515,6 +532,7 @@ def run(
     outdir: str | os.PathLike[str],
     *,
     annotation: str | os.PathLike[str] | pd.DataFrame | None = None,
+    genes: str | os.PathLike[str] | None = None,
 ) -> RunResult:
     """Map a library to the elements a screen targets, and write the table.
 
@@ -599,11 +617,20 @@ def run(
         else:
             logger.warning("No annotation given, so distance_to_tss will be empty.")
 
+        measured = None
+        if genes is not None:
+            from .igvf_export import _read_genes
+
+            measured = _read_genes(genes)
+            state["inputs"]["genes"] = str(genes)
+            state["inputs"]["genes_md5"] = file_md5(genes)
+
         mapping = map_to_elements(
             sites,
             regions,
             guides=library,
             distances=distances,
+            genes=measured,
         )
         write_mapping_tsv(outdir / RESULTS_DIR / TABLE, mapping)
         write_columns_yaml(outdir / RESULTS_DIR / "guide_element_mapping_columns.yaml")

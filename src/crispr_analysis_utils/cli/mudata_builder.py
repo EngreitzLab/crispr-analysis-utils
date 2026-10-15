@@ -68,12 +68,34 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="guide_element_mapping.tsv. Carried whole in guide.uns.",
     )
     run_parser.add_argument(
+        "--channel",
+        action="append",
+        default=[],
+        metavar="NAME=VALUE",
+        help=(
+            "What this channel is, repeatable: --channel replicate=1 "
+            "--channel day=4 --channel chip=A. One value for the whole "
+            "channel, joined to every cell's obs and kept in uns."
+        ),
+    )
+    run_parser.add_argument(
         "--covariates",
         help=(
             "Per-cell covariates, barcode in the first column. Carried into "
             "the root obs unchanged."
         ),
     )
+
+
+def _channel(pairs: list[str]) -> dict[str, str]:
+    """NAME=VALUE arguments as a mapping, refusing one without the equals."""
+    out = {}
+    for pair in pairs:
+        name, sep, value = pair.partition("=")
+        if not sep or not name:
+            raise CommandError(f"--channel takes NAME=VALUE, got {pair!r}.")
+        out[name] = value
+    return out
 
 
 def run(args: argparse.Namespace) -> int:
@@ -92,6 +114,7 @@ def run(args: argparse.Namespace) -> int:
             gtf_accession=args.gtf_accession,
             genome_accession=args.genome_accession,
             covariates=args.covariates,
+            metadata=_channel(args.channel),
             guide_annotation=args.guide_annotation,
             element_mapping=args.element_mapping,
         )
