@@ -333,6 +333,12 @@ KEPT = OKABE_ITO[4]
 REMOVED = "0.7"
 """Grey, for what it removes. Neutral, so the eye reads the kept cells first."""
 
+EDGE = "0.2"
+"""Near-black, for the outline a light fill needs to be seen on a white page."""
+
+EDGE_WIDTH = 0.4
+"""Points, thin enough that it outlines the fill rather than replacing it."""
+
 LOG_METRICS = ("total_counts", "n_genes_by_counts")
 """Metrics whose distribution is read on a log axis, because they are counts."""
 
@@ -589,8 +595,8 @@ def metric_scatter(
 
     if groups is None:
         layers = [
-            (kept & drawn, KEPT, "kept", alpha),
-            (~kept & drawn, REMOVED, "removed", alpha),
+            (kept & drawn, KEPT, "kept", alpha, 0.0),
+            (~kept & drawn, REMOVED, "removed", alpha, 0.0),
         ]
     else:
         labels = pd.Series(groups, index=frame.index).reindex(measured.index)
@@ -606,27 +612,31 @@ def metric_scatter(
         # sit on top of it. Those are drawn solid: a handful of points at
         # the alpha that keeps a cloud of ten thousand readable is barely
         # visible.
-        layers = [(labels.isna().to_numpy() & drawn, REMOVED, None, alpha)]
+        # The outline is what makes a pale fill findable: Okabe-Ito's yellow
+        # on a white page has almost no edge of its own.
+        layers = [(labels.isna().to_numpy() & drawn, REMOVED, None, alpha, 0.0)]
         layers += [
             (
                 (labels == name).to_numpy() & drawn,
                 OKABE_ITO[i % len(OKABE_ITO)],
                 name,
                 1.0,
+                EDGE_WIDTH,
             )
             for i, name in enumerate(named)
         ]
 
     # Rasterised: one point per cell stays a vector object otherwise, and a
     # channel of 10,000 cells turns into a PDF nobody can open.
-    for mask, colour, label, opacity in layers:
+    for mask, colour, label, opacity, edge in layers:
         if mask.any():
             axis.scatter(
                 xs[mask],
                 ys[mask],
                 s=size,
                 alpha=opacity,
-                linewidths=0,
+                linewidths=edge,
+                edgecolors=EDGE,
                 color=colour,
                 label=label,
                 rasterized=True,

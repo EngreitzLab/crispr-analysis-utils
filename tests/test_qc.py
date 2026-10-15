@@ -547,3 +547,21 @@ def test_a_grouped_point_is_drawn_solid_and_the_background_is_not():
     background, named = figure.axes[0].collections
     assert background.get_alpha() < 1.0
     assert named.get_alpha() == 1.0
+
+
+def test_a_grouped_point_is_outlined_so_a_pale_fill_still_reads():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame({"reference_upm": [10.0, 20.0], "mean_umi": [1.0, 2.0]})
+    figure, _, _ = metric_scatter(
+        frame,
+        x="reference_upm",
+        y="mean_umi",
+        log=("reference_upm", "mean_umi"),
+        groups=[None, "Day 4"],
+        marginals=False,
+    )
+    background, named = figure.axes[0].collections
+    assert background.get_linewidths()[0] == 0
+    assert named.get_linewidths()[0] > 0
+    assert named.get_edgecolors()[0].tolist() != named.get_facecolors()[0].tolist()
