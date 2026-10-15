@@ -384,15 +384,18 @@ def _band(values, metric, nmads, log, sides):
 
 def metric_distributions(
     frame: pd.DataFrame,
-    nmads: float = 5.0,
+    nmads: float | None = 5.0,
+    limits: dict[str, tuple[float | None, float | None]] | None = None,
+    band: tuple[str, ...] | None = None,
     log: tuple[str, ...] = LOG_METRICS,
     sides: dict[str, str] | None = None,
     bins: int = 60,
 ):
-    """One histogram per QC metric, split at that metric's own threshold.
+    """One histogram per QC metric, split at the rules it is cut on.
 
-    Every panel computes its MAD band, draws it, and colours by it, so the
-    line on the figure is the cut the table would make.
+    The rules come from `cell_filters`, so pass this the same `nmads`,
+    `limits` and `band` as the filter: the lines on the figure are then
+    the cuts the file was made with, not a second opinion.
 
     Parameters
     ----------
@@ -400,15 +403,19 @@ def metric_distributions(
         One column per metric, one row per cell, as `cell_fractions`
         returns. Rows that are entirely `NaN` are cells the modality does
         not hold, and are dropped rather than drawn as zero.
-    nmads : float
-        Width of each band, in MADs.
+    nmads : float, optional
+        Width of each band, in MADs. `None` draws only `limits`.
+    limits : dict, optional
+        `{metric: (low, high)}`, as `cell_filters` takes them.
+    band : tuple of str, optional
+        The metrics to measure a band for, every column by default.
     log : tuple of str
         Metrics binned, thresholded and drawn on a log axis. A count
         distribution spans orders of magnitude; a percentage does not.
     sides : dict, optional
-        Which tail each metric cuts. The default is `"both"` for a count
-        and `"upper"` for everything else, since a cell with unusually
-        little mitochondrial signal is not a problem.
+        Which tail each band cuts. The default is `"both"` for a count and
+        `"upper"` for everything else, since a cell with unusually little
+        mitochondrial signal is not a problem.
     bins : int
         Bins per panel.
 
@@ -434,7 +441,11 @@ def metric_distributions(
         raise FigureError("No measured cell to draw.")
 
     metrics = list(measured.columns)
-    sides = sides or {}
+    # The same call the filter makes, so a panel cannot draw a line the
+    # file was not cut on.
+    passes, rules = cell_filters(
+        measured, nmads=nmads, limits=limits, band=band, log=log, sides=sides
+    )
     columns = min(3, len(metrics))
     rows = -(-len(metrics) // columns)
     figure, axes = plt.subplots(
@@ -446,10 +457,15 @@ def metric_distributions(
     for axis, metric in zip(axes.ravel(), metrics, strict=False):
         values = measured[metric].to_numpy(dtype=float)
         on_log = metric in log
-        low, high = _band(values, metric, nmads, log, sides)
-        if (low, high) == (-np.inf, np.inf):
+        mine = rules[rules["metric"] == metric]
+        if mine.empty:
             unthresholded.append(metric)
-        within = (values >= low) & (values <= high)
+            within = np.ones(len(values), dtype=bool)
+        else:
+            within = passes[list(mine["rule"])].to_numpy(dtype=bool).all(axis=1)
+        # What the panel cut on, which is the tightest of its rules.
+        low = float(mine["low"].max()) if not mine.empty else -np.inf
+        high = float(mine["high"].min()) if not mine.empty else np.inf
 
         if on_log:
             # A zero has no place on a log axis, so the range starts at the
@@ -493,14 +509,19 @@ def metric_distributions(
                 color=REMOVED,
                 label="removed",
             )
-        for threshold, upper in ((low, False), (high, True)):
+        edges_of = [
+            (bound, upper, rule.source)
+            for rule in mine.itertuples()
+            for bound, upper in ((rule.low, False), (rule.high, True))
+        ]
+        for threshold, upper, source in edges_of:
             if not np.isfinite(threshold):
                 continue
             axis.axvline(threshold, color="black", linewidth=1.0, linestyle="--")
             # A line nobody can read is a line nobody can check. The label
             # sits inside the band, so it never leaves the panel.
             axis.annotate(
-                f"{nmads:g} MAD  {_label(threshold)}",
+                f"{source}  {_label(threshold)}",
                 xy=(threshold, 1.0),
                 xycoords=axis.get_xaxis_transform(),
                 xytext=(-3 if upper else 3, -3),
@@ -516,7 +537,7 @@ def metric_distributions(
         axis.set_title(
             f"{int(cut_counts.sum()):,} of {int(kept_counts.sum() + cut_counts.sum()):,} beyond"
             if metric not in unthresholded
-            else "no threshold",
+            else "no rule",
             loc="right",
             fontsize="small",
             color="0.35",
@@ -545,32 +566,28 @@ def metric_distributions(
 
     numbers = pd.concat(records, ignore_index=True)
     thresholds = ", ".join(
-        f"{metric} "
+        f"{rule.metric} {rule.source} "
         + " to ".join(
-            f"{bound:,.2f}"
-            for bound in (
-                numbers.loc[numbers["metric"] == metric, "threshold_low"].iloc[0],
-                numbers.loc[numbers["metric"] == metric, "threshold_high"].iloc[0],
-            )
-            if np.isfinite(bound)
+            f"{bound:,.2f}" for bound in (rule.low, rule.high) if np.isfinite(bound)
         )
-        for metric in metrics
+        for rule in rules.itertuples()
     )
     removed = int(numbers["n_removed"].sum())
     caption = (
         f"Distribution of each quality-control metric over {len(measured):,} "
         "cells. Counts are binned and drawn on a log axis, fractions on a "
-        "linear one. The dashed lines are that metric's own "
-        f"{nmads:g}-MAD thresholds ({thresholds}); cells beyond them are "
-        "grey, and each panel's title counts its own. Each panel cuts on "
-        f"its own metric, so those counts add to {removed:,}, which "
-        "double-counts a cell that several metrics reject."
+        "linear one. The dashed lines are the rules each panel is cut on, "
+        "a band measured from this channel or a limit given to it "
+        f"({thresholds}); cells beyond them are grey, and each panel's "
+        "title counts its own. Each panel cuts on its own metric, so those "
+        f"counts add to {removed:,}, which double-counts a cell that "
+        "several metrics reject."
     )
     if unthresholded:
         caption += (
             " No threshold is drawn for "
             + ", ".join(unthresholded)
-            + ", whose values have no spread to measure one from."
+            + ", which no rule covers."
         )
     return figure, numbers, caption
 
@@ -1049,8 +1066,8 @@ def cell_filters(
     """Which cells pass each quality-control rule.
 
     Two kinds of rule: a band this channel's own spread decides, and a
-    limit someone else did. A metric can carry both, so the floor the knee
-    gave it survives next to its band.
+    limit someone else did. A metric can carry both, so a threshold the
+    screen settled on elsewhere sits next to the band measured here.
 
     Parameters
     ----------
@@ -1085,8 +1102,7 @@ def cell_filters(
     Raises
     ------
     FilterError
-        A limit names a metric the frame does not hold, or nothing is left
-        to apply.
+        A limit or a band names a metric the frame does not hold.
 
     Notes
     -----
@@ -1143,11 +1159,6 @@ def cell_filters(
                 }
             )
 
-    if not rules:
-        raise FilterError(
-            "No rule to apply: no metric has the spread to measure a band, "
-            "and no limit was given."
-        )
     return (
         pd.DataFrame(passes, index=frame.index),
         pd.DataFrame(
@@ -1177,14 +1188,20 @@ def apply_filters(data, passes: pd.DataFrame, rules: pd.DataFrame, path=None):
     Raises
     ------
     FilterError
-        The rules do not cover exactly this object's cells, or no cell
-        passes them all.
+        There is no rule, the rules do not cover exactly this object's
+        cells, or no cell passes them all.
     """
     if list(passes.index) != list(data.obs_names):
         raise FilterError(
             f"The rules cover {len(passes.index):,} cells and the object "
             f"holds {data.n_obs:,}. Measure them on the object being "
             "filtered: a cell no rule saw would pass every one of them."
+        )
+    if passes.shape[1] == 0:
+        raise FilterError(
+            "No rule to apply: no metric has the spread to measure a band, "
+            "and no limit was given. Filtering on nothing would keep every "
+            "cell and say it passed."
         )
     keep = passes.to_numpy(dtype=bool).all(axis=1)
     if not keep.any():

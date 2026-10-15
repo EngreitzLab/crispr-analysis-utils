@@ -316,10 +316,37 @@ def test_a_metric_with_no_spread_loses_its_threshold_not_the_whole_figure():
     figure, numbers, caption = metric_distributions(frame, bins=4)
 
     assert len(figure.axes) >= 2
-    assert figure.axes[0].get_title(loc="right") == "no threshold"
+    assert figure.axes[0].get_title(loc="right") == "no rule"
     flat = numbers[numbers["metric"] == "pct_counts_mito"]
     assert not np.isfinite(flat["threshold_high"]).any()
     assert "pct_counts_mito" in caption.split("No threshold is drawn for")[1]
+
+
+def test_a_limit_is_drawn_and_labelled_beside_the_band_it_joins():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    rng = np.random.default_rng(3)
+    frame = pd.DataFrame(
+        {
+            "total_counts": rng.lognormal(7.0, 0.3, 300),
+            "pct_counts_ribo": rng.normal(15.0, 3.0, 300),
+        }
+    )
+    figure, numbers, caption = metric_distributions(
+        frame,
+        band=("total_counts",),
+        limits={"pct_counts_ribo": (6.0, None)},
+        bins=8,
+    )
+    counts, ribo = figure.axes[:2]
+
+    # A band on the one named, a limit on the one given, nothing doubled up.
+    assert [t.get_text().split()[0] for t in counts.texts] == ["5", "5"]
+    assert [t.get_text() for t in ribo.texts] == ["limit  6"]
+    assert numbers.loc[numbers["metric"] == "pct_counts_ribo", "threshold_low"].iloc[
+        0
+    ] == pytest.approx(6.0)
+    assert "pct_counts_ribo limit 6.00" in caption
 
 
 def test_the_scatter_cuts_into_quadrants_and_keeps_only_the_upper_right():
@@ -695,10 +722,17 @@ def test_a_limit_on_a_metric_the_frame_does_not_hold_is_refused():
 
 
 def test_a_flat_metric_with_no_limit_leaves_nothing_to_apply():
-    from crispr_analysis_utils.qc import FilterError, cell_filters
+    from crispr_analysis_utils.qc import FilterError, apply_filters, cell_filters
 
-    with pytest.raises(FilterError, match="no limit was given"):
-        cell_filters(pd.DataFrame({"pct_counts_mito": [1.0] * 10}))
+    data = mudata()
+    # A metric with no spread yields no rule. Drawing that is fine; applying
+    # it would keep every cell and call them filtered.
+    passes, rules = cell_filters(
+        pd.DataFrame({"pct_counts_mito": [1.0] * 3}, index=list(data.obs_names))
+    )
+    assert passes.shape[1] == 0 and rules.empty
+    with pytest.raises(FilterError, match="No rule to apply"):
+        apply_filters(data, passes, rules)
 
 
 def test_the_filtered_object_keeps_only_passing_cells_and_says_why(tmp_path):

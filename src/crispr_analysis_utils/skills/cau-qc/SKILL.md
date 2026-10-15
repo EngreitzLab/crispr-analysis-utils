@@ -110,13 +110,14 @@ whose UMI count reaches the floor, returning the filtered copy and the mask.
 of a `cell_fractions` frame, with matplotlib directly rather than through
 scanpy's plotting.
 
-- **Every panel thresholds on its own metric.** It calls `qc.mad_bounds`,
-  draws the result as a dashed black line, and colours by it: blue
-  (`qc.KEPT`) within the band, grey (`qc.REMOVED`) beyond it. The line and
-  the cut are one computation, so the figure cannot disagree with the
-  table.
-- **Each line is labelled with the rule and the value it drew**, and each
-  panel is titled with how many cells it put beyond the band. A cut that
+- **Give it the same rules as the filter.** `nmads`, `limits` and `band`
+  are `cell_filters`' own arguments, and the panel calls it to get them, so
+  the lines are the cuts the file was made with rather than a second
+  opinion. Blue (`qc.KEPT`) passes every rule the metric carries, grey
+  (`qc.REMOVED`) fails one.
+- **Each line is labelled with the rule and the value it drew** -- `5 MAD
+  13,063`, `limit  6` -- and each panel is titled with how many cells it
+  put beyond them. A metric can carry several lines. A cut that
   removes a handful leaves no grey tall enough to see, so without the count
   a one-colour panel looks like a panel that failed to say anything.
 - **Counts are two-sided and go on a log axis**, fractions are upper-tail
@@ -124,8 +125,8 @@ scanpy's plotting.
 - **The grey bars do not sum to the cells a filter drops.** Each panel
   counts its own rejects, so a cell that two metrics reject is grey twice.
   `mad_outlier` per metric, combined with `any`, is what gives the cells.
-- A metric with no spread loses its threshold, not the figure: the panel is
-  drawn with no line and the caption says so.
+- A metric no rule covers loses its lines, not the figure: the panel is
+  drawn without them and the caption says so.
 - A cell the modality does not hold is dropped, never binned as zero.
 
 ## Two metrics at once
@@ -207,11 +208,11 @@ every one, records them, and writes the object.
 - **Two kinds of rule, kept apart.** A band is measured from this channel's
   own spread; a limit is a number someone decided, `{metric: (low, high)}`
   with `None` for an open side. `total_counts_mad` and `total_counts_limit`
-  are separate columns, so a metric carries the floor the knee gave it and
-  its band at once, and the record says which one cut what.
-- **The band is the one the panel drew.** `metric_distributions` and
-  `cell_filters` reach `qc.mad_bounds` through the same helper, so the
-  figure cannot disagree with the file.
+  are separate columns, so a threshold the screen settled on elsewhere sits
+  next to the band measured here, and the record says which one cut what.
+- **The panel draws these rules.** `metric_distributions` calls
+  `cell_filters` for them, so pass both the same arguments and the figure
+  cannot disagree with the file.
 - **Measure the rules on the object being filtered.** `apply_filters`
   refuses a frame that does not cover exactly its cells: a cell no rule saw
   would otherwise pass every one of them.
