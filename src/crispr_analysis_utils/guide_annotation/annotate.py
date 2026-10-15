@@ -1,4 +1,4 @@
-"""Place each aligned site in a gene: exon, intron, promoter or intergenic.
+"""Place each aligned site in a gene: genic or intergenic, exon or intron.
 
 Overlaps are decided on the protospacer, so a guide reaching into an exon
 counts as exonic. Distances and the position along a CDS are measured from
