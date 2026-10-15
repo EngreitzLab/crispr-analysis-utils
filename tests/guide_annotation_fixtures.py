@@ -180,7 +180,12 @@ TSS = {
     "ENSG00000000003": 2999,
     "ENSG00000000005": 5000,
 }
-"""The reference transcript's start, which is what `promoters_from_store` takes."""
+"""Each gene's reference transcript start, one per gene.
+
+`promoters_from_store(reference_only=True)` gives exactly these. The default
+gives a site per transcript, so a gene with an alternative start contributes
+more than one.
+"""
 
 
 def _exon_ids(genes):
@@ -314,7 +319,7 @@ def site(guide_id, chrom, start, strand, *, spacer=SPACER, length=20, pam_matche
         "start": start,
         "end": end,
         "strand": strand,
-        "cut_site": end - 3 if strand == "+" else start + 3,
+        "target_site": end - 3 if strand == "+" else start + 3,
         "spacer": spacer,
         "pam_matches": pam_matches,
     }

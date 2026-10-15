@@ -28,11 +28,11 @@ empty. The guide's own columns repeat on each of its rows.
 | `spacer` | The protospacer: `guide_id` without any base 5' of it or the PAM. |
 | `site_class` | `unique`, `multi` or `no_site`: how many places this guide can cut. |
 | `n_matches` | How many places the protospacer occurs in the genome. |
-| `n_cut_sites` | How many of those have a PAM. |
+| `n_target_sites` | How many of those have a PAM. |
 | `orientation` | `forward`, `reverse_complement`, `no_pam`, `no_match` or `not_checked`. |
 | `orientation_evidence` | For `reverse_complement` only: `distinct` or `ambiguous`. |
 | `chr`, `start`, `end`, `strand` | This row's match. 0-based, half-open, the protospacer alone. |
-| `cut_site` | The boundary the cut falls on: between `cut_site - 1` and `cut_site`. |
+| `target_site` | The boundary the cut falls on: between `target_site - 1` and `target_site`. |
 | `pam_matches` | `TRUE` when the genomic PAM fits the pattern. |
 | `mapped_sequence` | What the genome holds here, to compare against `guide_id`. |
 
@@ -57,7 +57,7 @@ A guide can occur many times and still be cuttable once. This is the most
 common surprise:
 
 ```text
-n_matches 89   n_cut_sites 1   site_class unique
+n_matches 89   n_target_sites 1   site_class unique
 ```
 
 The protospacer occurs 89 times; one of those has a PAM. Cas9 cuts there and

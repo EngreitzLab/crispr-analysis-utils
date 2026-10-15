@@ -19,7 +19,12 @@ FEATURES = ("gene", "transcript", "exon", "CDS", "UTR")
 """The feature rows the store keeps. Everything else is dropped."""
 
 GENE_TYPES = ("protein_coding",)
-"""The gene types kept by default."""
+"""The gene types a guide is annotated against.
+
+Every call of genic, exon, intron and promoter follows these. Genes of other
+types are kept as one row each, so a protospacer overlapping one can be
+reported without that overlap deciding where the guide sits.
+"""
 
 COLUMNS = (
     "Chromosome",
@@ -33,6 +38,7 @@ COLUMNS = (
     "exon_id",
     "exon_number",
     "is_reference",
+    "gene_type",
 )
 """The store's columns. The first four are what pyranges needs."""
 
@@ -58,12 +64,37 @@ class Store:
     features: pd.DataFrame
     provenance: dict
 
-    def rows(self, feature: str, *, reference_only: bool = False) -> pd.DataFrame:
-        """The rows of one feature, optionally only the reference transcript's."""
+    @property
+    def gene_types(self) -> tuple[str, ...]:
+        """The gene types this store's annotation is called against."""
+        return tuple(self.provenance.get("gene_types") or GENE_TYPES)
+
+    def rows(
+        self, feature: str, *, reference_only: bool = False, primary: bool = True
+    ) -> pd.DataFrame:
+        """The rows of one feature.
+
+        Parameters
+        ----------
+        feature
+            One of `FEATURES`.
+        reference_only
+            Keep only the reference transcript's rows.
+        primary
+            Keep only genes of `gene_types`. On by default, so a store that
+            also carries other gene types cannot widen what counts as genic.
+        """
         rows = self.features[self.features["Feature"] == feature]
+        if primary:
+            rows = rows[rows["gene_type"].isin(self.gene_types)]
         if reference_only:
             rows = rows[rows["is_reference"]]
         return rows
+
+    def other_genes(self) -> pd.DataFrame:
+        """Gene rows whose type is not one the annotation is called against."""
+        genes = self.features[self.features["Feature"] == "gene"]
+        return genes[~genes["gene_type"].isin(self.gene_types)]
 
     @property
     def contigs(self) -> set[str]:
@@ -87,7 +118,10 @@ def build_store(
     out
         The parquet file to write.
     gene_types
-        The gene types to keep.
+        The gene types a guide is annotated against: genic, exon, intron and
+        promoter all follow these, and every feature row is kept for them.
+        Genes of every other type are kept as one row each, so an overlap can
+        be reported without it deciding where the guide sits.
 
     Returns
     -------
@@ -108,14 +142,20 @@ def build_store(
     # duplicate_attr is not optional: a GENCODE row carries several `tag`
     # keys, and without it the reader keeps one and drops most of MANE_Select.
     frame = pr.read_gtf(gtf, duplicate_attr=True)
+    # Genes of the annotated types keep every feature row; genes of any other
+    # type keep one row each, enough to report an overlap without that overlap
+    # deciding where a guide sits.
+    primary = frame["gene_type"].isin(gene_types)
     frame = frame.loc[
-        frame["gene_type"].isin(gene_types) & frame["Feature"].isin(FEATURES)
+        (primary & frame["Feature"].isin(FEATURES))
+        | (~primary & (frame["Feature"] == "gene"))
     ]
-    if frame.empty:
+    kept_primary = frame["gene_type"].isin(gene_types)
+    if not kept_primary.any():
         raise StoreError(
             f"{gtf} holds no {' or '.join(gene_types)} gene. Is it the right GTF?"
         )
-    if not (frame["Feature"] == "exon").any():
+    if not ((frame["Feature"] == "exon") & kept_primary).any():
         raise StoreError(
             f"{gtf} holds no exon rows, so it cannot say exon, intron or"
             " transcript. A genes-only GTF is not enough; use the full"
@@ -141,11 +181,23 @@ def build_store(
     provenance = {
         "gtf": str(gtf),
         "gene_types": list(gene_types),
+        "other_gene_types": sorted(
+            frame["gene_type"][~frame["gene_type"].isin(gene_types)].unique().tolist()
+        ),
         "cau_version": __version__,
         "counts": {
             feature: int((frame["Feature"] == feature).sum()) for feature in FEATURES
         },
-        "genes": int(frame["ensg"][frame["Feature"] == "gene"].nunique()),
+        "genes": int(
+            frame["ensg"][
+                (frame["Feature"] == "gene") & frame["gene_type"].isin(gene_types)
+            ].nunique()
+        ),
+        "other_genes": int(
+            frame["ensg"][
+                (frame["Feature"] == "gene") & ~frame["gene_type"].isin(gene_types)
+            ].nunique()
+        ),
         "reference_transcripts": int(len(reference)),
         "mane_select": int(
             frame["mane_select"][frame["Feature"] == "transcript"].sum()
@@ -189,9 +241,16 @@ def load_store(path: str | os.PathLike[str]) -> Store:
     table = pq.read_table(path)
     missing = set(COLUMNS) - set(table.column_names)
     if missing:
+        # gene_type arrived with the other-gene-type reporting, so a store
+        # built before it is simply old rather than foreign.
+        rebuild = (
+            "Rebuild it with `cau guide-annotation build-db`."
+            if missing == {"gene_type"}
+            else "Rebuild it."
+        )
         raise StoreError(
             f"{path} is missing {', '.join(sorted(missing))}, so it was not"
-            " written by this tool. Rebuild it."
+            f" written by this version of the tool. {rebuild}"
         )
     raw = (table.schema.metadata or {}).get(_METADATA_KEY)
     return Store(

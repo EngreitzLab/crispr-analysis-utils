@@ -291,8 +291,17 @@ and narrowing it would buy nothing.
       position: MANE Select, else Ensembl canonical, else the longest CDS,
       ordered down to the id so a rebuild picks the same one;
     - overlaps are decided on the protospacer, distances and the CDS position
-      from the cut site. `location` and `promoter` are separate columns
-      because a cut in exon 1 is usually both;
+      from the target site. `location` (genic or intergenic), `feature` (exon or
+      intron) and `promoter` are three separate columns because a site in
+      exon 1 is usually all three;
+    - the store keeps every feature row of the annotated gene types and one
+      gene row for every other type, so `other_gene_types` can report a
+      lncRNA overlap without that overlap deciding where the guide sits.
+      `rows()` defaults to the annotated types for exactly that reason;
+    - a gene has as many promoters as transcript starts, so the TSS set is
+      one site per transcript and `promoter_enst` names every one a
+      protospacer sits in. A `--promoters` BED supplies transcript ids in an
+      eighth column, and without them those columns are empty;
     - the table keys back to `guide_genome_annotation.tsv` on `guide_id`
       plus the four site columns, and repeats nothing else. A guide with two
       sites needs all five to join unambiguously;
@@ -316,7 +325,7 @@ and narrowing it would buy nothing.
       same base. The coordinates stay on the declared protospacer, so a G that
       pairs by chance never shifts a start;
     - coordinates are 0-based half-open protospacers, without the PAM or the
-      added base, and `cut_site` is a column, the boundary `b` (`end - 3` on
+      added base, and `target_site` is a column, the boundary `b` (`end - 3` on
       `+`, `start + 3` on `-`). The IGVF-named columns keep these
       definitions, which differ from the lab's DC_TAP tables (the guide page
       has the comparison);

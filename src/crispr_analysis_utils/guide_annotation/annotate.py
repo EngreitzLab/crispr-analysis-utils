@@ -2,7 +2,7 @@
 
 Overlaps are decided on the protospacer, so a guide reaching into an exon
 counts as exonic. Distances and the position along a CDS are measured from
-the cut site, which is where the break falls.
+the target site, which is where the break falls.
 
 Every interval operation ignores strand: a guide on one strand targets a gene
 on either.
@@ -16,10 +16,18 @@ import pandas as pd
 from .db import Store
 from .promoters import PromoterError
 
+GENIC = "genic"
+INTERGENIC = "intergenic"
 EXON = "exon"
 INTRON = "intron"
-INTERGENIC = "intergenic"
-LOCATIONS = (EXON, INTRON, INTERGENIC)
+DELIMITER = ";"
+"""Separates the ids in a list-valued column.
+
+A semicolon rather than a comma, because a comma already separates ids inside
+the IGVF format's own ``putative_target_genes``.
+"""
+LOCATIONS = (GENIC, INTERGENIC)
+FEATURES = (EXON, INTRON)
 """Where a site falls, in the order qc.tsv counts them."""
 
 CDS = "CDS"
@@ -28,8 +36,19 @@ UTR = "UTR"
 SENSE = "sense"
 ANTISENSE = "antisense"
 
-SITE_COLUMNS = ("chr", "start", "end", "strand", "cut_site")
+SITE_COLUMNS = ("chr", "start", "end", "strand", "target_site")
 """What `annotate_sites` needs of every site."""
+
+MIDPOINT = "midpoint"
+TARGET_SITE = "target_site"
+DISTANCE_FROM = (MIDPOINT, TARGET_SITE)
+"""Where a distance is measured from.
+
+The midpoint of the protospacer by default. A dCas9 occupies the whole
+protospacer rather than acting at one base, so its centre is the more honest
+reference for how far a guide sits from a TSS. `target_site` measures from
+the boundary 3 bases 5' of the PAM instead, which is where a nuclease cuts.
+"""
 
 _IGNORE = "ignore"
 """Strand behaviour for every join: a guide targets a gene on either strand."""
@@ -45,6 +64,7 @@ def annotate_sites(
     promoters: pd.DataFrame,
     *,
     promoter_window: int = 1000,
+    distance_from: str = MIDPOINT,
 ) -> pd.DataFrame:
     """Annotate every site against the genes of the store.
 
@@ -81,6 +101,11 @@ def annotate_sites(
         raise ValueError(
             f"promoter_window must not be negative, got {promoter_window}."
         )
+    if distance_from not in DISTANCE_FROM:
+        raise ValueError(
+            f"distance_from must be one of {', '.join(DISTANCE_FROM)}, got"
+            f" {distance_from!r}."
+        )
 
     sites = sites.reset_index(drop=True)
     _check_contigs(sites, store)
@@ -94,11 +119,30 @@ def annotate_sites(
             "_row": np.arange(len(sites)),
         }
     )
-    cuts = pr.PyRanges(
+    # The CDS position asks where along the coding sequence Cas9 acts, so it
+    # stays on the target site whatever distances are measured from.
+    targets = pr.PyRanges(
         {
             "Chromosome": sites["chr"].to_numpy(),
-            "Start": sites["cut_site"].to_numpy(),
-            "End": sites["cut_site"].to_numpy() + 1,
+            "Start": sites["target_site"].to_numpy(),
+            "End": sites["target_site"].to_numpy() + 1,
+            "Strand": sites["strand"].to_numpy(),
+            "_row": np.arange(len(sites)),
+        }
+    )
+
+    # Where distances are measured from. The midpoint rounds down, so a
+    # protospacer of even length takes the base left of centre.
+    anchor_at = (
+        (sites["start"].to_numpy() + sites["end"].to_numpy()) // 2
+        if distance_from == MIDPOINT
+        else sites["target_site"].to_numpy()
+    )
+    anchors = pr.PyRanges(
+        {
+            "Chromosome": sites["chr"].to_numpy(),
+            "Start": anchor_at,
+            "End": anchor_at + 1,
             "Strand": sites["strand"].to_numpy(),
             "_row": np.arange(len(sites)),
         }
@@ -108,28 +152,51 @@ def annotate_sites(
     pairs = pairs.merge(
         _exon_calls(spacers, store, pr), on=["_row", "ensg"], how="left"
     )
-    pairs = pairs.merge(_cds_position(cuts, store, pr), on=["_row", "ensg"], how="left")
+    pairs = pairs.merge(
+        _cds_position(targets, store, pr), on=["_row", "ensg"], how="left"
+    )
 
-    pairs["location"] = np.where(
+    # Two axes, not one. Whether a gene is there at all, and where inside it:
+    # a guide can be genic and in a promoter and in an exon at once, which a
+    # single column could not say.
+    pairs["location"] = np.where(pairs["ensg"].isna(), INTERGENIC, GENIC)
+    pairs["feature"] = np.where(
         pairs["ensg"].isna(),
-        INTERGENIC,
+        "",
         np.where(pairs["enst"].notna(), EXON, INTRON),
     )
     pairs["region"] = np.where(
-        pairs["location"] == EXON,
+        pairs["feature"] == EXON,
         np.where(pairs["cds_position"].notna(), CDS, UTR),
         "",
     )
     pairs["exonic_any_transcript"] = pairs["exonic_any_transcript"].fillna(False)
+    # How far into the gene the target site falls, from the gene's own 5'
+    # end. Near zero is the annotated start; a large one is deeper in, which
+    # is what distinguishes a canonical promoter from an alternative one.
+    five_prime = np.where(
+        pairs["gene_strand"] == "+", pairs["gene_start"], pairs["gene_end"] - 1
+    )
+    toward = anchor_at[pairs["_row"].to_numpy()] - five_prime
+    pairs["distance_to_gene_start"] = np.where(
+        pairs["gene_strand"].isna(),
+        np.nan,
+        np.where(pairs["gene_strand"] == "+", toward, -toward),
+    )
+
     pairs["sense"] = np.where(
         pairs["gene_strand"].isna(),
         "",
         np.where(pairs["strand_site"] == pairs["gene_strand"], SENSE, ANTISENSE),
     )
 
-    tss = _tss_columns(cuts, spacers, promoters, promoter_window, pr)
-    frame = sites.join(pairs.set_index("_row").drop(columns=["strand_site"]))
+    tss = _tss_columns(anchors, spacers, promoters, promoter_window, pr)
+    others = _other_gene_overlaps(spacers, store, pr, len(sites))
+    frame = sites.join(
+        pairs.set_index("_row").drop(columns=["strand_site", "gene_start", "gene_end"])
+    )
     frame = frame.merge(tss, left_index=True, right_index=True, how="left")
+    frame = frame.merge(others, left_index=True, right_index=True, how="left")
     frame["gc_percent"] = _gc_percent(frame)
     frame["max_polyt_run"] = _max_polyt(frame)
     return frame.reset_index(drop=True)
@@ -170,9 +237,67 @@ def _gene_pairs(spacers, store: Store, pr) -> pd.DataFrame:
             "ensg": _joined(frame, "ensg", "_gene"),
             "gene_symbol": _joined(frame, "gene_symbol", "_gene"),
             "gene_strand": _joined(frame, "Strand", "_gene"),
+            "gene_start": _joined(frame, "Start", "_gene"),
+            "gene_end": _joined(frame, "End", "_gene"),
             "strand_site": frame["Strand"],
         }
     )
+
+
+def _other_gene_overlaps(spacers, store: Store, pr, n_rows: int) -> pd.DataFrame:
+    """Per site: the genes of other types the protospacer overlaps.
+
+    Site-level, not per gene: an overlap with a lncRNA says the guide sits in
+    ambiguous territory whichever protein-coding gene the row is about.
+    """
+    empty = pd.DataFrame(
+        {
+            "other_gene_types": pd.Series([""] * n_rows, dtype="string"),
+            "other_genes": pd.Series([""] * n_rows, dtype="string"),
+        },
+        index=range(n_rows),
+    )
+    others = store.other_genes()
+    if others.empty:
+        return empty
+
+    hits = spacers.join_overlaps(
+        pr.PyRanges(
+            others[
+                ["Chromosome", "Start", "End", "Strand", "ensg", "gene_type"]
+            ].reset_index(drop=True)
+        ),
+        join_type="inner",
+        strand_behavior=_IGNORE,
+        suffix="_other",
+    )
+    frame = pd.DataFrame(hits)
+    if frame.empty:
+        return empty
+    frame = pd.DataFrame(
+        {
+            "_row": frame["_row"],
+            "ensg": _joined(frame, "ensg", "_other"),
+            "gene_type": _joined(frame, "gene_type", "_other"),
+        }
+    )
+    grouped = frame.groupby("_row").agg(
+        other_gene_types=("gene_type", _joined_uniques),
+        other_genes=("ensg", _joined_uniques),
+    )
+    rows = range(n_rows)
+    return pd.DataFrame(
+        {
+            name: grouped[name].reindex(rows).fillna("").astype("string")
+            for name in ("other_gene_types", "other_genes")
+        },
+        index=rows,
+    )
+
+
+def _joined_uniques(values: pd.Series) -> str:
+    """The distinct values, sorted, as one delimited string."""
+    return DELIMITER.join(sorted({str(v) for v in values if pd.notna(v) and str(v)}))
 
 
 def _exon_calls(spacers, store: Store, pr) -> pd.DataFrame:
@@ -214,14 +339,14 @@ def _exon_calls(spacers, store: Store, pr) -> pd.DataFrame:
     return best.merge(anywhere, on=["_row", "ensg"], how="outer")
 
 
-def _cds_position(cuts, store: Store, pr) -> pd.DataFrame:
-    """How far along the reference CDS the cut falls, and the CDS length."""
+def _cds_position(targets, store: Store, pr) -> pd.DataFrame:
+    """How far along the reference CDS the target site falls, and its length."""
     blocks = _cds_blocks(store)
     if blocks.empty:
         return pd.DataFrame(columns=["_row", "ensg", "cds_position", "cds_fraction"])
     columns = ["Chromosome", "Start", "End", "Strand", "ensg", "_offset", "_total"]
     hits = pd.DataFrame(
-        cuts.join_overlaps(
+        targets.join_overlaps(
             pr.PyRanges(blocks[columns].reset_index(drop=True)),
             join_type="inner",
             strand_behavior=_IGNORE,
@@ -265,7 +390,7 @@ def _cds_blocks(store: Store) -> pd.DataFrame:
 
 
 def _tss_columns(
-    cuts, spacers, promoters: pd.DataFrame, window: int, pr
+    anchors, spacers, promoters: pd.DataFrame, window: int, pr
 ) -> pd.DataFrame:
     """Promoter flag, and the signed distance to the nearest protein-coding TSS."""
     if promoters.empty:
@@ -276,12 +401,21 @@ def _tss_columns(
             ["Chromosome", "Start", "End", "Strand", "tss_gene", "tss_ensg"]
         ].reset_index(drop=True)
     )
+    # The windows carry their own ids, so an overlap says which transcripts'
+    # promoters a guide sits in, not merely that it sits in one.
     windows = pr.PyRanges(
         {
             "Chromosome": promoters["Chromosome"].to_numpy(),
             "Start": np.maximum(promoters["Start"].to_numpy() - window, 0),
             "End": promoters["End"].to_numpy() + window,
             "Strand": promoters["Strand"].to_numpy(),
+            "w_gene": promoters["gene_symbol"].to_numpy(),
+            "w_ensg": promoters["ensg"].to_numpy(),
+            "w_enst": (
+                promoters["enst"].to_numpy()
+                if "enst" in promoters
+                else np.full(len(promoters), "")
+            ),
         }
     )
     inside = pd.DataFrame(
@@ -289,12 +423,26 @@ def _tss_columns(
             windows, join_type="inner", strand_behavior=_IGNORE, suffix="_promoter"
         )
     )
-    promoter = pd.Series(False, index=range(len(cuts)), name="promoter")
+    rows = range(len(anchors))
+    promoter = pd.Series(False, index=rows, name="promoter")
+    hits = {
+        name: pd.Series([""] * len(anchors), index=rows, dtype="string")
+        for name in ("promoter_enst", "promoter_ensg", "promoter_gene")
+    }
     if not inside.empty:
         promoter.iloc[np.unique(inside["_row"].to_numpy())] = True
+        grouped = inside.groupby("_row").agg(
+            promoter_enst=("w_enst", _joined_uniques),
+            promoter_ensg=("w_ensg", _joined_uniques),
+            promoter_gene=("w_gene", _joined_uniques),
+        )
+        hits = {
+            name: grouped[name].reindex(rows).fillna("").astype("string")
+            for name in hits
+        }
 
     near = pd.DataFrame(
-        cuts.nearest_ranges(
+        anchors.nearest_ranges(
             tss,
             strand_behavior=_IGNORE,
             suffix="_tss",
@@ -303,13 +451,13 @@ def _tss_columns(
         )
     )
     near = near.drop_duplicates("_row").set_index("_row")
-    rows = range(len(promoter))
     # Signed in the gene's orientation: negative upstream of the TSS.
     toward = near["Start"] - _joined(near, "Start", "_tss")
     signed = np.where(_joined(near, "Strand", "_tss") == "+", toward, -toward)
     return pd.DataFrame(
         {
             "promoter": promoter.to_numpy(),
+            **hits,
             "distance_to_tss": pd.Series(signed, index=near.index).reindex(rows),
             "nearest_tss_gene": _joined(near, "tss_gene", "_tss").reindex(rows),
             "nearest_tss_ensg": _joined(near, "tss_ensg", "_tss").reindex(rows),

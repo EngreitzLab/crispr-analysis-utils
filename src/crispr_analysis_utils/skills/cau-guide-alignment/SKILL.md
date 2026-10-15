@@ -5,7 +5,7 @@ description: >-
   (the `cau guide-alignment` command, or
   `crispr_analysis_utils.guide_alignment.run`). Use when a user wants each
   guide's genomic site: which guides are unique, multi-mapping or absent;
-  their protospacer coordinates and cut sites, for sceptre, element annotation
+  their protospacer coordinates and target sites, for sceptre, element annotation
   or IGVF-style guide metadata; whether a guide table is reverse-complemented;
   or whether non-targeting controls really match nothing. Also for reading
   guide_genome_annotation.tsv, guide_mapping.bed, the columns file or
@@ -71,7 +71,7 @@ tables, so it always describes the folder it sits in. See
 Three things trip people up:
 
 - **`n_matches` is not `site_class`.** A protospacer can occur 89 times and
-  still be `unique`, because only one of those has a PAM. `n_cut_sites` is
+  still be `unique`, because only one of those has a PAM. `n_target_sites` is
   the one that matters for cutting; `n_matches` is the one that matters for
   specificity.
 - **`no_match` is the right answer for a non-targeting control.** They are

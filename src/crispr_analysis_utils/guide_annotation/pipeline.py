@@ -20,7 +20,7 @@ import pandas as pd
 
 from .._files import file_md5, write_json
 from .._version import __version__
-from .annotate import AnnotationError, annotate_sites
+from .annotate import MIDPOINT, AnnotationError, annotate_sites
 from .db import Store, load_store
 from .promoters import promoters_from_store, read_promoters
 from .summary import TABLE, counts, write_annotation_tsv, write_columns_yaml
@@ -69,6 +69,7 @@ def run(
     *,
     promoters: str | os.PathLike[str] | None = None,
     promoter_window: int = PROMOTER_WINDOW,
+    distance_from: str = MIDPOINT,
 ) -> RunResult:
     """Annotate every aligned site against the genes of the store.
 
@@ -84,10 +85,12 @@ def run(
         Where the table goes. Created if it does not exist; nothing is ever
         written outside it.
     promoters
-        A TSS BED. Without one, each gene's reference transcript start is
-        used instead.
+        A TSS BED. Without one, a site per transcript is taken from the store.
     promoter_window
         How far either side of a TSS counts as its promoter.
+    distance_from
+        Where distances are measured from: the protospacer midpoint, or the
+        target site 3 bases 5' of the PAM.
 
     Returns
     -------
@@ -110,6 +113,7 @@ def run(
     parameters = {
         "promoters": None if promoters is None else str(promoters),
         "promoter_window": promoter_window,
+        "distance_from": distance_from,
     }
     state: dict = {
         "step": STEP,
@@ -187,6 +191,7 @@ def _run(
             loaded,
             tss,
             promoter_window=parameters["promoter_window"],
+            distance_from=parameters["distance_from"],
         )
 
     with _timed(state, "outputs"):
@@ -222,7 +227,7 @@ def _read_sites(alignment: str | os.PathLike[str] | pd.DataFrame) -> pd.DataFram
             "The alignment table holds no mapped site, so there is nothing to"
             " annotate. Every guide matched nowhere, or had no PAM."
         )
-    for column in ("start", "end", "cut_site"):
+    for column in ("start", "end", "target_site"):
         frame[column] = frame[column].astype("int64")
     return frame.reset_index(drop=True)
 

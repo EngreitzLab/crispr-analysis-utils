@@ -67,7 +67,7 @@ in full.
   single site can appear against two of them.
 - **Any overlap counts, down to one base.** For CRISPRi that is right: the
   dCas9-KRAB footprint covers the whole protospacer, so a guide hanging off
-  an element's edge still represses it. For a cutting screen the cut site
+  an element's edge still represses it. For a cutting screen the target site
   would be the better test, and roughly 4% of rows are partial overlaps, so
   say which kind of screen it is before reading the counts.
 - **`element_id` comes from the BED's fourth column** when it has one, so an

@@ -42,6 +42,12 @@ SITES = (
     site("downstream_of_minus_tss", "chr1", 4390, "+"),
     # Upstream of AAA's TSS at 1000, and so in no gene but in a promoter.
     site("upstream_of_plus_tss", "chr1", 960, "+"),
+    # Inside DDD, which is lncRNA: no store annotates against it, so the row
+    # is intergenic and the overlap is reported on its own columns.
+    site("in_a_lncrna", "chr1", 7500, "+"),
+    # EEE's second transcript starts at 5500; its first starts at 5000, so
+    # this sits in the alternative promoter and no other.
+    site("alternative_promoter", "chr2", 5480, "+"),
 )
 
 
@@ -83,7 +89,7 @@ def test_the_input_columns_come_first_and_untouched(annotated):
     assert_frame_equal(
         annotated[carried].drop_duplicates(ignore_index=True), sites_frame(*SITES)
     )
-    assert annotated["cut_site"].tolist()[:2] == [2047, 2033]
+    assert annotated["target_site"].tolist()[:2] == [2047, 2033]
 
 
 def test_one_row_per_site_except_where_two_genes_overlap(annotated):
@@ -95,20 +101,21 @@ def test_one_row_per_site_except_where_two_genes_overlap(annotated):
 
 
 @pytest.mark.parametrize(
-    ("guide_id", "location"),
+    ("guide_id", "location", "feature"),
     [
-        ("exon_plus", "exon"),
-        ("exon_minus", "exon"),
-        ("other_transcript_exon", "intron"),
-        ("deep_intron", "intron"),
-        ("minus_cds_first_block", "exon"),
-        ("utr_and_promoter", "exon"),
-        ("intergenic", "intergenic"),
-        ("upstream_of_plus_tss", "intergenic"),
+        ("exon_plus", "genic", "exon"),
+        ("exon_minus", "genic", "exon"),
+        ("other_transcript_exon", "genic", "intron"),
+        ("deep_intron", "genic", "intron"),
+        ("minus_cds_first_block", "genic", "exon"),
+        ("utr_and_promoter", "genic", "exon"),
+        ("intergenic", "intergenic", ""),
+        ("upstream_of_plus_tss", "intergenic", ""),
     ],
 )
-def test_where_each_site_falls(annotated, guide_id, location):
-    assert one(annotated, guide_id)["location"] == location
+def test_where_each_site_falls(annotated, guide_id, location, feature):
+    row = one(annotated, guide_id)
+    assert (row["location"], row["feature"]) == (location, feature)
 
 
 def test_an_exonic_row_names_the_reference_transcript_and_its_exon(annotated):
@@ -137,7 +144,8 @@ def test_a_site_in_two_genes_gets_a_row_for_each(annotated):
     rows = rows_for(annotated, "two_genes")
     assert rows["gene_symbol"].tolist() == ["AAA", "BBB"]
     # The same bases are AAA's intron and BBB's third exon.
-    assert rows["location"].tolist() == ["intron", "exon"]
+    assert rows["feature"].tolist() == ["intron", "exon"]
+    assert rows["location"].tolist() == ["genic", "genic"]
     assert rows["enst"].tolist()[1] == "ENST00000000021"
     assert rows["exon_number"].tolist()[1] == "3"
 
@@ -145,10 +153,10 @@ def test_a_site_in_two_genes_gets_a_row_for_each(annotated):
 # --- another transcript's exon --------------------------------------------
 
 
-def test_a_non_reference_exon_is_flagged_without_changing_the_location(annotated):
+def test_a_non_reference_exon_is_flagged_without_changing_the_feature(annotated):
     row = one(annotated, "other_transcript_exon")
     # A2 has an exon at 1500-1600; the reference transcript A1 has an intron.
-    assert row["location"] == "intron"
+    assert row["feature"] == "intron"
     assert row["exonic_any_transcript"] is True
     assert pd.isna(row["enst"])
     assert row["region"] == ""
@@ -169,14 +177,14 @@ def test_a_guide_on_the_other_strand_is_still_in_the_gene(annotated):
     # AAA reads on +, this guide on -. Every join ignores strand, so the site
     # is annotated; a same-strand join would call it intergenic.
     row = one(annotated, "exon_minus")
-    assert (row["gene_symbol"], row["location"]) == ("AAA", "exon")
+    assert (row["gene_symbol"], row["feature"]) == ("AAA", "exon")
     assert row["enst"] == "ENST00000000011"
 
 
 def test_a_minus_strand_gene_annotates_a_plus_strand_guide(annotated):
     # The other direction: BBB reads on -, this guide on +.
     row = rows_for(annotated, "two_genes").iloc[1]
-    assert (row["gene_symbol"], row["location"]) == ("BBB", "exon")
+    assert (row["gene_symbol"], row["feature"]) == ("BBB", "exon")
 
 
 @pytest.mark.parametrize(
@@ -233,7 +241,7 @@ def test_the_lower_block_of_a_minus_strand_gene_carries_the_offset(annotated):
 def test_an_exon_whose_cut_misses_the_cds_is_utr(annotated):
     # The cut at 1047 is in AAA's exon 1 but 5' of the start codon at 1100.
     row = one(annotated, "utr_and_promoter")
-    assert (row["location"], row["region"], row["exon_number"]) == ("exon", "UTR", "1")
+    assert (row["feature"], row["region"], row["exon_number"]) == ("exon", "UTR", "1")
     assert pd.isna(row["cds_position"])
 
 
@@ -253,15 +261,16 @@ def test_region_is_empty_off_an_exon(annotated, guide_id):
     ("guide_id", "distance", "gene"),
     [
         # AAA's TSS is at 1000 and reads on +, so a later cut is downstream.
-        ("utr_and_promoter", 47, "AAA"),
-        ("exon_plus", 1047, "AAA"),
+        # Measured from the protospacer midpoint, which is the default.
+        ("utr_and_promoter", 40, "AAA"),
+        ("exon_plus", 1040, "AAA"),
         # Before the TSS of a + gene: upstream, so negative.
-        ("upstream_of_plus_tss", -23, "AAA"),
-        # BBB's TSS is at 4499 and reads on -, so an earlier cut is downstream.
-        ("downstream_of_minus_tss", 92, "BBB"),
-        ("minus_cds_first_block", 956, "BBB"),
+        ("upstream_of_plus_tss", -30, "AAA"),
+        # BBB's TSS is at 4499 and reads on -, so an earlier site is downstream.
+        ("downstream_of_minus_tss", 99, "BBB"),
+        ("minus_cds_first_block", 949, "BBB"),
         # After the TSS of a - gene: upstream, so negative.
-        ("intergenic", -15518, "BBB"),
+        ("intergenic", -15511, "BBB"),
     ],
 )
 def test_the_distance_to_the_tss_is_signed_in_the_genes_orientation(
@@ -299,7 +308,7 @@ def test_the_promoter_flag_is_the_window_around_any_tss(annotated, guide_id, pro
 
 def test_a_site_can_be_an_exon_and_a_promoter_at_once(annotated):
     row = one(annotated, "utr_and_promoter")
-    assert row["location"] == "exon"
+    assert row["feature"] == "exon"
     assert bool(row["promoter"]) is True
 
 
@@ -374,10 +383,10 @@ def test_the_contig_message_shows_both_namings(store, tss):
 def test_one_shared_contig_is_enough(store, tss):
     sites = sites_frame(site("here", "chr1", 2030, "+"), site("away", "chrZ", 10, "+"))
     frame = annotate_sites(sites, store, tss, promoter_window=WINDOW)
-    assert frame["location"].tolist() == ["exon", "intergenic"]
+    assert frame["location"].tolist() == ["genic", "intergenic"]
 
 
-@pytest.mark.parametrize("missing", ["chr", "start", "end", "strand", "cut_site"])
+@pytest.mark.parametrize("missing", ["chr", "start", "end", "strand", "target_site"])
 def test_a_missing_site_column_is_named(store, tss, missing):
     sites = sites_frame(site("g", "chr1", 2030, "+")).drop(columns=[missing])
     with pytest.raises(AnnotationError, match=f"sites are missing .*{missing}"):
@@ -392,3 +401,85 @@ def test_a_negative_promoter_window_is_refused(store, tss):
 def test_a_promoter_table_with_no_tss_is_refused(store, tss):
     with pytest.raises(PromoterError, match="holds no transcription start site"):
         annotate_sites(sites_frame(*SITES), store, tss.iloc[:0])
+
+
+def test_a_lncrna_overlap_is_reported_without_making_the_row_genic(annotated):
+    row = one(annotated, "in_a_lncrna")
+    assert (row["location"], row["feature"]) == ("intergenic", "")
+    assert pd.isna(row["ensg"])
+    assert row["other_gene_types"] == "lncRNA"
+    assert row["other_genes"] == "ENSG00000000004"
+
+
+def test_a_row_over_no_other_gene_type_leaves_those_columns_empty(annotated):
+    row = one(annotated, "exon_plus")
+    assert (row["other_gene_types"], row["other_genes"]) == ("", "")
+
+
+def test_an_alternative_promoter_is_found_and_names_its_transcript(annotated):
+    row = one(annotated, "alternative_promoter")
+    assert row["promoter"]
+    # The one-TSS-per-gene file would have had only ENST00000000051 at 5000.
+    assert row["promoter_enst"] == "ENST00000000052"
+    assert row["promoter_ensg"] == "ENSG00000000005"
+    assert row["promoter_gene"] == "EEE"
+
+
+def test_a_site_in_no_promoter_leaves_the_promoter_ids_empty(annotated):
+    row = one(annotated, "deep_intron")
+    assert not row["promoter"]
+    assert (row["promoter_enst"], row["promoter_ensg"], row["promoter_gene"]) == (
+        "",
+        "",
+        "",
+    )
+
+
+def test_the_distance_to_the_gene_start_is_signed_in_the_genes_orientation(annotated):
+    # AAA runs + from 1000; this cut is in its exon 2, well inside.
+    plus = one(annotated, "exon_plus")
+    assert plus["distance_to_gene_start"] > 0
+
+    # upstream_of_plus_tss sits before AAA entirely, so it is in no gene and
+    # the column is empty rather than negative.
+    outside = one(annotated, "upstream_of_plus_tss")
+    assert pd.isna(outside["distance_to_gene_start"])
+
+
+def test_a_minus_strand_gene_measures_from_its_own_5_prime_end(annotated, store):
+    row = one(annotated, "minus_cds_first_block")
+    gene = store.rows("gene")
+    bbb = gene[gene["gene_symbol"] == row["gene_symbol"]].iloc[0]
+    assert bbb["Strand"] == "-"
+    # Measured from End - 1, the gene's 5'-most base, counting inwards.
+    midpoint = (row["start"] + row["end"]) // 2
+    assert row["distance_to_gene_start"] == bbb["End"] - 1 - midpoint
+
+
+def test_the_gene_start_distance_separates_canonical_from_alternative(annotated):
+    # EEE starts at 5000; the alternative promoter sits 480 bases in, which is
+    # what tells the two apart when both are flagged promoter.
+    alt = one(annotated, "alternative_promoter")
+    assert alt["promoter"]
+    # EEE starts at 5000 and the protospacer midpoint is 5490.
+    assert alt["distance_to_gene_start"] == 490
+
+
+@pytest.mark.parametrize(
+    ("distance_from", "expected"),
+    [("midpoint", 40), ("target_site", 47)],
+)
+def test_distance_from_chooses_the_reference_point(store, tss, distance_from, expected):
+    frame = annotate_sites(
+        sites_frame(*SITES),
+        store,
+        tss,
+        promoter_window=WINDOW,
+        distance_from=distance_from,
+    )
+    assert one(frame, "utr_and_promoter")["distance_to_tss"] == expected
+
+
+def test_an_unknown_distance_reference_is_refused(store, tss):
+    with pytest.raises(ValueError, match="distance_from must be one of"):
+        annotate_sites(sites_frame(*SITES), store, tss, distance_from="pam")

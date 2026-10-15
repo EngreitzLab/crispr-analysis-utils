@@ -48,7 +48,7 @@ SITE_COLUMNS = (
     "start",
     "end",
     "strand",
-    "cut_site",
+    "target_site",
     "pam_matches",
     "mapped_sequence",
 )
@@ -156,11 +156,11 @@ def test_run_writes_every_output(setup):
     assert g_a["end"] == str(a_start + 20)
     assert g_a["strand"] == "+"
     assert g_a["pam_matches"] == "TRUE"
-    assert g_a["cut_site"] == str(a_start + 17)
+    assert g_a["target_site"] == str(a_start + 17)
     assert g_a["guide_id"] == SPACER_A + "NGG"
     # The genomic PAM is the tail of mapped_sequence; the pattern ends guide_id.
     assert g_a["mapped_sequence"] == SPACER_A + "TGG"
-    assert (g_a["n_matches"], g_a["n_cut_sites"]) == ("1", "1")
+    assert (g_a["n_matches"], g_a["n_target_sites"]) == ("1", "1")
     assert result.summaries[0].site_pam == "TGG"
     assert result.summaries[0].has_perfect_site is True
     assert result.summaries[0].extra_5p is False
@@ -168,10 +168,10 @@ def test_run_writes_every_output(setup):
     (g_c,) = guides["g_c"]
     assert g_c["site_class"] == "unique"
     assert (g_c["start"], g_c["strand"]) == (str(c_start), "-")
-    assert g_c["cut_site"] == str(c_start + 3)
+    assert g_c["target_site"] == str(c_start + 3)
     # Two sites, so two rows, with the guide's own columns repeated on each.
     assert {row["site_class"] for row in guides["g_g"]} == {"multi"}
-    assert {row["n_cut_sites"] for row in guides["g_g"]} == {"2"}
+    assert {row["n_target_sites"] for row in guides["g_g"]} == {"2"}
     assert len(guides["g_g"]) == 2
     (g_nt,) = guides["g_nt"]
     assert g_nt["site_class"] == "no_site"
@@ -246,7 +246,7 @@ def test_the_scan_is_exact_so_a_mismatched_site_is_never_reported(setup):
     rows = table(setup["outdir"] / "alignments" / "guide_genome_annotation.tsv")
     assert str(nag_start) not in {row["start"] for row in rows}
     guides = by_alias(rows)
-    assert guides["g_c"][0]["n_cut_sites"] == "1"
+    assert guides["g_c"][0]["n_target_sites"] == "1"
     assert guides["g_c"][0]["n_matches"] == "1"
     assert [s.min_mismatches for s in result.summaries if s.alias == "g_c"] == [0]
     assert {
@@ -331,7 +331,7 @@ def test_a_pam_running_off_a_contig_end_is_counted_not_reported(tmp_path):
     # Nothing was kept, so the guide gets its one row with no site in it.
     (row,) = table(result.outdir / "alignments" / "guide_genome_annotation.tsv")
     assert [row[name] for name in SITE_COLUMNS] == [""] * 7
-    assert (row["n_matches"], row["n_cut_sites"]) == ("0", "0")
+    assert (row["n_matches"], row["n_target_sites"]) == ("0", "0")
     assert result.summaries[0].site_class == "no_site"
     assert result.summaries[0].orientation == "no_match"
 
@@ -346,7 +346,7 @@ def test_a_match_without_a_pam_is_kept_out_of_the_bed_but_written_to_the_tsv(tmp
     assert (site.pam, site.pam_class) == ("TTT", "none")
     (row,) = table(result.outdir / "alignments" / "guide_genome_annotation.tsv")
     assert (row["chr"], row["start"], row["pam_matches"]) == ("c1", "4", "FALSE")
-    assert (row["n_matches"], row["n_cut_sites"]) == ("1", "0")
+    assert (row["n_matches"], row["n_target_sites"]) == ("1", "0")
     assert row["mapped_sequence"] == SPACER_A + "TTT"
     # Nothing can be cut there, so the BED is empty.
     assert (result.outdir / "alignments" / "guide_mapping.bed").read_text() == ""

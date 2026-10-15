@@ -67,23 +67,37 @@ the position along the CDS: **MANE Select, else Ensembl canonical, else the
 longest CDS**, and the order is deterministic down to the transcript id, so a
 rebuild chooses the same one.
 
-`location` is called against that transcript. `exonic_any_transcript` records
+`feature` is called against that transcript. `exonic_any_transcript` records
 whether any transcript of the gene has an exon there, so a row called `intron`
 that is another transcript's exon is still visible.
 
-## Location and promoter are separate columns
+## Three axes, not one
 
-A cut 300 bp into exon 1 is both exonic and inside a promoter. A single
-column would have to pick one and hide the other, so `location` is
-`exon`/`intron`/`intergenic` and `promoter` is its own TRUE/FALSE.
+A target site 300 bp into exon 1 is in a gene, in an exon and inside a
+promoter. One
+column would have to pick one and hide the others, so there are three:
+`location` is `genic`/`intergenic`, `feature` is `exon`/`intron` within the
+reference transcript, and `promoter` is its own TRUE/FALSE.
 
 With `--gene-types` at its default, `intergenic` means "not in a
-protein-coding gene", not "in no gene at all".
+protein-coding gene", not "in no gene at all". A protospacer inside a lncRNA
+is `intergenic`, and `other_gene_types` and `other_genes` name what it
+overlaps, so the ambiguity is on the row without it deciding the call.
+
+## Every transcript has a promoter
+
+A gene has as many promoters as it has distinct transcript starts, and a
+guide at an alternative promoter is invisible to a one-TSS-per-gene file.
+Without `--promoters` the store supplies a site for every transcript, and
+`promoter_enst`, `promoter_ensg` and `promoter_gene` name the ones whose
+window the protospacer overlaps. `nearest_tss_gene` and `nearest_tss_ensg`
+stay singular, because the nearest is one.
 
 ## What is measured from where
 
 Overlaps are decided on the **protospacer**, so a guide reaching into an exon
-counts as exonic. Distances and the CDS position are measured from the **cut
+counts as exonic. Distances and the CDS position are measured from the
+**target
 site**. Every interval test ignores strand: a guide on one strand targets a
 gene on either.
 

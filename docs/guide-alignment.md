@@ -74,8 +74,8 @@ random scaffolds are read too, and a guide will match its own alt copy.
 0-based and half-open, on the reference's forward strand, and the protospacer
 alone — the PAM and any base 5' of it are outside `[start, end)`.
 
-`cut_site` is the boundary the blunt SpCas9 cut falls on, three bases from the
-PAM: the cut lies between `cut_site - 1` and `cut_site`. On `+` that is
+`target_site` is the boundary the blunt SpCas9 cut falls on, three bases from the
+PAM: the cut lies between `target_site - 1` and `target_site`. On `+` that is
 `end - 3`, on `-` it is `start + 3`.
 
 ## Orientation

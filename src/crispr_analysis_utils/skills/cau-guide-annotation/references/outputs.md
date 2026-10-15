@@ -26,14 +26,18 @@ empty. Only sites with a PAM are annotated.
 | `chr`, `start`, `end`, `strand` | The protospacer, 0-based and half-open. |
 | `ensg`, `gene_symbol` | The gene this row is about, without a version. |
 | `enst` | Its reference transcript, when the protospacer hits one of that transcript's exons. |
-| `location` | `exon`, `intron` or `intergenic`. |
+| `location` | `genic` or `intergenic`, from whether a gene of an annotated type overlaps. |
+| `feature` | `exon` or `intron` inside the reference transcript; empty when intergenic. |
 | `exonic_any_transcript` | TRUE when any transcript of the gene has an exon here. |
 | `region` | `CDS` or `UTR` for an exonic row. |
 | `exon_number` | Which exon of the reference transcript, from its 5' end. |
 | `cds_position`, `cds_fraction` | How far along the CDS the cut falls, in bases and as a fraction. |
+| `distance_to_gene_start` | Signed bases from the anchor to this gene's annotated 5' end, in the gene's orientation. Near zero is the canonical promoter. |
 | `sense` | Whether the protospacer reads on the gene's own strand. |
+| `other_gene_types`, `other_genes` | Semicolon-separated types and ids of overlapping genes of other types, such as lncRNA. Empty when none. |
 | `promoter` | TRUE within the promoter window of any protein-coding TSS. |
-| `distance_to_tss` | Signed bases from the cut site to the nearest TSS. |
+| `promoter_enst`, `promoter_ensg`, `promoter_gene` | Semicolon-separated transcripts whose promoter window the protospacer overlaps, and their genes. Empty when the TSS file carries no transcript id. |
+| `distance_to_tss` | Signed bases from the anchor to the nearest TSS. The anchor is the protospacer midpoint unless `--distance-from target_site`. |
 | `nearest_tss_gene`, `nearest_tss_ensg` | Whose TSS that is. |
 | `gc_percent`, `max_polyt_run` | The protospacer's GC, and its longest T run. |
 
