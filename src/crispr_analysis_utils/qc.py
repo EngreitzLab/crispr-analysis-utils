@@ -591,7 +591,14 @@ def metric_scatter(
         layers = [(kept & drawn, KEPT, "kept"), (~kept & drawn, REMOVED, "removed")]
     else:
         labels = pd.Series(groups, index=frame.index).reindex(measured.index)
-        named = [str(name) for name in pd.unique(labels.dropna())]
+        # Deterministic, so a label keeps its colour across figures. A
+        # Categorical says the order it wants; anything else is sorted,
+        # since row order is not a meaning.
+        named = (
+            [str(name) for name in labels.cat.categories]
+            if isinstance(labels.dtype, pd.CategoricalDtype)
+            else sorted(str(name) for name in pd.unique(labels.dropna()))
+        )
         # Unlabelled first, so the classes being compared sit on top of it.
         layers = [(labels.isna().to_numpy() & drawn, REMOVED, None)]
         layers += [

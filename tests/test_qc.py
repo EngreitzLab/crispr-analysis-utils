@@ -21,6 +21,15 @@ from crispr_analysis_utils.qc import (
 BARCODES = ["AAA", "CCC", "GGG"]
 
 
+@pytest.fixture(autouse=True)
+def _close_figures():
+    """pyplot keeps every figure until it is closed, and this file draws many."""
+    yield
+    import matplotlib.pyplot as plt
+
+    plt.close("all")
+
+
 def mudata():
     """Three barcodes: the first gene-only, the last guide-only."""
     import anndata as ad
@@ -484,3 +493,40 @@ def test_groups_still_report_the_quadrant_counts():
         marginals=False,
     )
     assert "kept 1" in caption and "low_both 1" in caption
+
+
+def test_a_label_keeps_its_colour_whatever_order_the_rows_arrive_in():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    def legend(order):
+        frame = pd.DataFrame(
+            {"reference_upm": [10.0, 20.0, 30.0], "mean_umi": [1.0, 2.0, 3.0]}
+        )
+        figure, _, _ = metric_scatter(
+            frame,
+            x="reference_upm",
+            y="mean_umi",
+            log=("reference_upm", "mean_umi"),
+            groups=order,
+            marginals=False,
+        )
+        return [t.get_text() for t in figure.axes[0].get_legend().get_texts()]
+
+    assert legend(["Day 4", "Day 0", "Day 2"]) == legend(["Day 0", "Day 2", "Day 4"])
+
+
+def test_a_categorical_sets_its_own_legend_order():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame({"reference_upm": [10.0, 20.0], "mean_umi": [1.0, 2.0]})
+    wanted = ["Housekeeping", "Day 0"]
+    groups = pd.Categorical(["Day 0", "Housekeeping"], categories=wanted)
+    figure, _, _ = metric_scatter(
+        frame,
+        x="reference_upm",
+        y="mean_umi",
+        log=("reference_upm", "mean_umi"),
+        groups=groups,
+        marginals=False,
+    )
+    assert [t.get_text() for t in figure.axes[0].get_legend().get_texts()] == wanted
