@@ -351,8 +351,10 @@ def metric_distributions(
     for axis, metric in zip(axes.ravel(), metrics, strict=False):
         values = measured[metric].to_numpy(dtype=float)
         if metric in log:
-            # A zero has no place on a log axis, and the smallest count is 1.
-            floor = max(np.nanmin(values[values > 0], initial=1.0), 1.0)
+            # A zero has no place on a log axis, so the range starts at the
+            # smallest value actually present.
+            positive = values[values > 0]
+            floor = float(positive.min()) if positive.size else 1.0
             edges = np.logspace(np.log10(floor), np.log10(np.nanmax(values)), bins + 1)
             axis.set_xscale("log")
         else:

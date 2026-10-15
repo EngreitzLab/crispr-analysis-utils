@@ -183,3 +183,13 @@ def test_the_distributions_need_a_metric_and_a_measured_cell():
         metric_distributions(frame[[]])
     with pytest.raises(FigureError, match="No measured cell"):
         metric_distributions(frame.loc[["GGG"]])
+
+
+def test_a_log_panel_bins_from_the_smallest_value_not_from_one():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    frame = pd.DataFrame({"total_counts": [1000.0, 2000.0, 8000.0]})
+    _, numbers, _ = metric_distributions(frame, bins=4)
+    # Otherwise three of the four bins would sit under the data.
+    assert numbers["bin_left"].min() == pytest.approx(1000.0)
+    assert numbers["n_kept"].sum() == 3
