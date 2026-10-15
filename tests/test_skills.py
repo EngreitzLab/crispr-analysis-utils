@@ -23,6 +23,9 @@ REPO = Path(__file__).resolve().parent.parent
 
 # Which analysis modules each skill or agent covers.
 COVERAGE = {
+    # The workflow skill routes between the others: it covers no module of its
+    # own, and an empty tuple is how a skill says so.
+    "cau-workflow": (),
     "cau-accession": ("accession",),
     "cau-normalization": ("normalization",),
     "cau-guide-alignment": ("guide_alignment",),
