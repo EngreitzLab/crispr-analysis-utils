@@ -1228,3 +1228,177 @@ def apply_filters(data, passes: pd.DataFrame, rules: pd.DataFrame, path=None):
         path.parent.mkdir(parents=True, exist_ok=True)
         filtered.write_h5mu(path)
     return filtered
+
+
+def guide_counts(data, modality: str = "guide") -> pd.DataFrame:
+    """Every guide's UMIs and the number of cells it was seen in.
+
+    Parameters
+    ----------
+    data
+        A MuData as `mudata_builder` assembles it.
+    modality
+        The modality holding the guide counts.
+
+    Returns
+    -------
+    pandas.DataFrame
+        One row per guide, indexed by guide id, with `umis` and `n_cells`.
+        `attrs` carries the modality and how many cells it was summed over,
+        for a caption to quote.
+
+    Notes
+    -----
+    Both numbers are summed over the cells the modality holds, which under a
+    union is not every cell of the object.
+    """
+    counts = data[modality]
+    matrix = counts.X
+    frame = pd.DataFrame(
+        {
+            "umis": np.asarray(matrix.sum(axis=0)).ravel(),
+            "n_cells": np.asarray((matrix > 0).sum(axis=0)).ravel(),
+        },
+        index=pd.Index(counts.var_names, name="guide_id"),
+    )
+    frame.attrs = {"modality": modality, "n_cells": int(counts.n_obs)}
+    return frame
+
+
+#: What each `guide_counts` column is called on an axis.
+GUIDE_LABELS = {"umis": "UMIs per guide", "n_cells": "cells per guide"}
+
+
+def guide_abundance(
+    counts: pd.DataFrame,
+    column: str = "umis",
+    groups=None,
+    bins: int = 60,
+):
+    """How much of the library this channel saw, and how often.
+
+    The guides never seen get a bar of their own left of the axis. A zero
+    has no place on a log scale, and dropping it would answer a different
+    question than the one the figure is asked.
+
+    Parameters
+    ----------
+    counts : pandas.DataFrame
+        One row per guide, as `guide_counts` returns.
+    column : str
+        Which of its columns to bin.
+    groups : optional
+        A label per guide, aligned to `counts.index`. Each class is drawn
+        as its own outline, over the share of that class rather than the
+        count: a library's classes differ in size by two orders of
+        magnitude, and raw counts would show only the largest.
+    bins : int
+        Logarithmic bins between one and the largest count, rounded to
+        integer edges so no bin is narrower than a count.
+
+    Returns
+    -------
+    tuple
+        The figure, the numbers, and the caption, ready for `publish`.
+
+    Raises
+    ------
+    FigureError
+        No guide was seen at all, so there is nothing to bin.
+    """
+    from matplotlib import ticker
+
+    plt = style()
+    if column not in counts.columns:
+        raise FigureError(f"The frame has no {column!r} to bin.")
+    values = counts[column].to_numpy(dtype=float)
+    seen = values[values > 0]
+    if seen.size == 0:
+        raise FigureError(f"No guide has a {column} above zero to bin.")
+
+    labels = pd.Series("every guide" if groups is None else groups, index=counts.index)
+    named = (
+        [str(name) for name in labels.cat.categories]
+        if isinstance(labels.dtype, pd.CategoricalDtype)
+        else sorted(str(name) for name in pd.unique(labels.dropna()))
+    )
+    labels = labels.astype(str)
+
+    # A count is an integer, so a log bin narrower than one alternates
+    # full and empty and draws a comb. Rounding the edges collapses those
+    # into single-count bins and leaves the rest logarithmic.
+    edges = np.unique(np.round(np.logspace(0.0, np.log10(seen.max()), bins + 1)))
+    edges[-1] = max(edges[-1], float(seen.max()))
+
+    figure, axis = plt.subplots(figsize=(6.5, 4.0))
+    # The never-seen bars share the linear strip the symlog axis keeps for
+    # zero, side by side so one class does not hide another.
+    span = 0.8 / len(named)
+    records = []
+    for index, name in enumerate(named):
+        mine = values[(labels == name).to_numpy()]
+        if mine.size == 0:
+            continue
+        colour = KEPT if groups is None else OKABE_ITO[index % len(OKABE_ITO)]
+        scale = float(mine.size) if groups is not None else 1.0
+        binned = np.histogram(mine[mine > 0], bins=edges)[0] / scale
+        never = float((mine == 0).sum()) / scale
+        if groups is None:
+            axis.stairs(binned, edges, fill=True, color=colour)
+        else:
+            axis.stairs(binned, edges, color=colour, linewidth=1.4, label=name)
+        axis.bar(
+            0.1 + span * (index + 0.5),
+            never,
+            width=span * 0.9,
+            color=REMOVED if groups is None else colour,
+            edgecolor=EDGE,
+            linewidth=EDGE_WIDTH,
+        )
+        drawn = np.concatenate([[never], binned]) * scale
+        records.append(
+            pd.DataFrame(
+                {
+                    "class": name,
+                    "panel": ["never seen"] + ["binned"] * (len(edges) - 1),
+                    "bin_left": np.concatenate([[np.nan], edges[:-1]]),
+                    "bin_right": np.concatenate([[np.nan], edges[1:]]),
+                    "n_guides": drawn.astype(int),
+                    "share": drawn / mine.size,
+                }
+            )
+        )
+
+    axis.set_xscale("symlog", linthresh=1.0, linscale=0.35)
+    axis.set_yscale("log")
+    axis.set(
+        xlabel=GUIDE_LABELS.get(column, column.replace("_", " ")),
+        ylabel="guides" if groups is None else "share of the class",
+    )
+    axis.xaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: _label(v)))
+    axis.xaxis.set_minor_formatter(ticker.NullFormatter())
+    if groups is not None:
+        axis.legend(frameon=False, fontsize="small")
+
+    never = int((values == 0).sum())
+    axis.set_title(
+        f"{never:,} of {len(values):,} never seen",
+        loc="right",
+        fontsize="small",
+        color="0.35",
+    )
+    figure.tight_layout()
+
+    numbers = pd.concat(records, ignore_index=True)
+    over = counts.attrs.get("n_cells")
+    what = GUIDE_LABELS.get(column, column.replace("_", " "))
+    caption = (
+        f"{what[0].upper()}{what[1:]}, binned logarithmically"
+        + (f" over {over:,} cells" if over else "")
+        + f". The bar left of the axis is the {never:,} of {len(values):,} "
+        "guides never seen, which a log scale cannot place at zero. A "
+        "channel holds far fewer cells than a library holds guides, so a "
+        "guide missing here is not a guide missing from the library: that "
+        "question needs the channels pooled."
+    )
+    return figure, numbers, caption

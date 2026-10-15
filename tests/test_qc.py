@@ -811,3 +811,119 @@ def test_a_filter_that_keeps_nothing_is_refused():
     )
     with pytest.raises(FilterError, match="No cell passes"):
         apply_filters(data, passes, rules)
+
+
+def guide_library():
+    """Six guides over four cells: one no cell carries, one in every cell."""
+    import anndata as ad
+    import mudata as md
+
+    counts = np.array(
+        [
+            [0, 1, 0, 40, 900, 0],
+            [0, 0, 2, 0, 800, 0],
+            [0, 0, 0, 50, 0, 0],
+            [0, 1, 0, 0, 700, 0],
+        ],
+        dtype="float32",
+    )
+    var = pd.DataFrame(
+        {"type": ["targeting"] * 4 + ["non-targeting"] * 2},
+        index=pd.Index([f"g{n}" for n in range(6)], name="guide_id"),
+    )
+    guide = ad.AnnData(
+        X=counts,
+        obs=pd.DataFrame(index=pd.Index([f"c{n}" for n in range(4)], name="barcode")),
+        var=var,
+    )
+    return md.MuData({"guide": guide})
+
+
+def test_a_guide_no_cell_carries_is_counted_rather_than_dropped():
+    from crispr_analysis_utils.qc import guide_counts
+
+    counts = guide_counts(guide_library())
+    assert counts.index.tolist() == [f"g{n}" for n in range(6)]
+    assert counts["umis"].tolist() == [0.0, 2.0, 2.0, 90.0, 2400.0, 0.0]
+    assert counts["n_cells"].tolist() == [0, 2, 1, 2, 3, 0]
+
+
+def test_the_counts_remember_how_many_cells_they_were_summed_over():
+    from crispr_analysis_utils.qc import guide_counts
+
+    # A caption cannot say it otherwise: under a union the guide modality
+    # holds fewer cells than the object does.
+    assert guide_counts(guide_library()).attrs == {"modality": "guide", "n_cells": 4}
+
+
+def test_the_guides_never_seen_get_the_bar_a_log_axis_cannot_give_them():
+    from crispr_analysis_utils.qc import guide_abundance, guide_counts
+
+    figure, numbers, caption = guide_abundance(guide_counts(guide_library()))
+    unseen = numbers[numbers["panel"] == "never seen"]
+    assert unseen["n_guides"].tolist() == [2]
+    assert figure.axes[0].get_xscale() == "symlog"
+    assert "2 of 6" in figure.axes[0].get_title(loc="right")
+    assert "2 of 6 guides never seen" in caption
+
+
+def test_every_guide_that_was_seen_lands_in_a_bin():
+    from crispr_analysis_utils.qc import guide_abundance, guide_counts
+
+    _, numbers, _ = guide_abundance(guide_counts(guide_library()))
+    assert int(numbers.loc[numbers["panel"] == "binned", "n_guides"].sum()) == 4
+
+
+def test_a_count_is_never_split_across_two_bins():
+    from crispr_analysis_utils.qc import guide_abundance, guide_counts
+
+    # Logarithmic edges below ten are narrower than one, and would leave
+    # every other bin empty: a comb, not a distribution.
+    _, numbers, _ = guide_abundance(guide_counts(guide_library()), bins=60)
+    binned = numbers[numbers["panel"] == "binned"]
+    widths = binned["bin_right"] - binned["bin_left"]
+    assert (widths >= 1.0).all()
+
+
+def test_a_class_is_drawn_as_its_share_so_a_small_one_still_reads():
+    from crispr_analysis_utils.qc import guide_abundance, guide_counts
+
+    data = guide_library()
+    _, numbers, _ = guide_abundance(
+        guide_counts(data), groups=data["guide"].var["type"]
+    )
+    unseen = numbers[numbers["panel"] == "never seen"].set_index("class")
+    # One of four targeting guides, one of two controls: the same count,
+    # and the share is what separates them.
+    assert unseen.loc["targeting", "n_guides"] == 1
+    assert unseen.loc["non-targeting", "n_guides"] == 1
+    assert unseen.loc["targeting", "share"] == pytest.approx(0.25)
+    assert unseen.loc["non-targeting", "share"] == pytest.approx(0.5)
+
+
+def test_the_same_figure_bins_the_cells_a_guide_reached():
+    from crispr_analysis_utils.qc import guide_abundance, guide_counts
+
+    figure, numbers, caption = guide_abundance(
+        guide_counts(guide_library()), column="n_cells"
+    )
+    assert figure.axes[0].get_xlabel() == "cells per guide"
+    assert caption.startswith("Cells per guide")
+    assert int(numbers.loc[numbers["panel"] == "binned", "n_guides"].sum()) == 4
+
+
+def test_a_library_no_cell_saw_is_refused_rather_than_drawn_empty():
+    from crispr_analysis_utils.qc import guide_abundance, guide_counts
+
+    data = guide_library()
+    data["guide"].X[:] = 0
+    with pytest.raises(FigureError, match="above zero"):
+        guide_abundance(guide_counts(data))
+
+
+def test_the_caption_refuses_to_call_a_channels_gap_a_library_gap():
+    from crispr_analysis_utils.qc import guide_abundance, guide_counts
+
+    _, _, caption = guide_abundance(guide_counts(guide_library()))
+    assert "over 4 cells" in caption
+    assert "channels pooled" in caption

@@ -4,8 +4,9 @@ description: >-
   Draw quality-control figures for a CRISPR screen with crispr-analysis-utils
   (`crispr_analysis_utils.qc`), each published as a PDF, the numbers behind
   it and a caption. Use when a user wants a knee plot or other QC figure from
-  an assembled MuData, asks how deep a channel is, wants a figure ready for a
-  paper, or asks where the numbers behind a figure are. Covers the three
+  an assembled MuData, asks how deep a channel is, asks which guides a
+  channel saw, wants a figure ready for a paper, or asks where the numbers
+  behind a figure are. Covers the three
   files every figure writes, the house style, and why a figure is refused
   without its data.
 ---
@@ -25,6 +26,7 @@ fractions = qc.cell_fractions(cells)
 qc.publish("results/qc/metrics", *qc.metric_distributions(fractions))
 passes, rules = qc.cell_filters(fractions, nmads=5)
 clean = qc.apply_filters(cells, passes, rules, path="results/qc/filtered.h5mu")
+qc.publish("results/qc/guides", *qc.guide_abundance(qc.guide_counts(clean)))
 ```
 
 ## Every figure is three files
@@ -227,6 +229,29 @@ every one, records them, and writes the object.
   real cells to a band nobody chose.
 - `nmads=None` leaves only the limits, for a screen whose thresholds were
   settled elsewhere.
+
+## The guides the channel saw
+
+`qc.guide_counts(data)` gives every guide its UMIs and the cells it reached;
+`qc.guide_abundance(counts)` bins them.
+
+- **A guide missing from a channel is not a guide missing from the library.**
+  Ten thousand cells cannot sample forty thousand guides, so most of a
+  library is absent from any one channel by arithmetic. Pool the channels
+  before calling a guide lost, and compare the count against what the cell
+  count and the MOI predict.
+- **The guides never seen get a bar of their own**, on the linear strip of a
+  symlog axis. A log scale has no place for a zero, and leaving them out
+  would answer a different question than the one the figure is asked.
+- **The bins are rounded to integer edges**, so no bin is narrower than a
+  count. Without that the low end draws a comb rather than a distribution.
+- **Two modes are the shape to expect**: ambient at a handful of UMIs, and
+  the guides really in cells at thousands. Where the trough falls is what a
+  per-cell assignment has to separate.
+- **`groups=` compares the classes as shares**, not counts, since a library
+  is mostly targeting guides and its few hundred controls would otherwise be
+  a sliver.
+- `column="n_cells"` bins the cells a guide reached instead of its UMIs.
 
 ## Ask before running
 
