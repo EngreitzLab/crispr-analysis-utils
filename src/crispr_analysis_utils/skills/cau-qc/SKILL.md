@@ -137,6 +137,11 @@ on its margin, and the quadrant counts in the caption.
   counts in its quadrant, and the caption says how many there were.
 - `unit="genes"` makes the same figure a per-gene comparison against a
   reference, thresholds and quadrant counts included.
+- **`groups=` colours by a label instead of by the thresholds.** Where
+  nothing is being filtered, calling the points below a line "removed" is
+  wrong: the lines then only mark where things were expected to fall, and
+  the colour is free to carry what the point is. A point with no label is
+  grey and drawn behind the rest.
 
 ## Does the panel dominate?
 

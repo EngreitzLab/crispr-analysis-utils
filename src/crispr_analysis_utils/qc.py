@@ -507,6 +507,7 @@ def metric_scatter(
     log: tuple[str, ...] = LOG_METRICS,
     marginals: bool = True,
     unit: str = "cells",
+    groups=None,
 ):
     """Two QC metrics against each other, cut into quadrants by thresholds.
 
@@ -530,6 +531,12 @@ def metric_scatter(
     unit : str
         What a point is, for the caption. Cells by default; the same figure
         serves a per-gene comparison.
+    groups : array-like, optional
+        A label per row. Given, the colour carries the label rather than
+        whether the point clears the thresholds, which stay as lines. A row
+        with no label is drawn grey and behind the rest. Use it where
+        nothing is being filtered and the thresholds only mark where things
+        were expected to fall.
 
     Returns
     -------
@@ -580,12 +587,21 @@ def metric_scatter(
         figure, axis = plt.subplots(figsize=(5.5, 4.5))
         top = right = None
 
+    if groups is None:
+        layers = [(kept & drawn, KEPT, "kept"), (~kept & drawn, REMOVED, "removed")]
+    else:
+        labels = pd.Series(groups, index=frame.index).reindex(measured.index)
+        named = [str(name) for name in pd.unique(labels.dropna())]
+        # Unlabelled first, so the classes being compared sit on top of it.
+        layers = [(labels.isna().to_numpy() & drawn, REMOVED, None)]
+        layers += [
+            ((labels == name).to_numpy() & drawn, OKABE_ITO[i % len(OKABE_ITO)], name)
+            for i, name in enumerate(named)
+        ]
+
     # Rasterised: one point per cell stays a vector object otherwise, and a
     # channel of 10,000 cells turns into a PDF nobody can open.
-    for mask, colour, label in (
-        (kept & drawn, KEPT, "kept"),
-        (~kept & drawn, REMOVED, "removed"),
-    ):
+    for mask, colour, label in layers:
         if mask.any():
             axis.scatter(
                 xs[mask],
@@ -609,7 +625,7 @@ def metric_scatter(
     axis.grid(which="major", color="0.85", linewidth=0.6)
     axis.set_axisbelow(True)
     # Only worth a legend when there are two groups to tell apart.
-    if kept.any() and not kept.all():
+    if groups is not None or (kept.any() and not kept.all()):
         axis.legend(frameon=False, fontsize="small", loc="lower right")
 
     for panel, values, name, orientation in (
@@ -644,6 +660,8 @@ def metric_scatter(
             "drawn": drawn,
         }
     )
+    if groups is not None:
+        numbers["group"] = labels.to_numpy()
     stated = ", ".join(
         f"{name} at {value:,.4g}"
         for name, value in ((x, x_threshold), (y, y_threshold))
@@ -652,7 +670,12 @@ def metric_scatter(
     caption = (
         f"{x} against {y} for {len(measured):,} {unit}, one point each. "
         + (f"Dashed lines are the thresholds ({stated}). " if stated else "")
-        + "Points at or above every threshold are blue and the rest grey: "
+        + (
+            "Colour is the group each point belongs to, and a point in no "
+            "group is grey. Counts by quadrant: "
+            if groups is not None
+            else "Points at or above every threshold are blue and the rest grey: "
+        )
         + ", ".join(f"{label} {number:,}" for label, number in counts.items())
         + ". Histograms on the margins are each metric's own distribution "
         + f"over the same {unit}."

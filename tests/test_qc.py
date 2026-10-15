@@ -432,3 +432,55 @@ def test_the_point_size_follows_how_many_points_there_are():
     small = metric_scatter(many, marginals=False)[0].axes[0].collections[0].get_sizes()
     large = metric_scatter(few, marginals=False)[0].axes[0].collections[0].get_sizes()
     assert large[0] > small[0]
+
+
+def test_groups_colour_the_points_instead_of_the_threshold():
+    from crispr_analysis_utils.qc import OKABE_ITO, REMOVED, metric_scatter
+
+    frame = pd.DataFrame(
+        {"reference_upm": [5.0, 100.0, 200.0], "mean_umi": [0.2, 3.0, 4.0]},
+        index=pd.Index(["a", "b", "c"], name="gene"),
+    )
+    groups = pd.Series(["Day 0", "Day 4", None], index=frame.index)
+    figure, numbers, caption = metric_scatter(
+        frame,
+        x="reference_upm",
+        y="mean_umi",
+        x_threshold=30,
+        y_threshold=1,
+        log=("reference_upm", "mean_umi"),
+        unit="genes",
+        groups=groups,
+        marginals=False,
+    )
+
+    assert numbers["group"].tolist()[:2] == ["Day 0", "Day 4"]
+    assert pd.isna(numbers["group"].iloc[2])
+    labels = [t.get_text() for t in figure.axes[0].get_legend().get_texts()]
+    assert labels == ["Day 0", "Day 4"]
+    # Nothing is being filtered, so the caption must not say so.
+    assert "removed" not in caption
+    assert "Colour is the group" in caption
+    # The unlabelled point is grey and drawn first, behind the classes.
+    collections = figure.axes[0].collections
+    assert collections[0].get_facecolor()[0][0] == pytest.approx(float(REMOVED))
+    assert len(collections) == 3
+    assert OKABE_ITO[0].lstrip("#")
+
+
+def test_groups_still_report_the_quadrant_counts():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame({"reference_upm": [5.0, 100.0], "mean_umi": [0.2, 3.0]})
+    _, _, caption = metric_scatter(
+        frame,
+        x="reference_upm",
+        y="mean_umi",
+        x_threshold=30,
+        y_threshold=1,
+        log=("reference_upm", "mean_umi"),
+        unit="genes",
+        groups=["low", "high"],
+        marginals=False,
+    )
+    assert "kept 1" in caption and "low_both 1" in caption
