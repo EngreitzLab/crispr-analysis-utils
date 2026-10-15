@@ -12,13 +12,19 @@ description: >-
 
 # QC figures (`crispr_analysis_utils.qc`)
 
+One pass over a channel: find the floor, measure the cells, cut, write.
+
 ```python
 import mudata as md
 from crispr_analysis_utils import qc
 
 data = md.read_h5mu("results/mudata/mudata.h5mu")
-figure, numbers, caption = qc.knee(data)
-qc.publish("results/qc/knee_umis_per_barcode", figure, numbers, caption)
+qc.publish("results/qc/knee", *qc.knee(data))
+cells, _ = qc.filter_cells(data, min_umis=1000)  # read off that knee
+fractions = qc.cell_fractions(cells)
+qc.publish("results/qc/metrics", *qc.metric_distributions(fractions))
+passes, rules = qc.cell_filters(fractions, nmads=5)
+clean = qc.apply_filters(cells, passes, rules, path="results/qc/filtered.h5mu")
 ```
 
 ## Every figure is three files
@@ -191,8 +197,43 @@ carried over.
 - 5 MADs is the usual starting point. 3 is aggressive, and on a healthy
   channel cuts cells that are only deep.
 
+## The rules, and the file they make
+
+`qc.cell_filters(frame, nmads=5, limits=...)` turns the metric frame into one
+boolean column per rule, and a table of the rules themselves.
+`qc.apply_filters(data, passes, rules, path=...)` keeps the cells that pass
+every one, records them, and writes the object.
+
+- **Two kinds of rule, kept apart.** A band is measured from this channel's
+  own spread; a limit is a number someone decided, `{metric: (low, high)}`
+  with `None` for an open side. `total_counts_mad` and `total_counts_limit`
+  are separate columns, so a metric carries the floor the knee gave it and
+  its band at once, and the record says which one cut what.
+- **The band is the one the panel drew.** `metric_distributions` and
+  `cell_filters` reach `qc.mad_bounds` through the same helper, so the
+  figure cannot disagree with the file.
+- **Measure the rules on the object being filtered.** `apply_filters`
+  refuses a frame that does not cover exactly its cells: a cell no rule saw
+  would otherwise pass every one of them.
+- **A `NaN` fails its rule.** The modality did not measure that cell, and a
+  metric a cell was never measured for is not a metric it passed.
+- **`uns["qc"]` is the record** the file carries: `floor`, written by
+  `filter_cells` itself; `rules`, every threshold with its source and how
+  many cells it rejected; and the counts in and out. An open bound is an
+  infinity, since `None` does not survive HDF5.
+- `nmads=None` leaves only the limits, for a screen whose thresholds were
+  settled elsewhere.
+
 ## Ask before running
 
 - **Which object?** One channel's MuData, or several concatenated. A knee
   plot over pooled channels hides a channel that failed.
-- **Where do the figures go?** Nothing is written outside the stem's folder.
+- **Is this a targeted assay, and is the panel flagged?** `cell_fractions`
+  adds `pct_counts_targeted` only when `var` carries the `readout` column,
+  and `panel_expression` needs it too. Without the flag a TAP channel is
+  QCed as if it were whole-transcriptome, and a `pct_counts_targeted` limit
+  is a rule that cannot be written.
+- **What is the floor?** `min_umis` has no default; read it off this
+  channel's knee.
+- **Where do the figures and the filtered object go?** Nothing is written
+  outside the stem's folder, and `apply_filters` writes one `.h5mu`.

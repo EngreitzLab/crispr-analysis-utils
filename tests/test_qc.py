@@ -619,3 +619,145 @@ def test_a_grouped_point_is_outlined_so_a_pale_fill_still_reads():
     assert background.get_linewidths()[0] == 0
     assert named.get_linewidths()[0] > 0
     assert named.get_edgecolors()[0].tolist() != named.get_facecolors()[0].tolist()
+
+
+def test_a_rule_is_measured_from_the_channel_or_given_as_a_limit():
+    from crispr_analysis_utils.qc import cell_filters
+
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(
+        {
+            "total_counts": rng.lognormal(7.0, 0.3, 200),
+            "pct_counts_mito": rng.normal(5.0, 1.0, 200),
+        }
+    )
+    passes, rules = cell_filters(frame, limits={"pct_counts_mito": (None, 6.0)})
+
+    # Both kinds on one metric, and the band's own on the other.
+    assert list(rules["rule"]) == [
+        "total_counts_mad",
+        "pct_counts_mito_mad",
+        "pct_counts_mito_limit",
+    ]
+    assert list(passes.columns) == list(rules["rule"])
+    assert rules.set_index("rule").loc["pct_counts_mito_limit", "source"] == "limit"
+    assert rules.set_index("rule").loc["total_counts_mad", "source"] == "5 MAD"
+    limit = passes["pct_counts_mito_limit"].to_numpy()
+    assert limit.tolist() == (frame["pct_counts_mito"] <= 6.0).tolist()
+    assert rules["n_failed"].iloc[-1] == int((~limit).sum())
+
+
+def test_the_band_the_filter_cuts_on_is_the_one_the_panel_drew():
+    from crispr_analysis_utils.qc import cell_filters, metric_distributions
+
+    rng = np.random.default_rng(1)
+    frame = pd.DataFrame({"total_counts": rng.lognormal(7.0, 0.3, 300)})
+    _, numbers, _ = metric_distributions(frame, nmads=4.0, bins=8)
+    _, rules = cell_filters(frame, nmads=4.0)
+
+    assert rules["low"].iloc[0] == pytest.approx(numbers["threshold_low"].iloc[0])
+    assert rules["high"].iloc[0] == pytest.approx(numbers["threshold_high"].iloc[0])
+
+
+def test_a_cell_the_modality_never_measured_fails_the_rule():
+    from crispr_analysis_utils.qc import cell_filters
+
+    frame = pd.DataFrame({"pct_counts_mito": [1.0, 1.1, 1.2, np.nan]})
+    passes, rules = cell_filters(frame, limits={"pct_counts_mito": (0.0, 2.0)})
+
+    assert not passes.iloc[3].any()
+    # The NaN is dropped before the band, so it cannot poison the median.
+    assert np.isfinite(rules["high"]).all()
+
+
+def test_a_limit_on_a_metric_the_frame_does_not_hold_is_refused():
+    from crispr_analysis_utils.qc import FilterError, cell_filters
+
+    frame = pd.DataFrame({"pct_counts_mito": [1.0, 2.0, 3.0]})
+    with pytest.raises(FilterError, match="pct_counts_targeted"):
+        cell_filters(frame, limits={"pct_counts_targeted": (25.0, None)})
+
+
+def test_a_flat_metric_with_no_limit_leaves_nothing_to_apply():
+    from crispr_analysis_utils.qc import FilterError, cell_filters
+
+    with pytest.raises(FilterError, match="no limit was given"):
+        cell_filters(pd.DataFrame({"pct_counts_mito": [1.0] * 10}))
+
+
+def test_the_filtered_object_keeps_only_passing_cells_and_says_why(tmp_path):
+    from crispr_analysis_utils.qc import apply_filters, cell_filters
+
+    data = mudata()
+
+    passes, rules = cell_filters(
+        pd.DataFrame({"pct_counts_mito": [1.0, 9.0, 1.0]}, index=list(data.obs_names)),
+        nmads=None,
+        limits={"pct_counts_mito": (None, 5.0)},
+    )
+    path = tmp_path / "qc" / "filtered.h5mu"
+    filtered = apply_filters(data, passes, rules, path=path)
+
+    assert filtered.n_obs == 2
+    assert list(filtered.obs_names) == [BARCODES[0], BARCODES[2]]
+    assert filtered.uns["qc"]["n_cells_in"] == 3
+    assert filtered.uns["qc"]["n_cells_out"] == 2
+    assert filtered.uns["qc"]["rules"]["pct_counts_mito_limit"] == {
+        "metric": "pct_counts_mito",
+        "source": "limit",
+        "low": -np.inf,
+        "high": 5.0,
+        "n_failed": 1,
+    }
+    assert path.is_file()
+
+
+def test_the_written_file_carries_the_thresholds_that_made_it(tmp_path):
+    import mudata as md
+
+    from crispr_analysis_utils.qc import apply_filters, cell_filters, filter_cells
+
+    data = mudata()
+
+    cells, _ = filter_cells(data, min_umis=1)
+    passes, rules = cell_filters(
+        pd.DataFrame({"pct_counts_mito": [1.0, 2.0]}, index=list(cells.obs_names)),
+        nmads=None,
+        limits={"pct_counts_mito": (None, 5.0)},
+    )
+    path = tmp_path / "filtered.h5mu"
+    apply_filters(cells, passes, rules, path=path)
+
+    record = md.read_h5mu(path).uns["qc"]
+    # The floor is the first cut, and it writes itself down.
+    assert record["floor"]["min_umis"] == 1
+    assert record["floor"]["n_cells_in"] == 3
+    assert record["rules"]["pct_counts_mito_limit"]["high"] == 5.0
+
+
+def test_rules_measured_on_another_object_are_refused():
+    from crispr_analysis_utils.qc import FilterError, apply_filters, cell_filters
+
+    data = mudata()
+
+    passes, rules = cell_filters(
+        pd.DataFrame({"pct_counts_mito": [1.0, 2.0]}, index=list(data.obs_names)[:2]),
+        nmads=None,
+        limits={"pct_counts_mito": (None, 5.0)},
+    )
+    with pytest.raises(FilterError, match="would pass every one"):
+        apply_filters(data, passes, rules)
+
+
+def test_a_filter_that_keeps_nothing_is_refused():
+    from crispr_analysis_utils.qc import FilterError, apply_filters, cell_filters
+
+    data = mudata()
+
+    passes, rules = cell_filters(
+        pd.DataFrame({"pct_counts_mito": [9.0, 9.0, 9.0]}, index=list(data.obs_names)),
+        nmads=None,
+        limits={"pct_counts_mito": (None, 5.0)},
+    )
+    with pytest.raises(FilterError, match="No cell passes"):
+        apply_filters(data, passes, rules)

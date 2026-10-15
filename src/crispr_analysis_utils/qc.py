@@ -41,6 +41,10 @@ class FigureError(RuntimeError):
     """The figure cannot be drawn from what was given."""
 
 
+class FilterError(RuntimeError):
+    """The filter cannot be applied to what was given."""
+
+
 def style():
     """Set the colours and the defaults every figure here shares.
 
@@ -158,7 +162,18 @@ def filter_cells(data, min_umis: int, modality: str = "gene"):
         The filtered copy, and the boolean mask over the original barcodes.
     """
     keep = umis_per_cell(data, modality) >= min_umis
-    return data[keep].copy(), keep
+    filtered = data[keep].copy()
+    # The step that cuts writes down what it cut, so the record cannot be
+    # left to whoever writes the file.
+    record = dict(filtered.uns.get("qc", {}))
+    record["floor"] = {
+        "min_umis": int(min_umis),
+        "modality": modality,
+        "n_cells_in": int(data.n_obs),
+        "n_cells_out": int(filtered.n_obs),
+    }
+    filtered.uns["qc"] = record
+    return filtered, keep
 
 
 def knee(data, modalities: tuple[str, ...] = ("gene", "guide")):
@@ -348,6 +363,25 @@ LOG_METRICS = ("total_counts", "n_genes_by_counts")
 """Metrics whose distribution is read on a log axis, because they are counts."""
 
 
+def _band(values, metric, nmads, log, sides):
+    """One metric's MAD band, `(-inf, inf)` when it has none.
+
+    The side rule and the NaN drop live here rather than in each caller,
+    so the panel and the filter cut at the same place.
+    """
+    on_log = metric in log
+    side = sides.get(metric, "both" if on_log else "upper")
+    measured = values[np.isfinite(values)]
+    if measured.size == 0:
+        return -np.inf, np.inf
+    try:
+        return mad_bounds(measured, nmads=nmads, side=side, log=on_log)
+    except FigureError:
+        # No spread, so no threshold. That is a metric to report, not a
+        # reason to take the figure or the filter down.
+        return -np.inf, np.inf
+
+
 def metric_distributions(
     frame: pd.DataFrame,
     nmads: float = 5.0,
@@ -412,13 +446,8 @@ def metric_distributions(
     for axis, metric in zip(axes.ravel(), metrics, strict=False):
         values = measured[metric].to_numpy(dtype=float)
         on_log = metric in log
-        side = sides.get(metric, "both" if on_log else "upper")
-        try:
-            low, high = mad_bounds(values, nmads=nmads, side=side, log=on_log)
-        except FigureError:
-            # No spread, so no threshold. The panel still shows the
-            # distribution rather than taking the whole figure down.
-            low, high = -np.inf, np.inf
+        low, high = _band(values, metric, nmads, log, sides)
+        if (low, high) == (-np.inf, np.inf):
             unthresholded.append(metric)
         within = (values >= low) & (values <= high)
 
@@ -1007,3 +1036,170 @@ def cell_fractions(
     # Back onto every cell of the object: one the modality does not hold has
     # no measurement, which is not a measurement of zero.
     return frame.reindex(pd.Index(data.obs_names))
+
+
+def cell_filters(
+    frame: pd.DataFrame,
+    nmads: float | None = 5.0,
+    limits: dict[str, tuple[float | None, float | None]] | None = None,
+    log: tuple[str, ...] = LOG_METRICS,
+    sides: dict[str, str] | None = None,
+):
+    """Which cells pass each quality-control rule.
+
+    Two kinds of rule: a band this channel's own spread decides, and a
+    limit someone else did. A metric can carry both, so the floor the knee
+    gave it survives next to its band.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        One column per metric, one row per cell, as `cell_fractions`
+        returns, measured on cells already past the count floor. The MAD
+        describes whatever population it is given, and on raw barcodes
+        that population is ambient.
+    nmads : float, optional
+        Width of each band, in MADs. `None` measures no band, leaving only
+        `limits`.
+    limits : dict, optional
+        `{metric: (low, high)}` in the metric's own units, `None` for an
+        open side. A threshold from outside this channel goes here.
+    log : tuple of str
+        Metrics whose band is measured on a log scale.
+    sides : dict, optional
+        Which tail each band cuts. The default is `"both"` for a count and
+        `"upper"` for everything else.
+
+    Returns
+    -------
+    tuple of (pandas.DataFrame, pandas.DataFrame)
+        A boolean frame, one row per cell and one column per rule, `True`
+        where the cell passes it; and the rules themselves, one row each,
+        carrying the metric, where the bounds came from and how many cells
+        the rule rejected.
+
+    Raises
+    ------
+    FilterError
+        A limit names a metric the frame does not hold, or nothing is left
+        to apply.
+
+    Notes
+    -----
+    A cell whose metric is `NaN` fails that rule: the modality did not
+    measure it, and a metric a cell was never measured for is not one it
+    passed.
+    """
+    sides = sides or {}
+    limits = limits or {}
+    unknown = [metric for metric in limits if metric not in frame.columns]
+    if unknown:
+        raise FilterError(
+            "No such metric to limit: "
+            + ", ".join(unknown)
+            + ". The frame holds "
+            + ", ".join(frame.columns)
+            + "."
+        )
+
+    passes: dict[str, np.ndarray] = {}
+    rules = []
+    for metric in frame.columns:
+        values = frame[metric].to_numpy(dtype=float)
+        bounds = []
+        if nmads is not None:
+            low, high = _band(values, metric, nmads, log, sides)
+            if (low, high) != (-np.inf, np.inf):
+                bounds.append((f"{metric}_mad", f"{nmads:g} MAD", low, high))
+        if metric in limits:
+            low, high = limits[metric]
+            bounds.append(
+                (
+                    f"{metric}_limit",
+                    "limit",
+                    -np.inf if low is None else float(low),
+                    np.inf if high is None else float(high),
+                )
+            )
+        for name, source, low, high in bounds:
+            within = (values >= low) & (values <= high)
+            passes[name] = within
+            rules.append(
+                {
+                    "rule": name,
+                    "metric": metric,
+                    "source": source,
+                    "low": low,
+                    "high": high,
+                    "n_failed": int((~within).sum()),
+                }
+            )
+
+    if not rules:
+        raise FilterError(
+            "No rule to apply: no metric has the spread to measure a band, "
+            "and no limit was given."
+        )
+    return (
+        pd.DataFrame(passes, index=frame.index),
+        pd.DataFrame(
+            rules, columns=["rule", "metric", "source", "low", "high", "n_failed"]
+        ),
+    )
+
+
+def apply_filters(data, passes: pd.DataFrame, rules: pd.DataFrame, path=None):
+    """Keep the cells that pass every rule, and record the rules in `uns`.
+
+    Parameters
+    ----------
+    data : mudata.MuData
+        The object the rules were measured on.
+    passes, rules : pandas.DataFrame
+        What `cell_filters` returned.
+    path : str or pathlib.Path, optional
+        Where to write the filtered object. Nothing is written without one.
+
+    Returns
+    -------
+    mudata.MuData
+        The filtered copy, with every threshold that decided it under
+        `uns["qc"]`, so the file says how it was made.
+
+    Raises
+    ------
+    FilterError
+        The rules do not cover exactly this object's cells, or no cell
+        passes them all.
+    """
+    if list(passes.index) != list(data.obs_names):
+        raise FilterError(
+            f"The rules cover {len(passes.index):,} cells and the object "
+            f"holds {data.n_obs:,}. Measure them on the object being "
+            "filtered: a cell no rule saw would pass every one of them."
+        )
+    keep = passes.to_numpy(dtype=bool).all(axis=1)
+    if not keep.any():
+        raise FilterError("No cell passes every rule.")
+
+    filtered = data[keep].copy()
+    record = dict(filtered.uns.get("qc", {}))
+    record["n_cells_in"] = int(data.n_obs)
+    record["n_cells_out"] = int(filtered.n_obs)
+    record["rules"] = {
+        row.rule: {
+            "metric": row.metric,
+            "source": row.source,
+            "low": float(row.low),
+            "high": float(row.high),
+            "n_failed": int(row.n_failed),
+        }
+        for row in rules.itertuples()
+    }
+    filtered.uns["qc"] = record
+
+    if path is not None:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        filtered.write_h5mu(path)
+    return filtered
