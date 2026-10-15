@@ -520,9 +520,9 @@ def metric_distributions(
         "cells. Counts are binned and drawn on a log axis, fractions on a "
         "linear one. The dashed lines are that metric's own "
         f"{nmads:g}-MAD thresholds ({thresholds}); cells beyond them are "
-        f"grey. Each panel cuts on its own metric, so the {removed:,} grey "
-        "bars summed across panels double-count a cell that several "
-        "metrics reject."
+        "grey, and each panel's title counts its own. Each panel cuts on "
+        f"its own metric, so those counts add to {removed:,}, which "
+        "double-counts a cell that several metrics reject."
     )
     if unthresholded:
         caption += (
