@@ -8,7 +8,7 @@ that.
 
 `outdir` gets three folders and nothing else: ``alignments/`` with the
 results (``guides_alignment_metadata.tsv``, ``guides_mapping.bed``,
-``columns.yaml``, ``qc.tsv``), ``run_metadata/`` with
+``guides_alignment_metadata_columns.yaml``, ``qc.tsv``), ``run_metadata/`` with
 this invocation's record, and ``logs/``.
 """
 
@@ -272,7 +272,7 @@ def _run(
             tables / "guides_alignment_metadata.tsv", library, summaries, scan.sites
         )
         write_guides_bed(tables / "guides_mapping.bed", library, scan.sites)
-        write_columns_yaml(tables / "columns.yaml")
+        write_columns_yaml(tables / "guides_alignment_metadata_columns.yaml")
         write_qc_tsv(tables / "qc.tsv", summaries, counts=state["counts"])
 
     state["classes"] = _ordered((summary.site_class for summary in summaries), CLASSES)

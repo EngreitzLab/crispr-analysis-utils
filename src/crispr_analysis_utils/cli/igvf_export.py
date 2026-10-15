@@ -17,7 +17,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         description=(
             "Assemble the IGVF per-guide metadata table from the alignment, "
             "the element mapping and the annotation store. --outdir gets "
-            "igvf/ with guide_metadata.tsv and columns.yaml, run_metadata/ "
+            "igvf/ with guide_metadata.tsv and guide_metadata_columns.yaml, run_metadata/ "
             "and logs/."
         ),
     )

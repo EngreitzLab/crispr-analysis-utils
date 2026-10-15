@@ -35,8 +35,8 @@ from crispr_analysis_utils.guide_annotation.summary import (
 )
 
 EXPECTED_FILES = [
-    "annotations/columns.yaml",
     f"annotations/{TABLE}",
+    "annotations/guides_gene_annotation_columns.yaml",
     "logs/guide_annotation.log",
     re.compile(r"run_metadata/guide_annotation_\d{8}T\d{6}Z\.json"),
 ]
@@ -262,7 +262,9 @@ def test_the_groups_account_for_every_column():
 def test_columns_yaml_parses_and_documents_the_table(store, tmp_path):
     run(write_alignment(tmp_path / "aln.tsv"), store, tmp_path / "out")
     folder = tmp_path / "out" / "annotations"
-    parsed = yaml.safe_load((folder / "columns.yaml").read_text())
+    parsed = yaml.safe_load(
+        (folder / "guides_gene_annotation_columns.yaml").read_text()
+    )
     header = (folder / TABLE).read_text().splitlines()[0].split("\t")
     assert list(parsed) == [TABLE]
     assert list(parsed[TABLE]) == annotation_columns() == header

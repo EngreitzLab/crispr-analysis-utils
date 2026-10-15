@@ -1,7 +1,7 @@
 """The gene annotation: read the aligned sites, place them in genes, write the table.
 
 `outdir` gets three folders and nothing else: ``annotations/`` with the one
-results table and its ``columns.yaml``, ``run_metadata/`` with this
+results table and its ``guides_gene_annotation_columns.yaml``, ``run_metadata/`` with this
 invocation's record, and ``logs/``.
 """
 
@@ -192,7 +192,7 @@ def _run(
     with _timed(state, "outputs"):
         tables = outdir / RESULTS_DIR
         write_annotation_tsv(tables / TABLE, annotated)
-        write_columns_yaml(tables / "columns.yaml")
+        write_columns_yaml(tables / "guides_gene_annotation_columns.yaml")
 
     state["counts"] = counts(annotated)
     state["complete"] = True

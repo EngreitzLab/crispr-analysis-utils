@@ -42,7 +42,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Annotate every aligned site against the genes of a store.",
         description=(
             "Place every mapped site in a gene. --outdir gets annotations/ "
-            "with guides_gene_annotation.tsv and columns.yaml, run_metadata/ "
+            "with guides_gene_annotation.tsv and guides_gene_annotation_columns.yaml, run_metadata/ "
             "with this invocation's record, and logs/."
         ),
     )

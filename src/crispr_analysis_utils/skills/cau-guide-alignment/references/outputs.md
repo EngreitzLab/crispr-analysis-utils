@@ -6,12 +6,13 @@ beside its inputs:
 
 ```text
 alignments/      guides_alignment_metadata.tsv  guides_mapping.bed
-                 columns.yaml  qc.tsv
+                 guides_alignment_metadata_columns.yaml  qc.tsv
 run_metadata/    guide_alignment_<UTC timestamp>.json
 logs/            guide_alignment.log
 ```
 
-`columns.yaml` is written from the same definitions the tables are, so it is
+`guides_alignment_metadata_columns.yaml` is written from the same
+definitions the tables are, so it is
 always an accurate data dictionary of the folder it sits in. Read it first.
 
 ## `guides_alignment_metadata.tsv`

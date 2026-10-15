@@ -4,7 +4,8 @@
 `--outdir` gets three folders and nothing loose:
 
 ```text
-elements/        guide_element_mapping.tsv  columns.yaml  qc.tsv
+elements/        guide_element_mapping.tsv  qc.tsv
+                 guide_element_mapping_columns.yaml
 run_metadata/    element_mapping_<UTC timestamp>.json
 logs/            element_mapping.log
 ```

@@ -24,7 +24,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         description=(
             "Scan a reference for every guide's exact site. --outdir gets "
             "alignments/ with the results (guides_alignment_metadata.tsv, "
-            "guides_mapping.bed, columns.yaml, qc.tsv), "
+            "guides_mapping.bed, guides_alignment_metadata_columns.yaml, qc.tsv), "
             "run_metadata/ with this invocation's record, and logs/."
         ),
     )

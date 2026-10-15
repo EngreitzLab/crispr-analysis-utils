@@ -17,7 +17,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         description=(
             "Classify every guide against the elements a screen targets. "
             "--outdir gets elements/ with guide_element_mapping.tsv and "
-            "columns.yaml, run_metadata/ and logs/."
+            "guide_element_mapping_columns.yaml, run_metadata/ and logs/."
         ),
     )
     run_parser.add_argument(

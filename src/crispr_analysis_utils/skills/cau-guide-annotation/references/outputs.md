@@ -4,12 +4,14 @@
 `--outdir` gets three folders and nothing loose:
 
 ```text
-annotations/     guides_gene_annotation.tsv  columns.yaml
+annotations/     guides_gene_annotation.tsv
+                 guides_gene_annotation_columns.yaml
 run_metadata/    guide_annotation_<UTC timestamp>.json
 logs/            guide_annotation.log
 ```
 
-`columns.yaml` is written from the same definitions the table is, so it is
+`guides_gene_annotation_columns.yaml` is written from the same definitions
+the table is, so it is
 always an accurate data dictionary of the folder it sits in.
 
 ## `guides_gene_annotation.tsv`

@@ -397,7 +397,7 @@ def _round(value: float) -> float | int:
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
-    """Write columns.yaml, generated from `COLUMNS` so it cannot drift."""
+    """Write guide_element_mapping_columns.yaml, generated from `COLUMNS` so it cannot drift."""
     lines = ["# What each column of this folder's output holds.", "", f"{TABLE}:"]
     lines += [f'  {name}: "{_one_line(text)}"' for name, text in COLUMNS.items()]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -606,7 +606,7 @@ def run(
             distances=distances,
         )
         write_mapping_tsv(outdir / RESULTS_DIR / TABLE, mapping)
-        write_columns_yaml(outdir / RESULTS_DIR / "columns.yaml")
+        write_columns_yaml(outdir / RESULTS_DIR / "guide_element_mapping_columns.yaml")
         write_qc_tsv(outdir / RESULTS_DIR / "qc.tsv", mapping, regions, sites)
 
         state["counts"] = counts(mapping)

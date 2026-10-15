@@ -58,7 +58,8 @@ so check it against what the user expects before believing the table.
 ## Reading the result
 
 `--outdir` gets `elements/`, `run_metadata/` and `logs/`. The results are one
-table, `guide_element_mapping.tsv`, the `columns.yaml` that describes it, and
+table, `guide_element_mapping.tsv`, the `guide_element_mapping_columns.yaml`
+that describes it, and
 `qc.tsv`. See [`references/outputs.md`](references/outputs.md) for the columns
 in full.
 

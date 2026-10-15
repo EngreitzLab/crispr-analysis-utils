@@ -460,7 +460,7 @@ def write_guides_bed(
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
-    """Write columns.yaml: what every column of the outputs holds.
+    """Write guides_alignment_metadata_columns.yaml: what every column holds.
 
     Parameters
     ----------

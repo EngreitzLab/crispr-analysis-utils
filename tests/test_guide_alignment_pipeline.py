@@ -40,7 +40,7 @@ GUIDES = [
 OUTPUTS = (
     "guides_alignment_metadata.tsv",
     "guides_mapping.bed",
-    "columns.yaml",
+    "guides_alignment_metadata_columns.yaml",
     "qc.tsv",
 )
 SITE_COLUMNS = (

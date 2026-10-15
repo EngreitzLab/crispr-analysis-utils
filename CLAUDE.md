@@ -329,9 +329,9 @@ and narrowing it would buy nothing.
     - `alignments/` holds four files: `guides_alignment_metadata.tsv`, one
       row per library entry per site and the only one with the whole picture;
       `guides_mapping.bed`, its PAM-bearing rows for a browser, named by
-      spacer; `columns.yaml`, generated from the same definitions as the
-      table, so it always describes the folder it sits in; and `qc.tsv`,
-      counts;
+      spacer; `guides_alignment_metadata_columns.yaml`, generated from the
+      same definitions as the table, so it always describes the folder it
+      sits in; and `qc.tsv`, counts;
     - orientation is decided from both readings, held in the same scan: an
       entry is `reverse_complement` only when its reversed reading has a
       PAM-bearing site and the sequence as given does not. A `CCN` 5' of a

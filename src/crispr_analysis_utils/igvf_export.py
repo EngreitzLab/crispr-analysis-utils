@@ -484,7 +484,7 @@ def write_table(path: str | os.PathLike[str], table: pd.DataFrame) -> None:
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
-    """Write columns.yaml, generated from `COLUMNS` so it cannot drift."""
+    """Write guide_metadata_columns.yaml, generated from `COLUMNS` so it cannot drift."""
     lines = ["# What each column of this folder's output holds.", "", f"{TABLE}:"]
     lines += [f'  {name}: "{" ".join(text.split())}"' for name, text in COLUMNS.items()]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -597,7 +597,7 @@ def run(
         table = build_table(align, maps, info)
 
         write_table(outdir / RESULTS_DIR / TABLE, table)
-        write_columns_yaml(outdir / RESULTS_DIR / "columns.yaml")
+        write_columns_yaml(outdir / RESULTS_DIR / "guide_metadata_columns.yaml")
         state["counts"] = counts(table, info)
         state["complete"] = True
         state["finished"] = _now()
