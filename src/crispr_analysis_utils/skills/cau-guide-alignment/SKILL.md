@@ -70,6 +70,13 @@ tables, so it always describes the folder it sits in. See
 
 Three things trip people up:
 
+- **`n_oligos` above one means those counts will be a sum.** Two library
+  entries of one spacer, typically a 20-mer and the same spacer with a 5' G,
+  are one feature in any reference built on the spacer, and no read can be
+  assigned to one or the other when the leader ends in a poly-G run: the
+  extra base is indistinguishable from the leader's own. `oligo` records what
+  was ordered, `spacer` is what the reads can resolve, and a guide flagged
+  this way is not comparable with one ordered once.
 - **`n_matches` is not `site_class`.** A protospacer can occur 89 times and
   still be `unique`, because only one of those has a PAM. `n_target_sites` is
   the one that matters for cutting; `n_matches` is the one that matters for

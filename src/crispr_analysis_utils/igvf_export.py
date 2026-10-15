@@ -30,6 +30,15 @@ logger = logging.getLogger(__name__)
 COLUMNS = {
     "guide_id": "Unique name of the guide.",
     "spacer": "The targeting sequence of the gRNA, read 5' to 3', in DNA bases.",
+    "oligo": (
+        "The sequence the library ordered, without the PAM: the spacer plus"
+        " any base 5' of it, such as a G added for U6 transcription."
+    ),
+    "n_oligos": (
+        "How many library entries share this spacer. Above one, they are one"
+        " feature in the counts and the reads cannot be told apart, so the"
+        " counts are a sum."
+    ),
     "targeting": (
         "TRUE when the guide targets a locus relevant to the experiment."
         " FALSE for a safe-targeting or non-targeting control."
@@ -391,6 +400,12 @@ def build_table(
     out = pd.DataFrame(index=guides.index)
     out["guide_id"] = guides["alias"]
     out["spacer"] = guides["spacer"]
+    # Carried so the submitted table says which guides share a feature: their
+    # counts are a sum and are not comparable with a guide ordered once.
+    for column in ("oligo", "n_oligos"):
+        # An alignment table written before these existed has neither, and
+        # the column is then written empty rather than the table refused.
+        out[column] = guides[column] if column in guides.columns else pd.NA
 
     element = chosen.reindex(out.index)
     kind = element.map(info["genomic_element"])

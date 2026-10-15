@@ -18,6 +18,8 @@ guide and one spacer.
 | --- | --- |
 | `guide_id` | The guide's name, from the input table's own name for it. |
 | `spacer` | The targeting sequence, 5' to 3', in DNA bases. |
+| `oligo` | The sequence ordered, without the PAM. |
+| `n_oligos` | Entries sharing this spacer; above one the counts are a sum. |
 | `targeting` | TRUE only when the guide targets a relevant locus. |
 | `type` | `targeting`, `safe-targeting`, `non-targeting` or `positive control`. |
 | `guide_chr`, `guide_start`, `guide_end` | The protospacer, 0-based and half-open, **without** the PAM. |

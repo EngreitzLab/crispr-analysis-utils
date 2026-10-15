@@ -442,8 +442,12 @@ def test_a_written_coordinate_has_no_decimal_point(table, tmp_path):
 def test_a_field_that_does_not_apply_is_an_empty_cell(table, tmp_path):
     write_table(tmp_path / "igvf.tsv", table)
     lines = (tmp_path / "igvf.tsv").read_text().splitlines()
-    empty = "\t" * (len(COLUMNS) - 4)
-    assert lines[-1] == f"non_targeting\t{spacer('non_targeting')}\tFALSE\t{NON}{empty}"
+    # guide_id, spacer, oligo, n_oligos, targeting, type: the fixture's
+    # alignment predates oligo and n_oligos, so both are empty.
+    empty = "\t" * (len(COLUMNS) - 6)
+    assert lines[-1] == (
+        f"non_targeting\t{spacer('non_targeting')}\t\t\tFALSE\t{NON}{empty}"
+    )
     # The reporter and the imperfect guide are unused, so every row ends empty.
     assert all(line.endswith("\t\t") for line in lines[1:])
 
@@ -453,7 +457,9 @@ def test_a_column_the_table_lacks_is_written_empty(tmp_path):
     write_table(tmp_path / "bare.tsv", bare)
     lines = (tmp_path / "bare.tsv").read_text().splitlines()
     assert lines[0].split("\t") == list(COLUMNS)
-    assert lines[1].split("\t") == ["a", "", "", NON] + [""] * (len(COLUMNS) - 4)
+    assert lines[1].split("\t") == ["a", "", "", "", "", NON] + [""] * (
+        len(COLUMNS) - 6
+    )
 
 
 def test_columns_yaml_parses_and_documents_the_table(table, tmp_path):

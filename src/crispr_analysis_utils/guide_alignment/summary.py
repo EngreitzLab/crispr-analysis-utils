@@ -58,6 +58,13 @@ class GuideSummary:
         The name the guide table gives this entry.
     spacer
         The spacer, 5' to 3'.
+    oligo
+        The sequence the library ordered, without the PAM: the spacer plus
+        any base 5' of it.
+    n_oligos
+        How many library entries carry this spacer. More than one means a
+        feature reference built on the spacer merges them, so the counts are
+        a sum and are not comparable with a guide ordered once.
     mapped_sequence
         The guide's bases that pair with the genome at the unique site, as in
         `Site.mapped_sequence`; None unless the class is ``unique``.
@@ -104,6 +111,8 @@ class GuideSummary:
     guide_id: str
     alias: str
     spacer: str
+    oligo: str
+    n_oligos: int
     mapped_sequence: str | None
     site_pam: str | None
     has_perfect_site: bool
@@ -164,6 +173,10 @@ def summarize(
     patterns = validate_pams([pam])
     _check_max_mismatches(max_mismatches)
     primary = patterns[0]
+    # Two entries of one spacer are one feature in any reference built on the
+    # spacer, so their reads land together. Count them here so the table can
+    # say which guides carry a sum.
+    per_spacer = Counter(guide.spacer for guide in guides)
     summaries = []
     for guide, source in zip(guides, _source_rows(guides), strict=True):
         n_matches = 0
@@ -205,6 +218,8 @@ def summarize(
         summaries.append(
             GuideSummary(
                 guide_id=guide.guide_id,
+                oligo=guide.aligned_sequence,
+                n_oligos=per_spacer[guide.spacer],
                 alias=guide.alias,
                 spacer=guide.spacer,
                 mapped_sequence=unique.mapped_sequence if unique else None,
@@ -267,7 +282,7 @@ def fan_out_sites(
 
 
 GROUPS = (
-    ("from the guide table, before anything is aligned", 4),
+    ("from the guide table, before anything is aligned", 6),
     ("about the whole guide, repeated on each of its rows", 5),
     ("about this row's match; empty when the guide matches nowhere", 7),
 )
@@ -286,6 +301,19 @@ COLUMNS = {
     ),
     "spacer": (
         "The protospacer: guide_id without the PAM pattern or any base 5' of it."
+    ),
+    "oligo": (
+        "The sequence the library ordered, without the PAM. It differs from"
+        " the spacer when the entry carries a base 5' of the protospacer,"
+        " such as a G added for U6 transcription."
+    ),
+    "n_oligos": (
+        "How many library entries share this spacer. Above one, a feature"
+        " reference built on the spacer cannot tell them apart, so the"
+        " counts are a sum: expect roughly that multiple of a guide ordered"
+        " once. Here the second entry is the same spacer with a 5' G, which"
+        " no read can be assigned to on its own, because the leader ends in"
+        " a poly-G run."
     ),
     # about the whole guide
     "site_class": (
@@ -393,6 +421,8 @@ def write_guides_tsv(
                 summary.alias,
                 guide_accession(summary.spacer),
                 summary.spacer,
+                summary.oligo,
+                summary.n_oligos,
                 summary.site_class,
                 summary.n_matches,
                 summary.n_sites[0],

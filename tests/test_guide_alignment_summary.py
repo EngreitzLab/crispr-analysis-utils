@@ -59,6 +59,8 @@ COLUMN_NAMES = [
     "alias",
     "accession",
     "spacer",
+    "oligo",
+    "n_oligos",
     "site_class",
     "n_matches",
     "n_target_sites",
@@ -72,7 +74,7 @@ COLUMN_NAMES = [
     "pam_matches",
     "mapped_sequence",
 ]
-SITE_COLUMN_NAMES = COLUMN_NAMES[9:]
+SITE_COLUMN_NAMES = COLUMN_NAMES[11:]
 
 
 def site(spacer, start, strand="+", mismatches=0, pam_class="NGG", pam="TGG"):
@@ -345,12 +347,14 @@ def test_guides_tsv(tmp_path, guides, sites):
     assert lines[0].split("\t") == COLUMN_NAMES
     assert lines[1].split("\t") == (
         [SPACER_A + "NGG", "uniq", guide_accession(SPACER_A), SPACER_A]
+        # The fixture carries SPACER_A twice, as uniq and dup.
+        + [SPACER_A, "2"]
         + ["unique", "2", "1", "forward", ""]
         + ["chr1", "100", "120", "+", "117", "TRUE", SPACER_A + "TGG"]
     )
     # The guide's own columns repeat on its second row; only the site changes.
-    assert lines[2].split("\t")[:9] == lines[1].split("\t")[:9]
-    assert lines[2].split("\t")[9:] == (
+    assert lines[2].split("\t")[:11] == lines[1].split("\t")[:11]
+    assert lines[2].split("\t")[11:] == (
         ["chr1", "500", "520", "+", "517", "FALSE", SPACER_A + "TTT"]
     )
     # One row per entry per site, so the 11 sites of the library are 11 rows.
@@ -623,3 +627,32 @@ def test_guide_id_ends_in_the_pam_pattern_and_mapped_sequence_in_the_real_pam(tm
         SPACER_A + "GGG",
         "G" + SPACER_T + "TGG",
     ]
+
+
+def test_n_oligos_marks_the_entries_whose_counts_will_be_a_sum():
+    """Two entries of one spacer share a feature, so their reads land together.
+
+    The pair is a 20-mer and the same spacer with a 5' G. No read can be
+    assigned to one or the other: the leader ends in a poly-G run, so the
+    extra base is indistinguishable from the leader's own. The counts are a
+    sum, and n_oligos is what says so.
+    """
+    plain, with_g = SPACER_A, "G" + SPACER_A
+    guides = read_guides(pd.DataFrame([("plain", plain), ("with_g", with_g)]))
+    summaries = summarize(
+        guides,
+        {0: [site(plain, 100)], 1: [site(plain, 100)]},
+        orientation={0: "forward", 1: "forward"},
+    )
+    assert [s.spacer for s in summaries] == [plain, plain]
+    assert [s.oligo for s in summaries] == [plain, with_g]
+    assert [s.n_oligos for s in summaries] == [2, 2]
+    # One accession, because one feature is what the reads can distinguish.
+    assert len({guide_accession(s.spacer) for s in summaries}) == 1
+
+
+def test_a_guide_ordered_once_reports_one_oligo(guides, sites):
+    summaries = summarized(guides, sites)
+    singles = [s for s in summaries if s.alias not in {"uniq", "dup"}]
+    assert {s.n_oligos for s in singles} == {1}
+    assert all(s.oligo == s.spacer for s in singles)
