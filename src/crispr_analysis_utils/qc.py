@@ -498,6 +498,145 @@ def metric_distributions(
     return figure, numbers, caption
 
 
+def metric_scatter(
+    frame: pd.DataFrame,
+    x: str = "total_counts",
+    y: str = "pct_counts_targeted",
+    x_threshold: float | None = None,
+    y_threshold: float | None = None,
+    log: tuple[str, ...] = LOG_METRICS,
+    marginals: bool = True,
+):
+    """Two QC metrics against each other, cut into quadrants by thresholds.
+
+    A cell can be poor on either metric alone, and the pair says which.
+    The thresholds are given, not derived: a MAD band is one way to reach
+    them and a library that has been looked at closely is another.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        One row per cell, carrying at least the two columns named.
+    x, y : str
+        Columns to draw. Rows with `NaN` in either are dropped.
+    x_threshold, y_threshold : float, optional
+        Cuts, drawn as dashed lines. A cell is kept when it is at or above
+        both; a threshold left out keeps that axis whole.
+    log : tuple of str
+        Metrics drawn on a log axis.
+    marginals : bool
+        Draw each metric's own histogram against its axis.
+
+    Returns
+    -------
+    tuple of (matplotlib.figure.Figure, pandas.DataFrame, str)
+        The figure, one row per cell with its quadrant, and the caption.
+
+    Raises
+    ------
+    FigureError
+        A column is missing, or no cell has both metrics.
+    """
+    plt = style()
+
+    for name in (x, y):
+        if name not in frame:
+            raise FigureError(f"{name!r} is not a column of the frame.")
+    measured = frame[[x, y]].dropna()
+    if measured.empty:
+        raise FigureError("No cell has both metrics.")
+
+    xs = measured[x].to_numpy(dtype=float)
+    ys = measured[y].to_numpy(dtype=float)
+    above_x = xs >= x_threshold if x_threshold is not None else np.ones(len(xs), bool)
+    above_y = ys >= y_threshold if y_threshold is not None else np.ones(len(ys), bool)
+    kept = above_x & above_y
+
+    if marginals:
+        figure = plt.figure(figsize=(6.0, 6.0))
+        grid = figure.add_gridspec(
+            2, 2, width_ratios=(5, 1), height_ratios=(1, 5), wspace=0.05, hspace=0.05
+        )
+        axis = figure.add_subplot(grid[1, 0])
+        top = figure.add_subplot(grid[0, 0], sharex=axis)
+        right = figure.add_subplot(grid[1, 1], sharey=axis)
+    else:
+        figure, axis = plt.subplots(figsize=(5.5, 4.5))
+        top = right = None
+
+    # Rasterised: one point per cell stays a vector object otherwise, and a
+    # channel of 10,000 cells turns into a PDF nobody can open.
+    for mask, colour, label in ((kept, KEPT, "kept"), (~kept, REMOVED, "removed")):
+        if mask.any():
+            axis.scatter(
+                xs[mask],
+                ys[mask],
+                s=2,
+                alpha=0.4,
+                linewidths=0,
+                color=colour,
+                label=label,
+                rasterized=True,
+            )
+    if x in log:
+        axis.set_xscale("log")
+    if y in log:
+        axis.set_yscale("log")
+    if x_threshold is not None:
+        axis.axvline(x_threshold, color="black", linewidth=1.0, linestyle="--")
+    if y_threshold is not None:
+        axis.axhline(y_threshold, color="black", linewidth=1.0, linestyle="--")
+    axis.set(xlabel=x, ylabel=y)
+    axis.grid(which="major", color="0.85", linewidth=0.6)
+    axis.set_axisbelow(True)
+    axis.legend(frameon=False, fontsize="small", loc="lower right")
+
+    for panel, values, name, orientation in (
+        (top, xs, x, "vertical"),
+        (right, ys, y, "horizontal"),
+    ):
+        if panel is None:
+            continue
+        edges = (
+            np.logspace(np.log10(values.min()), np.log10(values.max()), 60)
+            if name in log
+            else 60
+        )
+        panel.hist(values, bins=edges, color="0.8", orientation=orientation)
+        panel.axis("off")
+
+    counts = {
+        "kept": int(kept.sum()),
+        "low_" + x: int((~above_x & above_y).sum()),
+        "low_" + y: int((above_x & ~above_y).sum()),
+        "low_both": int((~above_x & ~above_y).sum()),
+    }
+    numbers = pd.DataFrame(
+        {
+            "cell": measured.index,
+            x: xs,
+            y: ys,
+            "above_" + x: above_x,
+            "above_" + y: above_y,
+            "kept": kept,
+        }
+    )
+    stated = ", ".join(
+        f"{name} at {value:,.4g}"
+        for name, value in ((x, x_threshold), (y, y_threshold))
+        if value is not None
+    )
+    caption = (
+        f"{x} against {y} for {len(measured):,} cells, one point each. "
+        + (f"Dashed lines are the thresholds ({stated}). " if stated else "")
+        + "Cells at or above every threshold are blue and the rest grey: "
+        + ", ".join(f"{label} {number:,}" for label, number in counts.items())
+        + ". Histograms on the margins are each metric's own distribution "
+        "over the same cells."
+    )
+    return figure, numbers, caption
+
+
 MITO_CONTIG = "chrM"
 """Mitochondrial genes are the ones on the mitochondrial contig."""
 

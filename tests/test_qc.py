@@ -257,3 +257,36 @@ def test_a_metric_with_no_spread_loses_its_threshold_not_the_whole_figure():
     flat = numbers[numbers["metric"] == "pct_counts_mito"]
     assert not np.isfinite(flat["threshold_high"]).any()
     assert "pct_counts_mito" in caption.split("No threshold is drawn for")[1]
+
+
+def test_the_scatter_cuts_into_quadrants_and_keeps_only_the_upper_right():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame(
+        {
+            "total_counts": [500.0, 2000.0, 500.0, 2000.0],
+            "pct_counts_targeted": [10.0, 10.0, 60.0, 60.0],
+        }
+    )
+    figure, numbers, caption = metric_scatter(frame, x_threshold=1000, y_threshold=50)
+    assert numbers["kept"].tolist() == [False, False, False, True]
+    assert "kept 1" in caption
+    assert "low_both 1" in caption
+    # One line per threshold, on the scatter panel.
+    scatter_axis = figure.axes[0]
+    assert len(scatter_axis.get_lines()) == 2
+
+
+def test_the_scatter_drops_a_cell_missing_either_metric_and_refuses_an_empty_one():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame(
+        {"total_counts": [1000.0, np.nan], "pct_counts_targeted": [60.0, 60.0]}
+    )
+    _, numbers, _ = metric_scatter(frame, marginals=False)
+    assert len(numbers) == 1
+
+    with pytest.raises(FigureError, match="not a column"):
+        metric_scatter(frame, x="missing")
+    with pytest.raises(FigureError, match="No cell has both"):
+        metric_scatter(frame.iloc[1:2], y="total_counts", x="pct_counts_targeted")

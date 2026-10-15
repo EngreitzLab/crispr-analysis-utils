@@ -115,6 +115,21 @@ scanpy's plotting.
   drawn with no line and the caption says so.
 - A cell the modality does not hold is dropped, never binned as zero.
 
+## Two metrics at once
+
+`qc.metric_scatter(frame, x, y, x_threshold=..., y_threshold=...)` draws one
+point per cell with the thresholds as dashed lines, each metric's histogram
+on its margin, and the quadrant counts in the caption.
+
+- **The thresholds are given, not derived.** A MAD band is one way to reach
+  them; a library someone has QCed closely is another, and a fixed number
+  chosen that way is a legitimate input.
+- **Blue is at or above every threshold**, grey is everything else, so the
+  kept quadrant reads at a glance.
+- **The points are rasterised** and the text is not. One vector point per
+  cell makes a PDF that will not open: the same figure in R came to 39 MB.
+- A cell missing either metric is dropped, not drawn at zero.
+
 ## Thresholds from the channel itself
 
 `qc.mad_outlier(values, nmads=5, side="both", log=False)` flags the cells
