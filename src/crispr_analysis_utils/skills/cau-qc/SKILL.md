@@ -109,10 +109,14 @@ carried over.
   percentage. The base does not matter: a median and a MAD rescale together,
   so the band in the original units is the same either way.
 
-- **It cannot pick the first cut.** On the unfiltered barcode space the
-  median barcode is ambient and the MAD is zero or near it, so the call
-  raises. The order is: knee for the floor, then MAD on the cells that
-  survive it.
+- **It cannot pick the first cut.** The MAD describes whatever population
+  it is given, and on an unfiltered barcode space that population is ambient
+  droplets. On one real channel the median barcode held 2 UMIs and the
+  5-MAD band on `log10` reached 131, so every actual cell was an outlier.
+  The order is: knee for the floor, then MAD on the cells that survive it.
+- **`log=True` for a count, always.** On the raw scale the band is symmetric
+  around the median and its lower bound goes negative, so only the upper
+  tail ever cuts anything.
 - **`side="upper"` for a contamination fraction.** A cell with unusually
   little mitochondrial signal is not a problem; one with a lot is.
 - 5 MADs is the usual starting point. 3 is aggressive, and on a healthy
