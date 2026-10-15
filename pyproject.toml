@@ -41,6 +41,10 @@ dependencies = [
     "pyranges1>=1.4",
     # pandas writes and reads the annotation store as parquet.
     "pyarrow>=16",
+    # The assembled object, and the matrices it is assembled from. Imported
+    # inside functions, like pysam, so `cau --help` loads neither.
+    "anndata>=0.10",
+    "mudata>=0.3",
 ]
 
 [project.scripts]

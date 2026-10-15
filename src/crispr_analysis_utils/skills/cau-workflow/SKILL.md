@@ -25,6 +25,11 @@ detail; this one decides which step the user is actually asking for.
 | 3. Which element of the screen does it test? | `cau element-mapping run` | `cau-element-mapping` |
 | 4. Write the IGVF table | `cau igvf-export run` | `cau-igvf-export` |
 
+Once a screen has been sequenced, `cau-mudata-builder` assembles a channel's
+gene and guide counts into one MuData, taking `guide_metadata.tsv` from step 4
+as the guide annotation. It assembles only: no statistics, no filtering, no
+guide calls.
+
 Two modules sit outside the chain and need no predecessor:
 `cau-accession` (a lab-independent id encoded from the protospacer) and
 `cau-normalization` (counts per million, for a screen's count matrix).

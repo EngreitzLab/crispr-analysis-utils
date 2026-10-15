@@ -38,6 +38,10 @@ COMMANDS: dict[str, tuple[str, str]] = {
         "igvf_export",
         "Write the guide design in the IGVF per-guide metadata format.",
     ),
+    "mudata-builder": (
+        "mudata_builder",
+        "Assemble a gene and a guide count matrix into one MuData.",
+    ),
     "install-skills": (
         "install_skills",
         "Install the bundled Claude Code skills and agents.",

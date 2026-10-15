@@ -1,7 +1,7 @@
 """Annotate aligned guides against genes.
 
 `guide_alignment` answers where in the genome a guide is. This answers where
-in a gene: exon, intron or intergenic, whether it falls in a promoter, which
+in a gene: genic or intergenic, exon or intron, every promoter it sits in, which
 gene and transcript, and how far it is from the nearest protein-coding TSS.
 """
 

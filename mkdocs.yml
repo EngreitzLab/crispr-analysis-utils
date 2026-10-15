@@ -50,6 +50,7 @@ nav:
       - Gene annotation: guide-annotation.md
       - Element mapping: element-mapping.md
       - IGVF export: igvf-export.md
+      - MuData builder: mudata-builder.md
   - Agents and skills: agents-and-skills.md
   - API reference:
       - Overview: reference/index.md
