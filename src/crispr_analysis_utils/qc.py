@@ -589,7 +589,9 @@ def metric_scatter(
     axis.set(xlabel=x, ylabel=y)
     axis.grid(which="major", color="0.85", linewidth=0.6)
     axis.set_axisbelow(True)
-    axis.legend(frameon=False, fontsize="small", loc="lower right")
+    # Only worth a legend when there are two groups to tell apart.
+    if kept.any() and not kept.all():
+        axis.legend(frameon=False, fontsize="small", loc="lower right")
 
     for panel, values, name, orientation in (
         (top, xs, x, "vertical"),

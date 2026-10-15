@@ -290,3 +290,13 @@ def test_the_scatter_drops_a_cell_missing_either_metric_and_refuses_an_empty_one
         metric_scatter(frame, x="missing")
     with pytest.raises(FigureError, match="No cell has both"):
         metric_scatter(frame.iloc[1:2], y="total_counts", x="pct_counts_targeted")
+
+
+def test_the_scatter_drops_the_legend_when_nothing_is_removed():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame(
+        {"total_counts": [2000.0, 3000.0], "pct_counts_targeted": [60.0, 61.0]}
+    )
+    figure, _, _ = metric_scatter(frame, x_threshold=1000, y_threshold=25)
+    assert figure.axes[0].get_legend() is None
