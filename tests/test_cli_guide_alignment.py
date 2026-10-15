@@ -162,9 +162,7 @@ def test_run_end_to_end(tmp_path, capsys):
     assert captured.err == ""
     assert "Done in" in (tmp_path / "out" / "logs" / "guide_alignment.log").read_text()
     rows = (
-        (tmp_path / "out" / "alignments" / "guides_mapping.bed")
-        .read_text()
-        .splitlines()
+        (tmp_path / "out" / "alignments" / "guide_mapping.bed").read_text().splitlines()
     )
     # The BED's name field is the spacer, not the alias the table gives it.
     assert rows == [f"chr1\t{start}\t{start + 20}\t{SPACER_A}\t0\t+"]
@@ -201,9 +199,7 @@ def test_column_positions_are_read_as_numbers(tmp_path, capsys):
     assert status == 0
     assert capsys.readouterr().out.startswith("1 guides: 1 unique")
     rows = (
-        (tmp_path / "out" / "alignments" / "guides_mapping.bed")
-        .read_text()
-        .splitlines()
+        (tmp_path / "out" / "alignments" / "guide_mapping.bed").read_text().splitlines()
     )
     # The BED's name field is the spacer, not the alias the table gives it.
     assert rows == [f"chr1\t{start}\t{start + 20}\t{SPACER_A}\t0\t+"]
@@ -332,9 +328,7 @@ def test_fix_orientation_turns_a_reversed_entry_round(tmp_path, capsys):
     assert status == 0
     assert capsys.readouterr().out.startswith("1 guides: 1 unique")
     rows = (
-        (tmp_path / "out" / "alignments" / "guides_mapping.bed")
-        .read_text()
-        .splitlines()
+        (tmp_path / "out" / "alignments" / "guide_mapping.bed").read_text().splitlines()
     )
     # The BED's name field is the spacer, not the alias the table gives it.
     assert rows == [f"chr1\t{start}\t{start + 20}\t{SPACER_A}\t0\t+"]

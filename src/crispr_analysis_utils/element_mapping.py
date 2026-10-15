@@ -42,7 +42,7 @@ SITE_COLUMNS = ("guide_id", "chr", "start", "end", "strand")
 COLUMNS = {
     "guide_id": (
         "The sequence that was aligned. With the four site columns, the key"
-        " back to guides_alignment_metadata.tsv, which holds the rest."
+        " back to guide_genome_annotation.tsv, which holds the rest."
     ),
     "chr": "Contig of this site. Empty when the guide matches nowhere.",
     "start": "First base of the protospacer, 0-based.",
@@ -62,7 +62,7 @@ COLUMNS = {
         "Bases from the cut site to the nearest protein-coding TSS, signed in"
         " that gene's orientation. How far a safe-targeting site has to be to"
         " be safe depends on the screen, so threshold this yourself rather"
-        " than trusting the class alone. From guides_gene_annotation.tsv, so"
+        " than trusting the class alone. From guide_gene_annotation.tsv, so"
         " empty without it."
     ),
 }
@@ -150,7 +150,7 @@ def map_to_elements(
         Every guide in the library, so the ones that map nowhere are
         classified too. Defaults to the guides the sites name.
     distances
-        ``guides_gene_annotation.tsv``, for its ``distance_to_tss``. Without
+        ``guide_gene_annotation.tsv``, for its ``distance_to_tss``. Without
         it that column is empty; the classes do not depend on it.
 
     Returns
@@ -397,7 +397,7 @@ def _round(value: float) -> float | int:
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
-    """Write columns.yaml, generated from `COLUMNS` so it cannot drift."""
+    """Write guide_element_mapping_columns.yaml, generated from `COLUMNS` so it cannot drift."""
     lines = ["# What each column of this folder's output holds.", "", f"{TABLE}:"]
     lines += [f'  {name}: "{_one_line(text)}"' for name, text in COLUMNS.items()]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -521,7 +521,7 @@ def run(
     Parameters
     ----------
     alignment
-        ``guides_alignment_metadata.tsv`` from `guide_alignment.run`, or the
+        ``guide_genome_annotation.tsv`` from `guide_alignment.run`, or the
         same table as a DataFrame. Every guide in it is classified, including
         the ones that match nowhere.
     elements
@@ -530,7 +530,7 @@ def run(
         Where the table goes. Created if it does not exist; nothing is ever
         written outside it.
     annotation
-        ``guides_gene_annotation.tsv`` from `guide_annotation.run`, which
+        ``guide_gene_annotation.tsv`` from `guide_annotation.run`, which
         fills the ``distance_to_tss`` column.
 
     Returns
@@ -606,7 +606,7 @@ def run(
             distances=distances,
         )
         write_mapping_tsv(outdir / RESULTS_DIR / TABLE, mapping)
-        write_columns_yaml(outdir / RESULTS_DIR / "columns.yaml")
+        write_columns_yaml(outdir / RESULTS_DIR / "guide_element_mapping_columns.yaml")
         write_qc_tsv(outdir / RESULTS_DIR / "qc.tsv", mapping, regions, sites)
 
         state["counts"] = counts(mapping)

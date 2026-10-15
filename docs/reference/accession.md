@@ -13,7 +13,7 @@ target?"; `guide_id` answers "same oligo?".
 Nothing in a sequence says where the protospacer ends, so a sequence with its
 PAM still attached is accepted and gets a different accession, silently. One
 spacer in sixteen ends in `GG`. Decide which bases are the protospacer first;
-`guides_alignment_metadata.tsv`'s `spacer` column already has.
+`guide_genome_annotation.tsv`'s `spacer` column already has.
 
 ## The encoding
 

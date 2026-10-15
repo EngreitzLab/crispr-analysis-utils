@@ -319,7 +319,7 @@ COLUMNS = {
         " genome has that same base."
     ),
 }
-"""Every column of guides_alignment_metadata.tsv, and what it holds."""
+"""Every column of guide_genome_annotation.tsv, and what it holds."""
 
 BED_COLUMNS = {
     "chr": "Contig of the match.",
@@ -329,11 +329,11 @@ BED_COLUMNS = {
     "score": "Always 0; BED6 wants the field.",
     "strand": "Strand the protospacer reads 5' to 3' on.",
 }
-"""The six fields of guides_mapping.bed, which has no header of its own."""
+"""The six fields of guide_mapping.bed, which has no header of its own."""
 
 
 def guide_columns() -> list[str]:
-    """The columns of guides_alignment_metadata.tsv, in order.
+    """The columns of guide_genome_annotation.tsv, in order.
 
     One row per library entry per site, so the guide's own columns repeat on
     every site it has, and an entry with no site gets one row whose site
@@ -354,7 +354,7 @@ def write_guides_tsv(
     summaries: Sequence[GuideSummary],
     sites: Mapping[int, Sequence[Site]],
 ) -> None:
-    """Write guides_alignment_metadata.tsv: every entry, a row per site.
+    """Write guide_genome_annotation.tsv: every entry, a row per site.
 
     Parameters
     ----------
@@ -419,7 +419,7 @@ def write_guides_bed(
     guides: Sequence[Guide],
     sites: Mapping[int, Sequence[Site]],
 ) -> None:
-    """Write guides_mapping.bed: every site a guide could be cut at.
+    """Write guide_mapping.bed: every site a guide could be cut at.
 
     Parameters
     ----------
@@ -438,7 +438,7 @@ def write_guides_bed(
     of a guide that matches more than once. Sorted by contig, then position.
     A match with no PAM
     is not somewhere anything can be cut, so it is left out;
-    guides_alignment_metadata.tsv has them all.
+    guide_genome_annotation.tsv has them all.
     """
     # One row per distinct guide, not per entry: two entries of one sequence
     # would otherwise give byte-identical rows and bedtools would count twice.
@@ -460,7 +460,7 @@ def write_guides_bed(
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
-    """Write columns.yaml: what every column of the outputs holds.
+    """Write guide_genome_annotation_columns.yaml: what every column holds.
 
     Parameters
     ----------
@@ -473,7 +473,7 @@ def write_columns_yaml(path: str | os.PathLike[str]) -> None:
     tables themselves.
     """
     lines = ["# What each column of this folder's outputs holds.", ""]
-    lines.append("guides_alignment_metadata.tsv:")
+    lines.append("guide_genome_annotation.tsv:")
     columns = iter(COLUMNS.items())
     for heading, count in GROUPS:
         lines.append(f"  # {heading}")
@@ -481,7 +481,7 @@ def write_columns_yaml(path: str | os.PathLike[str]) -> None:
             column, description = next(columns)
             lines.append(f'  {column}: "{_one_line(description)}"')
     lines.append("")
-    lines.append("guides_mapping.bed:")
+    lines.append("guide_mapping.bed:")
     for column, description in BED_COLUMNS.items():
         lines.append(f'  {column}: "{_one_line(description)}"')
     lines.append("")

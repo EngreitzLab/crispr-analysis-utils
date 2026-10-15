@@ -19,7 +19,7 @@ everything the format asks for; this assembles it.
 
 ```bash
 cau igvf-export run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
     --mapping results/elements/guide_element_mapping.tsv \
     --elements elements.bed \
     --store gencode.v43.protein_coding.parquet \
@@ -78,7 +78,8 @@ a promoter and the genome agrees.
 ## Reading the result
 
 `--outdir` gets `igvf/`, `run_metadata/` and `logs/`. The results are one
-table, `guide_metadata.tsv`, and the `columns.yaml` that describes it. See
+table, `guide_metadata.tsv`, and the `guide_metadata_columns.yaml` that
+describes it. See
 [`references/outputs.md`](references/outputs.md) for the columns in full and
 the three checks worth running before submitting.
 

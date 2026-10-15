@@ -34,8 +34,8 @@ from crispr_analysis_utils.element_mapping import (
 )
 
 EXPECTED_FILES = [
-    "elements/columns.yaml",
     f"elements/{TABLE}",
+    "elements/guide_element_mapping_columns.yaml",
     "elements/qc.tsv",
     "logs/element_mapping.log",
     re.compile(r"run_metadata/element_mapping_\d{8}T\d{6}Z\.json"),
@@ -125,7 +125,7 @@ def test_the_table_has_every_column_of_the_data_dictionary(alignment, bed, tmp_p
     run(alignment, bed, tmp_path / "out")
     folder = tmp_path / "out" / "elements"
     table = pd.read_csv(folder / TABLE, sep="\t")
-    parsed = yaml.safe_load((folder / "columns.yaml").read_text())
+    parsed = yaml.safe_load((folder / "guide_element_mapping_columns.yaml").read_text())
     assert list(table.columns) == list(COLUMNS) == list(parsed[TABLE])
 
 

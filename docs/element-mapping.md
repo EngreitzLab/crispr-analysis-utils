@@ -12,8 +12,8 @@ read the output ([Agents and skills](agents-and-skills.md)).
 
 ```bash
 cau element-mapping run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
-    --annotation results/annotations/guides_gene_annotation.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
+    --annotation results/annotations/guide_gene_annotation.tsv \
     --elements elements.bed \
     --outdir results/
 ```

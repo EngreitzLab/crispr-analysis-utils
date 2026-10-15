@@ -94,7 +94,7 @@ def sequence_id(alias):
 
 
 def alignment_frame(guides=GUIDES):
-    """guides_alignment_metadata.tsv, one row per entry.
+    """guide_genome_annotation.tsv, one row per entry.
 
     Every guide here matches at most once, so the per-site columns do not
     repeat.

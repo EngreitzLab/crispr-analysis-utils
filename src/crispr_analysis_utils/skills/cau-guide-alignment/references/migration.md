@@ -26,8 +26,8 @@ coordinates at contig ends — cannot arise.
 
 | Was | Now |
 | --- | --- |
-| `guides.tsv` and `sites.tsv` | one `guides_alignment_metadata.tsv` |
-| `guides.bed` | `guides_mapping.bed` |
+| `guides.tsv` and `sites.tsv` | one `guide_genome_annotation.tsv` |
+| `guides.bed` | `guide_mapping.bed` |
 | `cut_sites.bed` | gone; `cut_site` is a column |
 | `orientation.tsv` | gone; its verdict and site are columns |
 | `summary.tsv` | `qc.tsv`, counts only |

@@ -293,7 +293,7 @@ and narrowing it would buy nothing.
     - overlaps are decided on the protospacer, distances and the CDS position
       from the cut site. `location` and `promoter` are separate columns
       because a cut in exon 1 is usually both;
-    - the table keys back to `guides_alignment_metadata.tsv` on `guide_id`
+    - the table keys back to `guide_genome_annotation.tsv` on `guide_id`
       plus the four site columns, and repeats nothing else. A guide with two
       sites needs all five to join unambiguously;
     - **pandas reads a written `TRUE`/`FALSE` column back as bool.** Both of
@@ -326,12 +326,12 @@ and narrowing it would buy nothing.
     - `run` writes only inside `outdir`, and only three folders: the results
       in `alignments/`, this invocation's record in `run_metadata/` and the
       log in `logs/`. Nothing of the run's own sits beside an input;
-    - `alignments/` holds four files: `guides_alignment_metadata.tsv`, one
+    - `alignments/` holds four files: `guide_genome_annotation.tsv`, one
       row per library entry per site and the only one with the whole picture;
-      `guides_mapping.bed`, its PAM-bearing rows for a browser, named by
-      spacer; `columns.yaml`, generated from the same definitions as the
-      table, so it always describes the folder it sits in; and `qc.tsv`,
-      counts;
+      `guide_mapping.bed`, its PAM-bearing rows for a browser, named by
+      spacer; `guide_genome_annotation_columns.yaml`, generated from the
+      same definitions as the table, so it always describes the folder it
+      sits in; and `qc.tsv`, counts;
     - orientation is decided from both readings, held in the same scan: an
       entry is `reverse_complement` only when its reversed reading has a
       PAM-bearing site and the sequence as given does not. A `CCN` 5' of a

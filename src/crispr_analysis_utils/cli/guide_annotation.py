@@ -42,14 +42,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Annotate every aligned site against the genes of a store.",
         description=(
             "Place every mapped site in a gene. --outdir gets annotations/ "
-            "with guides_gene_annotation.tsv and columns.yaml, run_metadata/ "
+            "with guide_gene_annotation.tsv and guide_gene_annotation_columns.yaml, run_metadata/ "
             "with this invocation's record, and logs/."
         ),
     )
     annotate.add_argument(
         "--alignment",
         required=True,
-        help="guides_alignment_metadata.tsv from `cau guide-alignment run`.",
+        help="guide_genome_annotation.tsv from `cau guide-alignment run`.",
     )
     annotate.add_argument(
         "--store",

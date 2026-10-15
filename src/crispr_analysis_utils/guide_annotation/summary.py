@@ -78,9 +78,9 @@ COLUMNS = {
         " so the guide expresses poorly from a U6 promoter."
     ),
 }
-"""Every column of guides_gene_annotation.tsv, and what it holds."""
+"""Every column of guide_gene_annotation.tsv, and what it holds."""
 
-TABLE = "guides_gene_annotation.tsv"
+TABLE = "guide_gene_annotation.tsv"
 """The one results table."""
 
 
@@ -109,7 +109,7 @@ def write_annotation_tsv(path: str | os.PathLike[str], annotated: pd.DataFrame) 
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
-    """Write columns.yaml: what every column of the table holds.
+    """Write guide_gene_annotation_columns.yaml: what every column holds.
 
     Parameters
     ----------

@@ -43,8 +43,8 @@ AAA = "ENSG00000000001"
 BBB = "ENSG00000000002"
 
 EXPECTED_FILES = [
-    "igvf/columns.yaml",
     f"igvf/{TABLE}",
+    "igvf/guide_metadata_columns.yaml",
     "logs/igvf_export.log",
     re.compile(r"run_metadata/igvf_export_\d{8}T\d{6}Z\.json"),
 ]
@@ -64,7 +64,7 @@ def bed(tmp_path):
 
 @pytest.fixture
 def alignment(tmp_path):
-    return write_alignment(tmp_path / "guides_alignment_metadata.tsv")
+    return write_alignment(tmp_path / "guide_genome_annotation.tsv")
 
 
 @pytest.fixture
@@ -141,7 +141,7 @@ def test_nothing_is_written_beside_the_inputs(inputs, genes, tmp_path):
     assert outside == [
         "elements.bed",
         "guide_element_mapping.tsv",
-        "guides_alignment_metadata.tsv",
+        "guide_genome_annotation.tsv",
         "pairs.tsv",
         "store.parquet",
         "test.gtf",
@@ -165,7 +165,7 @@ def test_the_written_table_is_the_one_the_result_carries(inputs, tmp_path):
 def test_the_table_has_every_column_of_the_data_dictionary(inputs, tmp_path):
     run(*inputs, tmp_path / "out", promoter_window=WINDOW)
     folder = tmp_path / "out" / "igvf"
-    parsed = yaml.safe_load((folder / "columns.yaml").read_text())
+    parsed = yaml.safe_load((folder / "guide_metadata_columns.yaml").read_text())
     assert list(table_of(tmp_path / "out").columns) == list(parsed[TABLE])
 
 

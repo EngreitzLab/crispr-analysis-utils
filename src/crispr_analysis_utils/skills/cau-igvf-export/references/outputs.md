@@ -4,7 +4,7 @@
 `--outdir` gets three folders and nothing loose:
 
 ```text
-igvf/            guide_metadata.tsv  columns.yaml
+igvf/            guide_metadata.tsv  guide_metadata_columns.yaml
 run_metadata/    igvf_export_<UTC timestamp>.json
 logs/            igvf_export.log
 ```
