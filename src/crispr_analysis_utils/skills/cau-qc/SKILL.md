@@ -97,10 +97,17 @@ whose UMI count reaches the floor, returning the filtered copy and the mask.
 
 ## Thresholds from the channel itself
 
-`qc.mad_outlier(values, nmads=5, side="both", log=True)` flags the cells more
-than `nmads` median absolute deviations from the median, on `log1p` by
-default. The spread is the channel's own, so the threshold moves with its
-depth rather than being carried over.
+`qc.mad_outlier(values, nmads=5, side="both", log=False)` flags the cells
+more than `nmads` median absolute deviations from the median. The spread is
+the channel's own, so the threshold moves with its depth rather than being
+carried over.
+
+- **The MAD is rescaled to a sigma** (`scale="normal"`, a factor of 1.4826),
+  so `nmads` reads as standard deviations. A raw MAD would make the same
+  number cut a third more tightly.
+- **`log=True` for a count**, which is roughly log-normal; off for a
+  percentage. The base does not matter: a median and a MAD rescale together,
+  so the band in the original units is the same either way.
 
 - **It cannot pick the first cut.** On the unfiltered barcode space the
   median barcode is ambient and the MAD is zero or near it, so the call

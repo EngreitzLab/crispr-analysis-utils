@@ -229,13 +229,15 @@ def mad_outlier(
     values,
     nmads: float = 5.0,
     side: str = "both",
-    log: bool = True,
+    log: bool = False,
 ) -> np.ndarray:
     """Flag the values that sit more than `nmads` MADs from the median.
 
     The median absolute deviation is the spread of the channel measured
     against itself, so a threshold built from it moves with the channel's
-    own depth instead of being carried over from another one.
+    own depth instead of being carried over from another one. The MAD is
+    rescaled to a standard deviation (`scale="normal"`), so `nmads` reads
+    as sigmas on a normal distribution.
 
     Parameters
     ----------
@@ -248,9 +250,8 @@ def mad_outlier(
         Which tail to flag. A count metric is two-sided; a contamination
         fraction only has an upper tail worth cutting.
     log : bool
-        Work on `log1p` of the values, true by default. A count
-        distribution is roughly log-normal, and on the raw scale the MAD
-        is dominated by the deep cells.
+        Work on `log10(x + 1)` rather than the raw value. Off by default:
+        a count distribution wants it, a percentage does not.
 
     Returns
     -------
@@ -264,13 +265,15 @@ def mad_outlier(
         can be read off it. This is what an unfiltered barcode space looks
         like: pick the cells first, then measure their spread.
     """
+    from scipy.stats import median_abs_deviation
+
     if side not in ("both", "lower", "upper"):
         raise FigureError(f"side must be both, upper or lower, not {side!r}")
     numbers = np.asarray(values, dtype=float)
     measured = ~np.isnan(numbers)
-    scale = np.log1p(numbers[measured]) if log else numbers[measured]
+    scale = np.log10(numbers[measured] + 1) if log else numbers[measured]
     middle = np.median(scale)
-    spread = np.median(np.abs(scale - middle))
+    spread = median_abs_deviation(scale, scale="normal")
     if spread == 0:
         raise FigureError(
             "The MAD is zero, so the threshold would be the median itself. "

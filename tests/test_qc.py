@@ -145,3 +145,14 @@ def test_a_zero_mad_is_refused_because_it_is_the_unfiltered_barcode_space():
     # What the whole barcode space looks like: the median barcode is ambient.
     with pytest.raises(FigureError, match="not on the whole barcode space"):
         mad_outlier(np.array([2.0] * 1000 + [5000.0]))
+
+
+def test_the_mad_is_rescaled_to_a_sigma_so_the_band_is_wider_than_the_raw_mad():
+    from crispr_analysis_utils.qc import mad_outlier
+
+    # Median 0, raw MAD 1, so scale="normal" puts one MAD at 1.4826.
+    values = np.array([-1.2] + [-1.0] * 500 + [0.0] + [1.0] * 500 + [1.2])
+    flagged = mad_outlier(values, nmads=1)
+    # A raw MAD would flag both probes; a sigma-scaled one does not.
+    assert not flagged.any()
+    assert mad_outlier(values, nmads=0.8).tolist()[0] is True
