@@ -268,6 +268,24 @@ def test_every_line_is_labelled_with_the_rule_and_the_value_it_drew():
     assert labels == [f"3 MAD  {high:.3g}"]
 
 
+def test_a_line_label_sits_inside_the_band_not_against_the_panel_edge():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    rng = np.random.default_rng(0)
+    figure, _, _ = metric_distributions(
+        pd.DataFrame({"total_counts": rng.lognormal(7.0, 0.4, 500)}), bins=10
+    )
+    axis = figure.axes[0]
+    figure.canvas.draw()
+    lower, upper = sorted(line.get_xdata()[0] for line in axis.get_lines())
+    # The loop draws the lower line first, so the labels come in that order.
+    below, above = (text.get_window_extent() for text in axis.texts)
+    # Both fall between the lines, where the kept cells are: outside them
+    # the panel edge is a few points away and the label is cut in half.
+    assert below.x0 >= axis.transData.transform((lower, 0))[0]
+    assert above.x1 <= axis.transData.transform((upper, 0))[0]
+
+
 def test_the_panel_says_how_many_it_put_beyond_the_band():
     from crispr_analysis_utils.qc import metric_distributions
 
