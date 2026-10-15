@@ -1042,6 +1042,7 @@ def cell_filters(
     frame: pd.DataFrame,
     nmads: float | None = 5.0,
     limits: dict[str, tuple[float | None, float | None]] | None = None,
+    band: tuple[str, ...] | None = None,
     log: tuple[str, ...] = LOG_METRICS,
     sides: dict[str, str] | None = None,
 ):
@@ -1064,6 +1065,9 @@ def cell_filters(
     limits : dict, optional
         `{metric: (low, high)}` in the metric's own units, `None` for an
         open side. A threshold from outside this channel goes here.
+    band : tuple of str, optional
+        The metrics to measure a band for. Every column by default; name a
+        subset when only some of them are worth cutting on.
     log : tuple of str
         Metrics whose band is measured on a log scale.
     sides : dict, optional
@@ -1092,10 +1096,14 @@ def cell_filters(
     """
     sides = sides or {}
     limits = limits or {}
-    unknown = [metric for metric in limits if metric not in frame.columns]
+    unknown = [
+        metric
+        for metric in list(limits) + list(band or ())
+        if metric not in frame.columns
+    ]
     if unknown:
         raise FilterError(
-            "No such metric to limit: "
+            "No such metric: "
             + ", ".join(unknown)
             + ". The frame holds "
             + ", ".join(frame.columns)
@@ -1107,7 +1115,7 @@ def cell_filters(
     for metric in frame.columns:
         values = frame[metric].to_numpy(dtype=float)
         bounds = []
-        if nmads is not None:
+        if nmads is not None and (band is None or metric in band):
             low, high = _band(values, metric, nmads, log, sides)
             if (low, high) != (-np.inf, np.inf):
                 bounds.append((f"{metric}_mad", f"{nmads:g} MAD", low, high))

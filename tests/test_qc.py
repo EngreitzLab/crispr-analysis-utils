@@ -670,12 +670,28 @@ def test_a_cell_the_modality_never_measured_fails_the_rule():
     assert np.isfinite(rules["high"]).all()
 
 
+def test_a_band_can_be_restricted_to_the_metrics_worth_cutting_on():
+    from crispr_analysis_utils.qc import cell_filters
+
+    rng = np.random.default_rng(2)
+    frame = pd.DataFrame(
+        {
+            "total_counts": rng.lognormal(7.0, 0.3, 200),
+            "pct_counts_ribo": rng.normal(15.0, 3.0, 200),
+        }
+    )
+    _, rules = cell_filters(frame, band=("total_counts",))
+    assert list(rules["rule"]) == ["total_counts_mad"]
+
+
 def test_a_limit_on_a_metric_the_frame_does_not_hold_is_refused():
     from crispr_analysis_utils.qc import FilterError, cell_filters
 
     frame = pd.DataFrame({"pct_counts_mito": [1.0, 2.0, 3.0]})
     with pytest.raises(FilterError, match="pct_counts_targeted"):
         cell_filters(frame, limits={"pct_counts_targeted": (25.0, None)})
+    with pytest.raises(FilterError, match="n_genes_by_counts"):
+        cell_filters(frame, band=("n_genes_by_counts",))
 
 
 def test_a_flat_metric_with_no_limit_leaves_nothing_to_apply():

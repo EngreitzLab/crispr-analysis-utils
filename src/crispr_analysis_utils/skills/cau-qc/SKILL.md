@@ -221,6 +221,9 @@ every one, records them, and writes the object.
   `filter_cells` itself; `rules`, every threshold with its source and how
   many cells it rejected; and the counts in and out. An open bound is an
   infinity, since `None` does not survive HDF5.
+- **`band=` names the metrics worth a band**, every column by default. Not
+  every metric deserves one: a ribosomal fraction with a long tail loses
+  real cells to a band nobody chose.
 - `nmads=None` leaves only the limits, for a screen whose thresholds were
   settled elsewhere.
 
