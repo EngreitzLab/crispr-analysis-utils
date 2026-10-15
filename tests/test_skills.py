@@ -32,6 +32,7 @@ COVERAGE = {
     "cau-guide-annotation": ("guide_annotation",),
     "cau-element-mapping": ("element_mapping",),
     "cau-igvf-export": ("igvf_export",),
+    "cau-mudata-builder": ("mudata_builder",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.
