@@ -379,3 +379,25 @@ def test_the_panel_caption_says_what_a_zero_background_median_means():
     assert "inf" not in caption
     assert "background median being zero" in caption
     assert "0 of 4 background genes seen" in caption
+
+
+def test_the_scatter_serves_a_per_gene_comparison_too():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame(
+        {"reference_upm": [5.0, 100.0], "mean_umi": [0.2, 3.0]},
+        index=pd.Index(["ENSG1", "ENSG2"], name="gene"),
+    )
+    _, numbers, caption = metric_scatter(
+        frame,
+        x="reference_upm",
+        y="mean_umi",
+        x_threshold=30,
+        y_threshold=1,
+        log=("reference_upm", "mean_umi"),
+        unit="genes",
+    )
+    assert "2 genes, one point each" in caption
+    assert "over the same genes" in caption
+    assert numbers.columns[0] == "gene"
+    assert numbers["kept"].tolist() == [False, True]

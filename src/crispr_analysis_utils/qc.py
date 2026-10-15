@@ -506,6 +506,7 @@ def metric_scatter(
     y_threshold: float | None = None,
     log: tuple[str, ...] = LOG_METRICS,
     marginals: bool = True,
+    unit: str = "cells",
 ):
     """Two QC metrics against each other, cut into quadrants by thresholds.
 
@@ -526,6 +527,9 @@ def metric_scatter(
         Metrics drawn on a log axis.
     marginals : bool
         Draw each metric's own histogram against its axis.
+    unit : str
+        What a point is, for the caption. Cells by default; the same figure
+        serves a per-gene comparison.
 
     Returns
     -------
@@ -544,7 +548,9 @@ def metric_scatter(
             raise FigureError(f"{name!r} is not a column of the frame.")
     measured = frame[[x, y]].dropna()
     if measured.empty:
-        raise FigureError("No cell has both metrics.")
+        raise FigureError(
+            f"No {unit[:-1] if unit.endswith('s') else unit} has both metrics."
+        )
 
     xs = measured[x].to_numpy(dtype=float)
     ys = measured[y].to_numpy(dtype=float)
@@ -615,7 +621,7 @@ def metric_scatter(
     }
     numbers = pd.DataFrame(
         {
-            "cell": measured.index,
+            unit.rstrip("s"): measured.index,
             x: xs,
             y: ys,
             "above_" + x: above_x,
@@ -629,12 +635,12 @@ def metric_scatter(
         if value is not None
     )
     caption = (
-        f"{x} against {y} for {len(measured):,} cells, one point each. "
+        f"{x} against {y} for {len(measured):,} {unit}, one point each. "
         + (f"Dashed lines are the thresholds ({stated}). " if stated else "")
-        + "Cells at or above every threshold are blue and the rest grey: "
+        + "Points at or above every threshold are blue and the rest grey: "
         + ", ".join(f"{label} {number:,}" for label, number in counts.items())
         + ". Histograms on the margins are each metric's own distribution "
-        "over the same cells."
+        + f"over the same {unit}."
     )
     return figure, numbers, caption
 
