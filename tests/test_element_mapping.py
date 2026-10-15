@@ -447,8 +447,8 @@ def test_whole_numbers_are_written_without_a_trailing_zero(tmp_path):
     )
     write_mapping_tsv(tmp_path / "m.tsv", frame)
     lines = (tmp_path / "m.tsv").read_text().splitlines()
-    assert lines[1] == "a\tchr1\t1000\t1020\t+\tE1\tenhancer\ttargeting\t47"
-    assert lines[2] == "b\t\t\t\t\t\t\tnon_targeting\t"
+    assert lines[1] == "a\tchr1\t1000\t1020\t+\tE1\tenhancer\ttargeting\t47\t"
+    assert lines[2] == "b\t\t\t\t\t\t\tnon_targeting\t\t"
 
 
 def test_a_written_mapping_holds_no_decimal_point(with_distances, tmp_path):
@@ -464,7 +464,7 @@ def test_a_written_mapping_holds_no_decimal_point(with_distances, tmp_path):
 def test_a_non_targeting_row_is_written_with_empty_cells(mapping, tmp_path):
     write_mapping_tsv(tmp_path / "m.tsv", mapping)
     lines = (tmp_path / "m.tsv").read_text().splitlines()
-    assert lines[-1] == "never\t\t\t\t\t\t\tnon_targeting\t"
+    assert lines[-1] == "never\t\t\t\t\t\t\tnon_targeting\t\t"
 
 
 def test_a_column_map_to_elements_never_made_is_written_empty(tmp_path):
@@ -472,7 +472,7 @@ def test_a_column_map_to_elements_never_made_is_written_empty(tmp_path):
     write_mapping_tsv(tmp_path / "bare.tsv", bare)
     lines = (tmp_path / "bare.tsv").read_text().splitlines()
     assert lines[0].split("\t") == list(COLUMNS)
-    assert lines[1] == "a\t\t\t\t\t\t\tnon_targeting\t"
+    assert lines[1] == "a\t\t\t\t\t\t\tnon_targeting\t\t"
 
 
 def test_columns_yaml_parses_and_documents_the_table(mapping, tmp_path):

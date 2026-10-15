@@ -43,6 +43,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "which fills the distance_to_tss column."
         ),
     )
+    run_parser.add_argument(
+        "--genes",
+        default=None,
+        help=(
+            "A pairs table of element to gene, which fills "
+            "putative_target_genes. The same file `cau igvf-export run` "
+            "takes, so the two tables name the same genes."
+        ),
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -56,6 +65,7 @@ def run(args: argparse.Namespace) -> int:
             args.elements,
             args.outdir,
             annotation=args.annotation,
+            genes=args.genes,
         )
     except (FileNotFoundError, ElementError, ValueError, OSError, KeyError) as error:
         raise CommandError(str(error)) from error
