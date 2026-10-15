@@ -104,6 +104,8 @@ through scanpy's plotting.
 - **Counts go on a log axis**, fractions on a linear one (`LOG_METRICS`).
 - **`flagged` stacks the rejected cells on the kept ones**, so a threshold
   is read against the distribution it was taken from rather than beside it.
+  Kept is blue (`qc.KEPT`) and removed is grey (`qc.REMOVED`), so the eye
+  goes to the cells the analysis keeps.
 - The dashed line is the median, and the caption carries it, so a figure
   cannot drift from its own numbers.
 - A cell the modality does not hold is dropped, never binned as zero.

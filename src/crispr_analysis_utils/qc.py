@@ -289,6 +289,12 @@ def mad_outlier(
     return flagged
 
 
+KEPT = OKABE_ITO[4]
+"""Blue, for what a threshold keeps: the cells the analysis goes on with."""
+
+REMOVED = "0.7"
+"""Grey, for what it removes. Neutral, so the eye reads the kept cells first."""
+
 LOG_METRICS = ("total_counts", "n_genes_by_counts")
 """Metrics whose distribution is read on a log axis, because they are counts."""
 
@@ -362,17 +368,18 @@ def metric_distributions(
 
         kept_counts, _ = np.histogram(values[~cut], bins=edges)
         cut_counts, _ = np.histogram(values[cut], bins=edges)
-        axis.stairs(kept_counts, edges, fill=True, color=OKABE_ITO[4], label="kept")
+        axis.stairs(kept_counts, edges, fill=True, color=KEPT, label="kept")
         if cut.any():
             axis.stairs(
                 cut_counts,
                 edges,
                 baseline=kept_counts,
                 fill=True,
-                color=OKABE_ITO[5],
+                color=REMOVED,
                 label="flagged",
             )
-        axis.axvline(np.nanmedian(values), color="0.3", linewidth=1.0, linestyle="--")
+        # Black, so the median is not read as another grey category.
+        axis.axvline(np.nanmedian(values), color="black", linewidth=1.0, linestyle="--")
         axis.set(xlabel=metric, ylabel="cells")
         axis.grid(which="major", color="0.85", linewidth=0.6)
         axis.set_axisbelow(True)
