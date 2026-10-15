@@ -193,3 +193,12 @@ def test_a_log_panel_bins_from_the_smallest_value_not_from_one():
     # Otherwise three of the four bins would sit under the data.
     assert numbers["bin_left"].min() == pytest.approx(1000.0)
     assert numbers["n_kept"].sum() == 3
+
+
+def test_a_cell_on_the_smallest_or_largest_value_is_still_counted():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    # logspace rounds these endpoints just inside the data.
+    frame = pd.DataFrame({"total_counts": [271.0, 1000.0, 2321.0, 12150.0]})
+    _, numbers, _ = metric_distributions(frame, bins=60)
+    assert numbers["n_kept"].sum() == 4

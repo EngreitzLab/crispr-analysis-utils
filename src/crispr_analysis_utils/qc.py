@@ -364,7 +364,13 @@ def metric_distributions(
             edges = np.logspace(np.log10(floor), np.log10(np.nanmax(values)), bins + 1)
             axis.set_xscale("log")
         else:
-            edges = np.linspace(np.nanmin(values), np.nanmax(values), bins + 1)
+            floor = float(np.nanmin(values))
+            edges = np.linspace(floor, np.nanmax(values), bins + 1)
+        # logspace rounds its endpoints, so a cell sitting exactly on the
+        # smallest or largest value can fall outside its own range and go
+        # uncounted. Pin the outer edges back onto the data.
+        edges[0] = min(edges[0], floor)
+        edges[-1] = max(edges[-1], float(np.nanmax(values)))
 
         kept_counts, _ = np.histogram(values[~cut], bins=edges)
         cut_counts, _ = np.histogram(values[cut], bins=edges)
