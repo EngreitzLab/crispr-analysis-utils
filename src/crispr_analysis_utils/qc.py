@@ -557,6 +557,12 @@ def metric_scatter(
     above_x = xs >= x_threshold if x_threshold is not None else np.ones(len(xs), bool)
     above_y = ys >= y_threshold if y_threshold is not None else np.ones(len(ys), bool)
     kept = above_x & above_y
+    # A log axis cannot show a zero, and matplotlib drops one without
+    # saying so. Keep it in the numbers and account for it in the caption.
+    drawn = np.ones(len(xs), dtype=bool)
+    for name, values in ((x, xs), (y, ys)):
+        if name in log:
+            drawn &= values > 0
 
     if marginals:
         figure = plt.figure(figsize=(6.0, 6.0))
@@ -572,7 +578,10 @@ def metric_scatter(
 
     # Rasterised: one point per cell stays a vector object otherwise, and a
     # channel of 10,000 cells turns into a PDF nobody can open.
-    for mask, colour, label in ((kept, KEPT, "kept"), (~kept, REMOVED, "removed")):
+    for mask, colour, label in (
+        (kept & drawn, KEPT, "kept"),
+        (~kept & drawn, REMOVED, "removed"),
+    ):
         if mask.any():
             axis.scatter(
                 xs[mask],
@@ -605,12 +614,13 @@ def metric_scatter(
     ):
         if panel is None:
             continue
+        shown = values[drawn]
         edges = (
-            np.logspace(np.log10(values.min()), np.log10(values.max()), 60)
+            np.logspace(np.log10(shown.min()), np.log10(shown.max()), 60)
             if name in log
             else 60
         )
-        panel.hist(values, bins=edges, color="0.8", orientation=orientation)
+        panel.hist(shown, bins=edges, color="0.8", orientation=orientation)
         panel.axis("off")
 
     counts = {
@@ -627,6 +637,7 @@ def metric_scatter(
             "above_" + x: above_x,
             "above_" + y: above_y,
             "kept": kept,
+            "drawn": drawn,
         }
     )
     stated = ", ".join(
@@ -642,6 +653,12 @@ def metric_scatter(
         + ". Histograms on the margins are each metric's own distribution "
         + f"over the same {unit}."
     )
+    if not drawn.all():
+        caption += (
+            f" {int((~drawn).sum()):,} of the {unit} hold a zero on a log "
+            "axis and so cannot be drawn; they are in the data file, marked "
+            "by the drawn column, and are counted in the quadrants above."
+        )
     return figure, numbers, caption
 
 

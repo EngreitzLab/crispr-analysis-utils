@@ -132,6 +132,11 @@ on its margin, and the quadrant counts in the caption.
 - **The points are rasterised** and the text is not. One vector point per
   cell makes a PDF that will not open: the same figure in R came to 39 MB.
 - A cell missing either metric is dropped, not drawn at zero.
+- **A zero cannot sit on a log axis**, and matplotlib drops one without
+  saying so. Such a point stays in the data file with `drawn` false, still
+  counts in its quadrant, and the caption says how many there were.
+- `unit="genes"` makes the same figure a per-gene comparison against a
+  reference, thresholds and quadrant counts included.
 
 ## Does the panel dominate?
 

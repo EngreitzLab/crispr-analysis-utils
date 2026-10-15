@@ -401,3 +401,20 @@ def test_the_scatter_serves_a_per_gene_comparison_too():
     assert "over the same genes" in caption
     assert numbers.columns[0] == "gene"
     assert numbers["kept"].tolist() == [False, True]
+
+
+def test_a_zero_on_a_log_axis_is_reported_rather_than_silently_dropped():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    frame = pd.DataFrame(
+        {
+            "total_counts": [0.0, 1000.0, 3000.0],
+            "pct_counts_targeted": [60.0, 60.0, 60.0],
+        }
+    )
+    _, numbers, caption = metric_scatter(frame, x_threshold=500, y_threshold=25)
+
+    assert numbers["drawn"].tolist() == [False, True, True]
+    # Still counted: it is below the threshold, and the quadrant says so.
+    assert numbers["kept"].tolist() == [False, True, True]
+    assert "1 of the cells hold a zero on a log axis" in caption
