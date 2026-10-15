@@ -133,6 +133,20 @@ on its margin, and the quadrant counts in the caption.
   cell makes a PDF that will not open: the same figure in R came to 39 MB.
 - A cell missing either metric is dropped, not drawn at zero.
 
+## Does the panel dominate?
+
+`qc.panel_expression(data)` boxplots the mean expression per gene, in UMIs
+per million, for the genes `var["readout"]` marks against every other gene.
+
+- **Gene by gene, not cell by cell.** `pct_counts_targeted` says how much of
+  a cell is the panel; this says whether that comes from the panel as a
+  whole or from a few genes carrying it.
+- `qc.mean_upm(counts)` is the number behind it: each cell scaled to a
+  million UMIs, then averaged across cells, computed on the sparse matrix.
+  `normalization.counts_per_million` is the same arithmetic for the dense
+  guide-by-sample table of a bulk screen and would densify this one.
+- One is added before the log, so a gene seen in no cell still appears.
+
 ## Thresholds from the channel itself
 
 `qc.mad_outlier(values, nmads=5, side="both", log=False)` flags the cells

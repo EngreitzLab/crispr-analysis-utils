@@ -318,3 +318,52 @@ def test_an_extra_gene_class_is_measured_alongside_the_built_in_ones():
 def test_an_extra_mask_of_the_wrong_length_is_refused():
     with pytest.raises(FigureError, match="covers 2 genes"):
         cell_fractions(mudata(), extra={"wrong": np.array([True, False])})
+
+
+def test_mean_upm_scales_each_cell_before_averaging():
+    from crispr_analysis_utils.qc import mean_upm
+
+    data = mudata()
+    values = mean_upm(data["gene"])
+    # AAA is 10/10/20/10/50 of 100; CCC is 0/0/0/0/100 of 100.
+    assert values.tolist() == pytest.approx(
+        [50_000.0, 50_000.0, 100_000.0, 50_000.0, 750_000.0]
+    )
+
+
+def test_a_cell_with_no_umis_does_not_divide_by_zero():
+    import anndata as ad
+    import mudata as md
+
+    from crispr_analysis_utils.qc import mean_upm
+
+    empty = ad.AnnData(
+        X=np.array([[1.0, 1.0], [0.0, 0.0]], dtype="float32"),
+        obs=pd.DataFrame(index=pd.Index(["a", "b"], name="barcode")),
+        var=pd.DataFrame(index=pd.Index(["g1", "g2"], name="gene_id")),
+    )
+    values = mean_upm(md.MuData({"gene": empty})["gene"])
+    # The empty cell contributes zero, so the mean is halved, not infinite.
+    assert values.tolist() == pytest.approx([250_000.0, 250_000.0])
+
+
+def test_the_panel_boxplot_splits_on_the_readout_flag(tmp_path):
+    from crispr_analysis_utils.qc import panel_expression
+
+    figure, numbers, caption = panel_expression(mudata())
+    assert numbers["in_panel"].sum() == 1
+    assert len(numbers) == 5
+    assert "1 genes of the panel against the 4 others" in caption
+    written = publish(tmp_path / "panel", figure, numbers, caption)
+    assert written[".tsv.gz"].exists()
+
+
+def test_the_panel_boxplot_needs_a_flag_that_marks_something():
+    from crispr_analysis_utils.qc import panel_expression
+
+    data = mudata()
+    with pytest.raises(FigureError, match="not a column"):
+        panel_expression(data, flag="missing")
+    data["gene"].var["readout"] = False
+    with pytest.raises(FigureError, match="marks no gene"):
+        panel_expression(data)

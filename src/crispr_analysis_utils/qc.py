@@ -639,6 +639,124 @@ def metric_scatter(
     return figure, numbers, caption
 
 
+def mean_upm(counts) -> np.ndarray:
+    """Mean UMIs per million per gene, over the cells of one modality.
+
+    Each cell is scaled to a million UMIs first, so a deep cell does not
+    outweigh a shallow one, and the mean is taken across cells.
+
+    `normalization.counts_per_million` is the same arithmetic for the dense
+    guide-by-sample tables of a bulk screen; a single-cell matrix is sparse
+    and far too large to densify, so it is done here instead.
+
+    Parameters
+    ----------
+    counts : anndata.AnnData
+        One modality. Cells in rows, genes in columns.
+
+    Returns
+    -------
+    numpy.ndarray
+        One value per gene. A cell with no UMIs contributes nothing rather
+        than dividing by zero.
+    """
+    import scipy.sparse as sp
+
+    matrix = counts.X
+    totals = np.asarray(matrix.sum(axis=1)).ravel()
+    # A cell with no UMIs has no composition to measure; scaling it by zero
+    # keeps it in the denominator without inventing counts for it.
+    scale = np.divide(
+        1e6, totals, out=np.zeros_like(totals, dtype=float), where=totals > 0
+    )
+    if sp.issparse(matrix):
+        scaled = sp.diags(scale) @ matrix
+    else:
+        scaled = np.asarray(matrix) * scale[:, None]
+    return np.asarray(scaled.mean(axis=0)).ravel()
+
+
+def panel_expression(data, modality: str = "gene", flag: str = "readout"):
+    """How much more a targeted panel's genes are seen than everything else.
+
+    A targeted assay works when its panel dominates. This compares the two
+    groups gene by gene rather than cell by cell, which is what says whether
+    the enrichment comes from the panel as a whole or from a few genes.
+
+    Parameters
+    ----------
+    data
+        A MuData as `mudata_builder` assembles it.
+    modality : str
+        Which modality holds the genes.
+    flag : str
+        The boolean column of `var` marking the panel.
+
+    Returns
+    -------
+    tuple of (matplotlib.figure.Figure, pandas.DataFrame, str)
+        The figure, one row per gene, and the caption.
+
+    Raises
+    ------
+    FigureError
+        `var` has no such column, or it marks no gene.
+    """
+    plt = style()
+
+    counts = data[modality]
+    if flag not in counts.var:
+        raise FigureError(f"{flag!r} is not a column of {modality}.var.")
+    in_panel = counts.var[flag].fillna(False).to_numpy().astype(bool)
+    if not in_panel.any():
+        raise FigureError(f"{flag!r} marks no gene, so there is no panel.")
+
+    values = mean_upm(counts)
+    numbers = pd.DataFrame(
+        {
+            "gene": counts.var_names,
+            "symbol": counts.var.get("symbol", pd.Series(index=counts.var_names)),
+            "mean_upm": values,
+            "in_panel": in_panel,
+        }
+    ).reset_index(drop=True)
+
+    figure, axis = plt.subplots(figsize=(4.0, 4.5))
+    groups = [values[in_panel], values[~in_panel]]
+    # +1 so a gene seen in no cell stays on a log axis instead of vanishing.
+    boxes = axis.boxplot(
+        [group + 1 for group in groups],
+        tick_labels=["panel", "background"],
+        widths=0.5,
+        patch_artist=True,
+        flierprops={"markersize": 2, "markeredgewidth": 0, "alpha": 0.3},
+    )
+    for patch, colour in zip(boxes["boxes"], (KEPT, REMOVED), strict=False):
+        patch.set_facecolor(colour)
+    for median in boxes["medians"]:
+        median.set_color("black")
+    axis.set_yscale("log")
+    axis.set_ylabel("mean UMIs per million + 1")
+    axis.grid(axis="y", which="major", color="0.85", linewidth=0.6)
+    axis.set_axisbelow(True)
+    figure.tight_layout()
+
+    panel_median = float(np.median(values[in_panel]))
+    background_median = float(np.median(values[~in_panel]))
+    fold = panel_median / background_median if background_median else float("inf")
+    caption = (
+        f"Mean expression per gene, in units of UMIs per million, for the "
+        f"{int(in_panel.sum()):,} genes of the panel against the "
+        f"{int((~in_panel).sum()):,} others. Medians are "
+        f"{panel_median:,.1f} and {background_median:,.1f}, a "
+        f"{fold:,.0f}-fold difference. One is added before taking the log so "
+        "a gene seen in no cell still appears. Comparing genes rather than "
+        "cells is what separates enrichment across the whole panel from a "
+        "few genes carrying it."
+    )
+    return figure, numbers, caption
+
+
 MITO_CONTIG = "chrM"
 """Mitochondrial genes are the ones on the mitochondrial contig."""
 
