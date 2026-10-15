@@ -94,6 +94,9 @@ whose UMI count reaches the floor, returning the filtered copy and the mask.
   `RPL` prefixes with the ~80 real ribosomal proteins and are transcribed.
 - A cell the modality does not hold gets `NaN`, not zero: it was not
   measured.
+- **`extra={name: mask}` adds a class of someone else's definition.** A
+  threshold set against an older analysis's idea of ribosomal only applies
+  to that definition, so measure it rather than assume the two agree.
 
 ## The metric distributions
 

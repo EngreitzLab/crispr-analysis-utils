@@ -702,7 +702,11 @@ def gene_classes(var: pd.DataFrame) -> dict[str, np.ndarray]:
     return classes
 
 
-def cell_fractions(data, modality: str = "gene") -> pd.DataFrame:
+def cell_fractions(
+    data,
+    modality: str = "gene",
+    extra: dict[str, np.ndarray] | None = None,
+) -> pd.DataFrame:
     """The share of each cell's UMIs coming from each class of gene.
 
     The arithmetic is scanpy's `calculate_qc_metrics`, so the columns are
@@ -716,6 +720,11 @@ def cell_fractions(data, modality: str = "gene") -> pd.DataFrame:
         A MuData as `mudata_builder` assembles it.
     modality
         Which modality to measure; the gene counts by default.
+    extra
+        Further classes, as a mapping of name to a boolean mask over the
+        modality's genes. A class defined elsewhere -- an older analysis's
+        own definition of ribosomal, say -- is measured alongside the
+        built-in ones, so a threshold set against it still applies.
 
     Returns
     -------
@@ -729,6 +738,14 @@ def cell_fractions(data, modality: str = "gene") -> pd.DataFrame:
 
     counts = data[modality]
     classes = gene_classes(counts.var)
+    for name, mask in (extra or {}).items():
+        mask = np.asarray(mask, dtype=bool)
+        if mask.shape != (counts.n_vars,):
+            raise FigureError(
+                f"The mask for {name!r} covers {mask.shape[0]:,} genes, "
+                f"but the modality holds {counts.n_vars:,}."
+            )
+        classes[name] = mask
 
     # scanpy reads the class membership off var, by the names given here.
     measured = counts.copy()

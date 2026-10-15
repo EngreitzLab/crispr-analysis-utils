@@ -300,3 +300,21 @@ def test_the_scatter_drops_the_legend_when_nothing_is_removed():
     )
     figure, _, _ = metric_scatter(frame, x_threshold=1000, y_threshold=25)
     assert figure.axes[0].get_legend() is None
+
+
+def test_an_extra_gene_class_is_measured_alongside_the_built_in_ones():
+    data = mudata()
+    # Another analysis's own definition, wider than this module's.
+    wider = np.array([False, True, True, True, False])
+    frame = cell_fractions(data, extra={"ribo_wide": wider})
+
+    assert "pct_counts_ribo_wide" in frame
+    # AAA: 10 + 20 + 10 of 100 UMIs.
+    assert frame.loc["AAA", "pct_counts_ribo_wide"] == pytest.approx(40.0)
+    # The built-in classes are untouched.
+    assert frame.loc["AAA", "pct_counts_ribo"] == pytest.approx(20.0)
+
+
+def test_an_extra_mask_of_the_wrong_length_is_refused():
+    with pytest.raises(FigureError, match="covers 2 genes"):
+        cell_fractions(mudata(), extra={"wrong": np.array([True, False])})
