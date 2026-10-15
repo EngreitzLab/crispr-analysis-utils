@@ -97,17 +97,22 @@ whose UMI count reaches the floor, returning the filtered copy and the mask.
 
 ## The metric distributions
 
-`qc.metric_distributions(frame, flagged=None)` draws one histogram per
-column of a `cell_fractions` frame, with matplotlib directly rather than
-through scanpy's plotting.
+`qc.metric_distributions(frame, nmads=5)` draws one histogram per column
+of a `cell_fractions` frame, with matplotlib directly rather than through
+scanpy's plotting.
 
-- **Counts go on a log axis**, fractions on a linear one (`LOG_METRICS`).
-- **`flagged` stacks the rejected cells on the kept ones**, so a threshold
-  is read against the distribution it was taken from rather than beside it.
-  Kept is blue (`qc.KEPT`) and removed is grey (`qc.REMOVED`), so the eye
-  goes to the cells the analysis keeps.
-- The dashed line is the median, and the caption carries it, so a figure
-  cannot drift from its own numbers.
+- **Every panel thresholds on its own metric.** It calls `qc.mad_bounds`,
+  draws the result as a dashed black line, and colours by it: blue
+  (`qc.KEPT`) within the band, grey (`qc.REMOVED`) beyond it. The line and
+  the cut are one computation, so the figure cannot disagree with the
+  table.
+- **Counts are two-sided and go on a log axis**, fractions are upper-tail
+  only and linear (`LOG_METRICS`, overridable with `sides`).
+- **The grey bars do not sum to the cells a filter drops.** Each panel
+  counts its own rejects, so a cell that two metrics reject is grey twice.
+  `mad_outlier` per metric, combined with `any`, is what gives the cells.
+- A metric with no spread loses its threshold, not the figure: the panel is
+  drawn with no line and the caption says so.
 - A cell the modality does not hold is dropped, never binned as zero.
 
 ## Thresholds from the channel itself

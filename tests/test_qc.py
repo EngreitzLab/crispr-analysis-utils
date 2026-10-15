@@ -162,15 +162,14 @@ def test_the_distributions_draw_one_panel_per_metric_and_bin_every_cell(tmp_path
     from crispr_analysis_utils.qc import metric_distributions
 
     frame = cell_fractions(mudata())
-    flagged = np.array([False, True, False])
-    figure, numbers, caption = metric_distributions(frame, flagged=flagged, bins=4)
+    figure, numbers, caption = metric_distributions(frame, bins=4)
 
     metrics = list(frame.columns)
     assert sorted(numbers["metric"].unique()) == sorted(metrics)
     # The unmeasured cell is dropped, the other two are binned exactly once.
-    per_metric = numbers.groupby("metric")[["n_kept", "n_flagged"]].sum().sum(axis=1)
+    per_metric = numbers.groupby("metric")[["n_kept", "n_removed"]].sum().sum(axis=1)
     assert (per_metric == 2).all()
-    assert "flagged" in caption
+    assert "MAD" in caption
     written = publish(tmp_path / "metrics", figure, numbers, caption)
     assert written[".pdf"].exists()
 
@@ -204,15 +203,15 @@ def test_a_cell_on_the_smallest_or_largest_value_is_still_counted():
     assert numbers["n_kept"].sum() == 4
 
 
-def test_the_flagged_layer_sits_on_the_kept_one_rather_than_over_it():
+def test_the_removed_layer_sits_on_the_kept_one_rather_than_over_it():
     from matplotlib.patches import StepPatch
 
     from crispr_analysis_utils.qc import metric_distributions
 
-    # One flagged cell among many kept: the grey must be a sliver on top.
-    frame = pd.DataFrame({"pct_counts_mito": [1.0] * 50 + [9.0]})
-    flagged = np.array([False] * 50 + [True])
-    figure, numbers, _ = metric_distributions(frame, flagged=flagged, bins=4)
+    # One outlier among many: the grey must be a sliver on top.
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame({"pct_counts_mito": np.r_[rng.normal(1.0, 0.1, 50), 9.0]})
+    figure, numbers, _ = metric_distributions(frame, bins=4)
 
     axis = figure.axes[0]
     patches = [a for a in axis.get_children() if isinstance(a, StepPatch)]
@@ -223,4 +222,38 @@ def test_the_flagged_layer_sits_on_the_kept_one_rather_than_over_it():
     # The grey starts where the blue ends and only ever goes up from there.
     assert np.allclose(baseline, kept)
     assert (stacked >= kept).all()
-    assert np.allclose(stacked - kept, numbers["n_flagged"].to_numpy())
+    assert np.allclose(stacked - kept, numbers["n_removed"].to_numpy())
+
+
+def test_the_line_is_the_threshold_and_the_colour_changes_at_it():
+    from crispr_analysis_utils.qc import mad_bounds, metric_distributions
+
+    rng = np.random.default_rng(0)
+    values = np.r_[rng.normal(1.0, 0.1, 50), 9.0]
+    frame = pd.DataFrame({"pct_counts_mito": values})
+    figure, numbers, caption = metric_distributions(frame, bins=4)
+
+    # Upper tail only for a fraction, so one line, at the upper bound.
+    _, high = mad_bounds(values, side="upper")
+    lines = [x.get_xdata()[0] for x in figure.axes[0].get_lines()]
+    assert lines == pytest.approx([high])
+    assert numbers["threshold_high"].iloc[0] == pytest.approx(high)
+    assert not np.isfinite(numbers["threshold_low"].iloc[0])
+    # Everything grey lies beyond the line, everything blue short of it.
+    beyond = numbers[numbers["n_removed"] > 0]
+    assert (beyond["bin_right"] > high).all()
+    assert f"{high:,.2f}" in caption
+
+
+def test_a_metric_with_no_spread_loses_its_threshold_not_the_whole_figure():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    frame = pd.DataFrame(
+        {"pct_counts_mito": [1.0] * 50, "pct_counts_ribo": [1.0, 2.0] * 25}
+    )
+    figure, numbers, caption = metric_distributions(frame, bins=4)
+
+    assert len(figure.axes) >= 2
+    flat = numbers[numbers["metric"] == "pct_counts_mito"]
+    assert not np.isfinite(flat["threshold_high"]).any()
+    assert "pct_counts_mito" in caption.split("No threshold is drawn for")[1]

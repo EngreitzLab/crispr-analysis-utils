@@ -265,13 +265,51 @@ def mad_outlier(
         can be read off it. This is what an unfiltered barcode space looks
         like: pick the cells first, then measure their spread.
     """
+    numbers = np.asarray(values, dtype=float)
+    measured = ~np.isnan(numbers)
+    low, high = mad_bounds(numbers[measured], nmads=nmads, side=side, log=log)
+
+    flagged = np.zeros(numbers.shape, dtype=bool)
+    flagged[measured] |= numbers[measured] < low
+    flagged[measured] |= numbers[measured] > high
+    return flagged
+
+
+def mad_bounds(
+    values,
+    nmads: float = 5.0,
+    side: str = "both",
+    log: bool = False,
+) -> tuple[float, float]:
+    """The thresholds `mad_outlier` applies, in the values' own units.
+
+    A figure draws these and colours by them, so the line on the plot and
+    the cut in the table cannot disagree.
+
+    Parameters
+    ----------
+    values : array-like
+        One number per cell, with no `NaN`.
+    nmads, side, log
+        As `mad_outlier`.
+
+    Returns
+    -------
+    tuple of float
+        Lower and upper threshold. A tail that `side` does not cut comes
+        back as `-inf` or `inf`.
+
+    Raises
+    ------
+    FigureError
+        `side` is not one of the three, or the MAD is zero.
+    """
     from scipy.stats import median_abs_deviation
 
     if side not in ("both", "lower", "upper"):
         raise FigureError(f"side must be both, upper or lower, not {side!r}")
     numbers = np.asarray(values, dtype=float)
-    measured = ~np.isnan(numbers)
-    scale = np.log10(numbers[measured] + 1) if log else numbers[measured]
+    scale = np.log10(numbers + 1) if log else numbers
     middle = np.median(scale)
     spread = median_abs_deviation(scale, scale="normal")
     if spread == 0:
@@ -281,12 +319,12 @@ def mad_outlier(
         )
 
     low, high = middle - nmads * spread, middle + nmads * spread
-    flagged = np.zeros(numbers.shape, dtype=bool)
-    if side in ("both", "lower"):
-        flagged[measured] |= scale < low
-    if side in ("both", "upper"):
-        flagged[measured] |= scale > high
-    return flagged
+    if log:
+        low, high = 10**low - 1, 10**high - 1
+    return (
+        float(low) if side in ("both", "lower") else -np.inf,
+        float(high) if side in ("both", "upper") else np.inf,
+    )
 
 
 KEPT = OKABE_ITO[4]
@@ -301,11 +339,15 @@ LOG_METRICS = ("total_counts", "n_genes_by_counts")
 
 def metric_distributions(
     frame: pd.DataFrame,
-    flagged=None,
+    nmads: float = 5.0,
     log: tuple[str, ...] = LOG_METRICS,
+    sides: dict[str, str] | None = None,
     bins: int = 60,
 ):
-    """One histogram per QC metric, over the cells the frame describes.
+    """One histogram per QC metric, split at that metric's own threshold.
+
+    Every panel computes its MAD band, draws it, and colours by it, so the
+    line on the figure is the cut the table would make.
 
     Parameters
     ----------
@@ -313,20 +355,23 @@ def metric_distributions(
         One column per metric, one row per cell, as `cell_fractions`
         returns. Rows that are entirely `NaN` are cells the modality does
         not hold, and are dropped rather than drawn as zero.
-    flagged : array-like of bool, optional
-        True for the cells a threshold rejects. Drawn in a second colour on
-        top of the kept ones, so what a cut removes is visible against what
-        it leaves.
+    nmads : float
+        Width of each band, in MADs.
     log : tuple of str
-        Metrics binned and drawn on a log axis. A count distribution spans
-        orders of magnitude; a percentage does not.
+        Metrics binned, thresholded and drawn on a log axis. A count
+        distribution spans orders of magnitude; a percentage does not.
+    sides : dict, optional
+        Which tail each metric cuts. The default is `"both"` for a count
+        and `"upper"` for everything else, since a cell with unusually
+        little mitochondrial signal is not a problem.
     bins : int
         Bins per panel.
 
     Returns
     -------
     tuple of (matplotlib.figure.Figure, pandas.DataFrame, str)
-        The figure, one row per bin per metric, and the caption.
+        The figure, one row per bin per metric carrying both thresholds,
+        and the caption.
 
     Raises
     ------
@@ -340,13 +385,9 @@ def metric_distributions(
     measured = frame.dropna(how="all")
     if measured.empty:
         raise FigureError("No measured cell to draw.")
-    cut = (
-        np.zeros(len(measured), dtype=bool)
-        if flagged is None
-        else np.asarray(flagged, dtype=bool)[frame.index.isin(measured.index)]
-    )
 
     metrics = list(measured.columns)
+    sides = sides or {}
     columns = min(3, len(metrics))
     rows = -(-len(metrics) // columns)
     figure, axes = plt.subplots(
@@ -354,9 +395,21 @@ def metric_distributions(
     )
 
     records = []
+    unthresholded: list[str] = []
     for axis, metric in zip(axes.ravel(), metrics, strict=False):
         values = measured[metric].to_numpy(dtype=float)
-        if metric in log:
+        on_log = metric in log
+        side = sides.get(metric, "both" if on_log else "upper")
+        try:
+            low, high = mad_bounds(values, nmads=nmads, side=side, log=on_log)
+        except FigureError:
+            # No spread, so no threshold. The panel still shows the
+            # distribution rather than taking the whole figure down.
+            low, high = -np.inf, np.inf
+            unthresholded.append(metric)
+        within = (values >= low) & (values <= high)
+
+        if on_log:
             # A zero has no place on a log axis, so the range starts at the
             # smallest value actually present.
             positive = values[values > 0]
@@ -372,23 +425,24 @@ def metric_distributions(
         edges[0] = min(edges[0], floor)
         edges[-1] = max(edges[-1], float(np.nanmax(values)))
 
-        kept_counts, _ = np.histogram(values[~cut], bins=edges)
-        cut_counts, _ = np.histogram(values[cut], bins=edges)
+        kept_counts, _ = np.histogram(values[within], bins=edges)
+        cut_counts, _ = np.histogram(values[~within], bins=edges)
         axis.stairs(kept_counts, edges, fill=True, color=KEPT, label="kept")
-        if cut.any():
-            # Stacked, so the top of the grey is kept + flagged. Passing
-            # the flagged count alone fills between it and the baseline,
-            # which paints over the kept cells instead of sitting on them.
+        if (~within).any():
+            # Stacked, so the top of the grey is kept + cut. Passing the cut
+            # count alone fills between it and the baseline, which paints
+            # over the kept cells instead of sitting on them.
             axis.stairs(
                 kept_counts + cut_counts,
                 edges,
                 baseline=kept_counts,
                 fill=True,
                 color=REMOVED,
-                label="flagged",
+                label="removed",
             )
-        # Black, so the median is not read as another grey category.
-        axis.axvline(np.nanmedian(values), color="black", linewidth=1.0, linestyle="--")
+        for threshold in (low, high):
+            if np.isfinite(threshold):
+                axis.axvline(threshold, color="black", linewidth=1.0, linestyle="--")
         axis.set(xlabel=metric, ylabel="cells")
         axis.grid(which="major", color="0.85", linewidth=0.6)
         axis.set_axisbelow(True)
@@ -400,37 +454,47 @@ def metric_distributions(
                     "bin_left": edges[:-1],
                     "bin_right": edges[1:],
                     "n_kept": kept_counts,
-                    "n_flagged": cut_counts,
+                    "n_removed": cut_counts,
+                    "threshold_low": low,
+                    "threshold_high": high,
                 }
             )
         )
 
     for axis in axes.ravel()[len(metrics) :]:
         axis.set_visible(False)
-    if cut.any():
-        axes.ravel()[0].legend(frameon=False, fontsize="small")
+    axes.ravel()[0].legend(frameon=False, fontsize="small")
     figure.tight_layout()
 
     numbers = pd.concat(records, ignore_index=True)
-    medians = ", ".join(
-        f"{metric} {measured[metric].median():,.2f}" for metric in metrics
+    thresholds = ", ".join(
+        f"{metric} "
+        + " to ".join(
+            f"{bound:,.2f}"
+            for bound in (
+                numbers.loc[numbers["metric"] == metric, "threshold_low"].iloc[0],
+                numbers.loc[numbers["metric"] == metric, "threshold_high"].iloc[0],
+            )
+            if np.isfinite(bound)
+        )
+        for metric in metrics
     )
-    counted = (
-        f"{int((~cut).sum()):,} kept and {int(cut.sum()):,} flagged"
-        if cut.any()
-        else f"{len(measured):,}"
-    )
+    removed = int(numbers["n_removed"].sum())
     caption = (
-        f"Distribution of each quality-control metric over {counted} cells. "
-        "Counts are binned and drawn on a log axis, fractions on a linear "
-        "one; the dashed line is the median (" + medians + "). The flagged "
-        "cells are stacked on the kept ones, so a threshold's effect is "
-        "read against the distribution it was taken from."
-        if cut.any()
-        else f"Distribution of each quality-control metric over {counted} "
+        f"Distribution of each quality-control metric over {len(measured):,} "
         "cells. Counts are binned and drawn on a log axis, fractions on a "
-        "linear one; the dashed line is the median (" + medians + ")."
+        "linear one. The dashed lines are that metric's own "
+        f"{nmads:g}-MAD thresholds ({thresholds}); cells beyond them are "
+        f"grey. Each panel cuts on its own metric, so the {removed:,} grey "
+        "bars summed across panels double-count a cell that several "
+        "metrics reject."
     )
+    if unthresholded:
+        caption += (
+            " No threshold is drawn for "
+            + ", ".join(unthresholded)
+            + ", whose values have no spread to measure one from."
+        )
     return figure, numbers, caption
 
 
