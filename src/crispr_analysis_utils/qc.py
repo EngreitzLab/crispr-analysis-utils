@@ -743,16 +743,23 @@ def panel_expression(data, modality: str = "gene", flag: str = "readout"):
 
     panel_median = float(np.median(values[in_panel]))
     background_median = float(np.median(values[~in_panel]))
-    fold = panel_median / background_median if background_median else float("inf")
+    seen = int((values[~in_panel] > 0).sum())
+    difference = (
+        f"a {panel_median / background_median:,.0f}-fold difference"
+        if background_median
+        # Half the reference is never seen, so its median is zero and a
+        # ratio says nothing. The share that is seen does.
+        else f"the background median being zero, with {seen:,} of "
+        f"{int((~in_panel).sum()):,} background genes seen at all"
+    )
     caption = (
         f"Mean expression per gene, in units of UMIs per million, for the "
         f"{int(in_panel.sum()):,} genes of the panel against the "
         f"{int((~in_panel).sum()):,} others. Medians are "
-        f"{panel_median:,.1f} and {background_median:,.1f}, a "
-        f"{fold:,.0f}-fold difference. One is added before taking the log so "
-        "a gene seen in no cell still appears. Comparing genes rather than "
-        "cells is what separates enrichment across the whole panel from a "
-        "few genes carrying it."
+        f"{panel_median:,.1f} and {background_median:,.1f}, {difference}. "
+        "One is added before taking the log so a gene seen in no cell still "
+        "appears. Comparing genes rather than cells is what separates "
+        "enrichment across the whole panel from a few genes carrying it."
     )
     return figure, numbers, caption
 

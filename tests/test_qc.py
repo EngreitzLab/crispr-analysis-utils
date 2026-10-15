@@ -367,3 +367,15 @@ def test_the_panel_boxplot_needs_a_flag_that_marks_something():
     data["gene"].var["readout"] = False
     with pytest.raises(FigureError, match="marks no gene"):
         panel_expression(data)
+
+
+def test_the_panel_caption_says_what_a_zero_background_median_means():
+    from crispr_analysis_utils.qc import panel_expression
+
+    data = mudata()
+    # Most of an unfiltered reference is never seen, so its median is zero.
+    data["gene"].X = np.array([[0, 0, 0, 0, 50], [0, 0, 0, 0, 100]], dtype="float32")
+    _, _, caption = panel_expression(data)
+    assert "inf" not in caption
+    assert "background median being zero" in caption
+    assert "0 of 4 background genes seen" in caption
