@@ -95,6 +95,19 @@ whose UMI count reaches the floor, returning the filtered copy and the mask.
 - A cell the modality does not hold gets `NaN`, not zero: it was not
   measured.
 
+## The metric distributions
+
+`qc.metric_distributions(frame, flagged=None)` draws one histogram per
+column of a `cell_fractions` frame, with matplotlib directly rather than
+through scanpy's plotting.
+
+- **Counts go on a log axis**, fractions on a linear one (`LOG_METRICS`).
+- **`flagged` stacks the rejected cells on the kept ones**, so a threshold
+  is read against the distribution it was taken from rather than beside it.
+- The dashed line is the median, and the caption carries it, so a figure
+  cannot drift from its own numbers.
+- A cell the modality does not hold is dropped, never binned as zero.
+
 ## Thresholds from the channel itself
 
 `qc.mad_outlier(values, nmads=5, side="both", log=False)` flags the cells

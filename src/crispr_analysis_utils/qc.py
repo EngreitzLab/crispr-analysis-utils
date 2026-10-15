@@ -289,6 +289,133 @@ def mad_outlier(
     return flagged
 
 
+LOG_METRICS = ("total_counts", "n_genes_by_counts")
+"""Metrics whose distribution is read on a log axis, because they are counts."""
+
+
+def metric_distributions(
+    frame: pd.DataFrame,
+    flagged=None,
+    log: tuple[str, ...] = LOG_METRICS,
+    bins: int = 60,
+):
+    """One histogram per QC metric, over the cells the frame describes.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        One column per metric, one row per cell, as `cell_fractions`
+        returns. Rows that are entirely `NaN` are cells the modality does
+        not hold, and are dropped rather than drawn as zero.
+    flagged : array-like of bool, optional
+        True for the cells a threshold rejects. Drawn in a second colour on
+        top of the kept ones, so what a cut removes is visible against what
+        it leaves.
+    log : tuple of str
+        Metrics binned and drawn on a log axis. A count distribution spans
+        orders of magnitude; a percentage does not.
+    bins : int
+        Bins per panel.
+
+    Returns
+    -------
+    tuple of (matplotlib.figure.Figure, pandas.DataFrame, str)
+        The figure, one row per bin per metric, and the caption.
+
+    Raises
+    ------
+    FigureError
+        The frame has no columns, or no cell survives the `NaN` drop.
+    """
+    plt = style()
+
+    if frame.shape[1] == 0:
+        raise FigureError("No metric to draw.")
+    measured = frame.dropna(how="all")
+    if measured.empty:
+        raise FigureError("No measured cell to draw.")
+    cut = (
+        np.zeros(len(measured), dtype=bool)
+        if flagged is None
+        else np.asarray(flagged, dtype=bool)[frame.index.isin(measured.index)]
+    )
+
+    metrics = list(measured.columns)
+    columns = min(3, len(metrics))
+    rows = -(-len(metrics) // columns)
+    figure, axes = plt.subplots(
+        rows, columns, figsize=(4.0 * columns, 3.0 * rows), squeeze=False
+    )
+
+    records = []
+    for axis, metric in zip(axes.ravel(), metrics, strict=False):
+        values = measured[metric].to_numpy(dtype=float)
+        if metric in log:
+            # A zero has no place on a log axis, and the smallest count is 1.
+            floor = max(np.nanmin(values[values > 0], initial=1.0), 1.0)
+            edges = np.logspace(np.log10(floor), np.log10(np.nanmax(values)), bins + 1)
+            axis.set_xscale("log")
+        else:
+            edges = np.linspace(np.nanmin(values), np.nanmax(values), bins + 1)
+
+        kept_counts, _ = np.histogram(values[~cut], bins=edges)
+        cut_counts, _ = np.histogram(values[cut], bins=edges)
+        axis.stairs(kept_counts, edges, fill=True, color=OKABE_ITO[4], label="kept")
+        if cut.any():
+            axis.stairs(
+                cut_counts,
+                edges,
+                baseline=kept_counts,
+                fill=True,
+                color=OKABE_ITO[5],
+                label="flagged",
+            )
+        axis.axvline(np.nanmedian(values), color="0.3", linewidth=1.0, linestyle="--")
+        axis.set(xlabel=metric, ylabel="cells")
+        axis.grid(which="major", color="0.85", linewidth=0.6)
+        axis.set_axisbelow(True)
+
+        records.append(
+            pd.DataFrame(
+                {
+                    "metric": metric,
+                    "bin_left": edges[:-1],
+                    "bin_right": edges[1:],
+                    "n_kept": kept_counts,
+                    "n_flagged": cut_counts,
+                }
+            )
+        )
+
+    for axis in axes.ravel()[len(metrics) :]:
+        axis.set_visible(False)
+    if cut.any():
+        axes.ravel()[0].legend(frameon=False, fontsize="small")
+    figure.tight_layout()
+
+    numbers = pd.concat(records, ignore_index=True)
+    medians = ", ".join(
+        f"{metric} {measured[metric].median():,.2f}" for metric in metrics
+    )
+    counted = (
+        f"{int((~cut).sum()):,} kept and {int(cut.sum()):,} flagged"
+        if cut.any()
+        else f"{len(measured):,}"
+    )
+    caption = (
+        f"Distribution of each quality-control metric over {counted} cells. "
+        "Counts are binned and drawn on a log axis, fractions on a linear "
+        "one; the dashed line is the median (" + medians + "). The flagged "
+        "cells are stacked on the kept ones, so a threshold's effect is "
+        "read against the distribution it was taken from."
+        if cut.any()
+        else f"Distribution of each quality-control metric over {counted} "
+        "cells. Counts are binned and drawn on a log axis, fractions on a "
+        "linear one; the dashed line is the median (" + medians + ")."
+    )
+    return figure, numbers, caption
+
+
 MITO_CONTIG = "chrM"
 """Mitochondrial genes are the ones on the mitochondrial contig."""
 

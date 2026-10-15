@@ -156,3 +156,30 @@ def test_the_mad_is_rescaled_to_a_sigma_so_the_band_is_wider_than_the_raw_mad():
     # A raw MAD would flag both probes; a sigma-scaled one does not.
     assert not flagged.any()
     assert mad_outlier(values, nmads=0.8).tolist()[0] is True
+
+
+def test_the_distributions_draw_one_panel_per_metric_and_bin_every_cell(tmp_path):
+    from crispr_analysis_utils.qc import metric_distributions
+
+    frame = cell_fractions(mudata())
+    flagged = np.array([False, True, False])
+    figure, numbers, caption = metric_distributions(frame, flagged=flagged, bins=4)
+
+    metrics = list(frame.columns)
+    assert sorted(numbers["metric"].unique()) == sorted(metrics)
+    # The unmeasured cell is dropped, the other two are binned exactly once.
+    per_metric = numbers.groupby("metric")[["n_kept", "n_flagged"]].sum().sum(axis=1)
+    assert (per_metric == 2).all()
+    assert "flagged" in caption
+    written = publish(tmp_path / "metrics", figure, numbers, caption)
+    assert written[".pdf"].exists()
+
+
+def test_the_distributions_need_a_metric_and_a_measured_cell():
+    from crispr_analysis_utils.qc import metric_distributions
+
+    frame = cell_fractions(mudata())
+    with pytest.raises(FigureError, match="No metric"):
+        metric_distributions(frame[[]])
+    with pytest.raises(FigureError, match="No measured cell"):
+        metric_distributions(frame.loc[["GGG"]])
