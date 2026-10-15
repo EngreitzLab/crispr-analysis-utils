@@ -202,3 +202,25 @@ def test_a_cell_on_the_smallest_or_largest_value_is_still_counted():
     frame = pd.DataFrame({"total_counts": [271.0, 1000.0, 2321.0, 12150.0]})
     _, numbers, _ = metric_distributions(frame, bins=60)
     assert numbers["n_kept"].sum() == 4
+
+
+def test_the_flagged_layer_sits_on_the_kept_one_rather_than_over_it():
+    from matplotlib.patches import StepPatch
+
+    from crispr_analysis_utils.qc import metric_distributions
+
+    # One flagged cell among many kept: the grey must be a sliver on top.
+    frame = pd.DataFrame({"pct_counts_mito": [1.0] * 50 + [9.0]})
+    flagged = np.array([False] * 50 + [True])
+    figure, numbers, _ = metric_distributions(frame, flagged=flagged, bins=4)
+
+    axis = figure.axes[0]
+    patches = [a for a in axis.get_children() if isinstance(a, StepPatch)]
+    assert len(patches) == 2
+    kept = patches[0].get_data().values
+    stacked = patches[1].get_data().values
+    baseline = patches[1].get_data().baseline
+    # The grey starts where the blue ends and only ever goes up from there.
+    assert np.allclose(baseline, kept)
+    assert (stacked >= kept).all()
+    assert np.allclose(stacked - kept, numbers["n_flagged"].to_numpy())

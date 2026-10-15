@@ -376,8 +376,11 @@ def metric_distributions(
         cut_counts, _ = np.histogram(values[cut], bins=edges)
         axis.stairs(kept_counts, edges, fill=True, color=KEPT, label="kept")
         if cut.any():
+            # Stacked, so the top of the grey is kept + flagged. Passing
+            # the flagged count alone fills between it and the baseline,
+            # which paints over the kept cells instead of sitting on them.
             axis.stairs(
-                cut_counts,
+                kept_counts + cut_counts,
                 edges,
                 baseline=kept_counts,
                 fill=True,
