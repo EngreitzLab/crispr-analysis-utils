@@ -278,6 +278,7 @@ def build(
     measurement_set: str,
     reference: dict | None = None,
     covariates: pd.DataFrame | None = None,
+    tables: dict[str, pd.DataFrame] | None = None,
 ):
     """Assemble the two matrices into one MuData.
 
@@ -296,6 +297,11 @@ def build(
     covariates
         One row per cell, indexed by barcode. Its columns join the root
         ``obs``. Nothing is computed; whatever is given is carried.
+    tables
+        Whole tables to carry in ``mod['guide'].uns``, by name. The gene
+        annotation is one row per guide per site per gene, so it cannot go in
+        ``var`` without collapsing it; keeping it whole loses nothing and
+        decides nothing.
 
     Returns
     -------
@@ -337,6 +343,9 @@ def build(
 
     # MuData takes the union of the two indexes and records membership in
     # obsm, so a barcode seen in one modality only is kept and visible.
+    for name, table in (tables or {}).items():
+        guide.uns[name] = table
+
     data = md.MuData({"gene": rna, "guide": guide})
     data.uns["reference"] = dict(reference or {})
     data.uns["measurement_set"] = measurement_set
@@ -382,6 +391,8 @@ def run(
     gtf_accession: str | None = None,
     genome_accession: str | None = None,
     covariates: str | os.PathLike[str] | None = None,
+    guide_annotation: str | os.PathLike[str] | None = None,
+    element_mapping: str | os.PathLike[str] | None = None,
 ) -> RunResult:
     """Assemble one channel's matrices into a MuData, and write it.
 
@@ -405,6 +416,10 @@ def run(
     covariates
         A table of per-cell covariates, indexed by barcode in its first
         column. Carried into the root ``obs`` unchanged.
+    guide_annotation, element_mapping
+        ``guide_gene_annotation.tsv`` and ``guide_element_mapping.tsv``.
+        Carried whole in ``mod['guide'].uns``, since neither is one row per
+        guide. ``var`` keeps the IGVF columns alone.
 
     Returns
     -------
@@ -467,6 +482,17 @@ def run(
             state["inputs"]["covariates"] = str(covariates)
             state["inputs"]["covariates_md5"] = file_md5(covariates)
 
+        tables = {}
+        for name, path in (
+            ("annotation", guide_annotation),
+            ("element_mapping", element_mapping),
+        ):
+            if path is None:
+                continue
+            tables[name] = pd.read_csv(path, sep="\t", low_memory=False)
+            state["inputs"][name] = str(path)
+            state["inputs"][f"{name}_md5"] = file_md5(path)
+
         reference = reference_block(
             loaded,
             gtf_accession=gtf_accession,
@@ -483,6 +509,7 @@ def run(
             measurement_set=measurement_set,
             reference=reference,
             covariates=covariate_table,
+            tables=tables,
         )
         data.write(outdir / RESULTS_DIR / TABLE)
 
@@ -499,6 +526,7 @@ def run(
             "guides": int(data["guide"].n_vars),
             "genes_unannotated": int(data["gene"].var["symbol"].isna().sum()),
             "guides_unannotated": int(data["guide"].var["spacer"].isna().sum()),
+            "uns_tables": {k: int(len(v)) for k, v in tables.items()},
         }
         state["complete"] = True
         state["finished"] = _now()
