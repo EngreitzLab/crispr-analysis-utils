@@ -70,6 +70,10 @@ in full.
   an element's edge still represses it. For a cutting screen the target site
   would be the better test, and roughly 4% of rows are partial overlaps, so
   say which kind of screen it is before reading the counts.
+- **`--genes` fills `putative_target_genes`**, from the same pairs table
+  `cau igvf-export run` takes and through the same lookup, so the two tables
+  name the same genes. Without it the column is empty; with it, only elements
+  the pairs table covers get one.
 - **`element_id` comes from the BED's fourth column** when it has one, so an
   id used elsewhere keeps its spelling. Otherwise it is `chr:start-end`,
   1-based, as a locus is read aloud.

@@ -75,6 +75,15 @@ a promoter and the genome agrees.
 | `intron` | the intron's coordinates |
 | `enhancer`, `distal element` | the element's coordinates |
 
+## genomic_element does not say genic
+
+`genomic_element` is decided by precedence: promoter, then exon, then intron,
+then distal element. Promoter and enhancer win before the gene body is ever
+tested, so the class cannot say whether the element sits in a gene.
+`element_location` does, from the same overlap. On one library 499 promoter
+and 110 enhancer guides are intergenic, while every exon and intron guide is
+genic.
+
 ## Reading the result
 
 `--outdir` gets `igvf/`, `run_metadata/` and `logs/`. The results are one

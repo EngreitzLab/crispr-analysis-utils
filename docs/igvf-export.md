@@ -89,3 +89,12 @@ passed to it as it is.
 
 `intended_target_name` is what joins the guide table to the pipeline's
 pairs-to-test file, so the two have to name elements the same way.
+
+## genomic_element does not say genic
+
+`genomic_element` is decided by precedence -- promoter, then exon, then
+intron, then distal element -- so promoter and enhancer win before the gene
+body is tested and the class cannot say whether the element sits in a gene.
+`element_location` does, computed from the same overlap. On the hiPSC-to-EC
+library 499 promoter and 110 enhancer guides are intergenic, while every exon
+and intron guide is genic.

@@ -25,6 +25,7 @@ guide and one spacer.
 | `guide_chr`, `guide_start`, `guide_end` | The protospacer, 0-based and half-open, **without** the PAM. |
 | `strand` | The strand targeted. |
 | `pam` | The PAM as the genome holds it, 5' to 3' on that strand. |
+| `element_location` | `genic` or `intergenic`: whether the element overlaps a protein-coding gene. Independent of `genomic_element`, which tests promoter and enhancer first. |
 | `genomic_element` | `promoter`, `enhancer`, `distal element`, `exon` or `intron`. |
 | `intended_target_name` | Names the target; what it holds depends on the element. |
 | `intended_target_chr/start/end` | The element's coordinates. |

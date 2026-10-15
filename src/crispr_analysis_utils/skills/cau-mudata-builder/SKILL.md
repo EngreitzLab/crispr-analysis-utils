@@ -20,7 +20,10 @@ cau mudata-builder run \
     --guide-metadata results/igvf/guide_metadata.tsv \
     --store gencode.v43.annotation.parquet \
     --measurement-set IGVFDS8842PXCC \
+    --guide-annotation results/annotations/guide_gene_annotation.tsv \
+    --element-mapping results/elements/guide_element_mapping.tsv \
     --gtf-accession IGVFFI9561BASO \
+    --channel replicate=1 --channel day=4 --channel chip=A \
     --outdir results/
 ```
 
@@ -34,6 +37,10 @@ cau mudata-builder run \
 - **Which channel?** `--measurement-set` goes into the cell index as
   `{barcode}_{measurement_set}`, so two channels concatenate without their
   barcodes colliding. There is no sensible default.
+- **What is this channel?** `--channel NAME=VALUE`, repeatable: replicate,
+  day, chip, batch, whatever the screen records. Ask rather than read it out
+  of a FASTQ path, which ties the answer to one lab's naming. One value for
+  the whole channel, so it joins every cell.
 - **The portal ids.** `--gtf-accession` and `--genome-accession` take IGVF
   accessions; the CRISPR pipeline's inputs carry them. Without one the object
   records the file's name instead, so the field is never empty and never a
@@ -49,7 +56,9 @@ cau mudata-builder run \
 | `mod['gene'].var` | `symbol`, `gene_type`, `gene_chr`, `gene_start`, `gene_end` |
 | `mod['guide'].X` | the guide counts, untouched |
 | `mod['guide'].var` | every column of `guide_metadata.tsv` |
-| `obs` | `barcode` and `measurement_set`, plus any `--covariates` given |
+| `obs` | `barcode`, `measurement_set`, every `--channel` value, and any `--covariates` given |
+| `mod['guide'].uns` | `annotation` and `element_mapping`, whole, from `--guide-annotation` and `--element-mapping` |
+| `uns['channel']` | the same `--channel` values, for anything reading the object rather than the table |
 | `obsm['gene']`, `obsm['guide']` | which modality holds each cell |
 | `uns['reference']` | the GTF and genome: name, md5 and accession |
 
@@ -59,6 +68,15 @@ cau mudata-builder run \
 statistics, no QC, no filtering, no doublet calls, no guide assignment, no
 pairs to test. Those are later steps, and each is a judgement this one has no
 business making.
+
+## The tables that cannot go in var
+
+`guide_gene_annotation.tsv` is one row per guide per site per gene, 45,501
+rows for 43,766 guides, and `guide_element_mapping.tsv` one per guide per
+element. Neither is one row per guide, so neither fits `var`. Both are
+carried whole in `mod['guide'].uns`: the signed distances, the promoter
+transcripts and the other-gene-type overlaps are there to be joined, and
+nothing about how to collapse them has been decided.
 
 ## Four things worth knowing
 
