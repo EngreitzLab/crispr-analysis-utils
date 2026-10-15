@@ -418,3 +418,17 @@ def test_a_zero_on_a_log_axis_is_reported_rather_than_silently_dropped():
     # Still counted: it is below the threshold, and the quadrant says so.
     assert numbers["kept"].tolist() == [False, True, True]
     assert "1 of the cells hold a zero on a log axis" in caption
+
+
+def test_the_point_size_follows_how_many_points_there_are():
+    from crispr_analysis_utils.qc import metric_scatter
+
+    few = pd.DataFrame(
+        {"total_counts": [1000.0] * 10, "pct_counts_targeted": [60.0] * 10}
+    )
+    many = pd.DataFrame(
+        {"total_counts": [1000.0] * 3000, "pct_counts_targeted": [60.0] * 3000}
+    )
+    small = metric_scatter(many, marginals=False)[0].axes[0].collections[0].get_sizes()
+    large = metric_scatter(few, marginals=False)[0].axes[0].collections[0].get_sizes()
+    assert large[0] > small[0]
