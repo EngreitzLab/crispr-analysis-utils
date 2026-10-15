@@ -518,3 +518,20 @@ def test_a_targeting_guide_without_a_pam_is_counted(alignment, mapping, info):
     table = build_table(without, mapping, info)
     assert pd.isna(guide(table, "distal")["pam"])
     assert counts(table, info)["missing_pam"] == 1
+
+
+def test_a_measured_pair_matches_across_a_one_base_start_difference():
+    """chr:start-end is browser notation, so 1-based; a pairs table built
+    from the BED's own columns is 0-based."""
+    from crispr_analysis_utils.igvf_export import _measured_genes
+
+    known = {"chr11:35618822-35619124": ["ENSG00000179431"]}
+    # The element as a browser would name it, one base along.
+    assert _measured_genes(known, "chr11:35618823-35619124") == ["ENSG00000179431"]
+    # The reverse does not arise from this convention and is not tried, so a
+    # neighbouring element one base below cannot be matched by accident.
+    assert _measured_genes(known, "chr11:35618821-35619124") == []
+    # An exact match still wins, and an unrelated element still finds nothing.
+    assert _measured_genes(known, "chr11:35618822-35619124") == ["ENSG00000179431"]
+    assert _measured_genes(known, "chr11:99999999-99999999") == []
+    assert _measured_genes(known, "not_coordinates") == []

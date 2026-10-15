@@ -73,6 +73,12 @@ in full.
 - **`element_id` comes from the BED's fourth column** when it has one, so an
   id used elsewhere keeps its spelling. Otherwise it is `chr:start-end`,
   1-based, as a locus is read aloud.
+- **That id is 1-based over a 0-based interval, and the two cannot be
+  concatenated.** `chr:start-end` is what a genome browser takes, so its
+  start is the BED's `Start` plus one. A table that pastes a BED's own
+  columns back together is 0-based and will miss every element by a single
+  base: all 26 validated enhancers of one library matched nothing that way,
+  silently, until someone asked where the target genes had gone.
 - **It keys back** to `guide_genome_annotation.tsv` on `guide_id` and the
   four site columns.
 
