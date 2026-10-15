@@ -39,19 +39,19 @@ cau guide-annotation build-db gencode.v43.annotation.gtf.gz \
     --out gencode.v43.protein_coding.parquet
 
 cau guide-annotation run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
     --store gencode.v43.protein_coding.parquet \
     --promoters gencode.v43.protein_coding.TSS1bp.bed6 \
     --outdir results/
 
 cau element-mapping run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
-    --annotation results/annotations/guides_gene_annotation.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
+    --annotation results/annotations/guide_gene_annotation.tsv \
     --elements elements.bed \
     --outdir results/
 
 cau igvf-export run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
     --mapping results/elements/guide_element_mapping.tsv \
     --elements elements.bed \
     --store gencode.v43.protein_coding.parquet \
@@ -65,7 +65,7 @@ parquet store and the TSS file across runs and across steps 2 and 4.
 
 ## What flows between the steps
 
-`guides_alignment_metadata.tsv` is the spine: one row per library entry per
+`guide_genome_annotation.tsv` is the spine: one row per library entry per
 site, and the only table with the whole picture. Everything downstream reads
 it, and steps 3 and 4 read it directly rather than through step 2's output.
 
