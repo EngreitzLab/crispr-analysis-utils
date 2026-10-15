@@ -8,7 +8,7 @@ description: >-
   their protospacer coordinates and cut sites, for sceptre, element annotation
   or IGVF-style guide metadata; whether a guide table is reverse-complemented;
   or whether non-targeting controls really match nothing. Also for reading
-  guides_alignment_metadata.tsv, guides_mapping.bed, the columns file or
+  guide_genome_annotation.tsv, guide_mapping.bed, the columns file or
   qc.tsv,
   and for users of the earlier GEM-based workflow.
 ---
@@ -63,7 +63,7 @@ the PAM, is the library designer's answer, not something to infer.
 ## Reading the result
 
 `--outdir` gets `alignments/`, `run_metadata/` and `logs/`. Start with
-`alignments/guides_alignment_metadata_columns.yaml`: it is generated from
+`alignments/guide_genome_annotation_columns.yaml`: it is generated from
 the same definitions as the
 tables, so it always describes the folder it sits in. See
 [`references/outputs.md`](references/outputs.md) for the columns in full.

@@ -64,7 +64,7 @@ def bed(tmp_path):
 
 @pytest.fixture
 def alignment(tmp_path):
-    return write_alignment(tmp_path / "guides_alignment_metadata.tsv")
+    return write_alignment(tmp_path / "guide_genome_annotation.tsv")
 
 
 @pytest.fixture
@@ -141,7 +141,7 @@ def test_nothing_is_written_beside_the_inputs(inputs, genes, tmp_path):
     assert outside == [
         "elements.bed",
         "guide_element_mapping.tsv",
-        "guides_alignment_metadata.tsv",
+        "guide_genome_annotation.tsv",
         "pairs.tsv",
         "store.parquet",
         "test.gtf",

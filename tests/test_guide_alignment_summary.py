@@ -138,13 +138,13 @@ def rows_by_alias(table):
 
 def write_tables(path, guides, summaries, sites):
     """Write every table `run` writes into `path`, and read the two of them back."""
-    write_guides_tsv(path / "guides_alignment_metadata.tsv", guides, summaries, sites)
-    write_guides_bed(path / "guides_mapping.bed", guides, sites)
+    write_guides_tsv(path / "guide_genome_annotation.tsv", guides, summaries, sites)
+    write_guides_bed(path / "guide_mapping.bed", guides, sites)
     write_columns_yaml(path / "columns.yaml")
-    table = read_table(path / "guides_alignment_metadata.tsv")
+    table = read_table(path / "guide_genome_annotation.tsv")
     bed = [
         line.split("\t")
-        for line in (path / "guides_mapping.bed")
+        for line in (path / "guide_mapping.bed")
         .read_text(encoding="utf-8")
         .splitlines()
     ]
@@ -334,7 +334,7 @@ def test_guides_tsv(tmp_path, guides, sites):
     table, _ = write_tables(tmp_path, guides, summaries, sites)
 
     lines = (
-        (tmp_path / "guides_alignment_metadata.tsv")
+        (tmp_path / "guide_genome_annotation.tsv")
         .read_text(encoding="utf-8")
         .splitlines()
     )
@@ -457,14 +457,14 @@ def test_columns_yaml_documents_exactly_what_is_written(tmp_path, guides, sites)
     table, bed = write_tables(tmp_path, guides, summaries, sites)
 
     document = yaml.safe_load((tmp_path / "columns.yaml").read_text(encoding="utf-8"))
-    assert list(document) == ["guides_alignment_metadata.tsv", "guides_mapping.bed"]
+    assert list(document) == ["guide_genome_annotation.tsv", "guide_mapping.bed"]
     # The data dictionary names every column of the table, in the table's order.
-    assert list(document["guides_alignment_metadata.tsv"]) == list(table.columns)
-    assert list(document["guides_alignment_metadata.tsv"]) == guide_columns()
-    assert list(document["guides_mapping.bed"]) == list(BED_COLUMNS)
+    assert list(document["guide_genome_annotation.tsv"]) == list(table.columns)
+    assert list(document["guide_genome_annotation.tsv"]) == guide_columns()
+    assert list(document["guide_mapping.bed"]) == list(BED_COLUMNS)
     assert len(bed[0]) == len(BED_COLUMNS)
     assert sum(n for _, n in GROUPS) == len(COLUMNS)
-    assert all(document["guides_alignment_metadata.tsv"][name] for name in COLUMNS)
+    assert all(document["guide_genome_annotation.tsv"][name] for name in COLUMNS)
 
 
 def test_guides_tsv_rejects_summaries_that_are_not_one_per_guide(

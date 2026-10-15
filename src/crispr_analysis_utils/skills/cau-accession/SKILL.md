@@ -52,7 +52,7 @@ One spacer in sixteen ends in `GG`, so you cannot tell by looking.
   designed at 20 nt and the sequences are 21, the first base is that G and is
   not part of the protospacer.
 - If the user has already run `cau guide-alignment`, the `spacer` column of
-  `guides_alignment_metadata.tsv` is the protospacer, and the `accession`
+  `guide_genome_annotation.tsv` is the protospacer, and the `accession`
   column is already there.
 
 Never guess which bases to strip.

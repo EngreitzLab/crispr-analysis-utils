@@ -18,7 +18,7 @@ site and no element.
 
 | Column | Holds |
 | --- | --- |
-| `guide_id` | The aligned sequence. With the four site columns, the key back to `guides_alignment_metadata.tsv`. |
+| `guide_id` | The aligned sequence. With the four site columns, the key back to `guide_genome_annotation.tsv`. |
 | `chr`, `start`, `end`, `strand` | The protospacer, 0-based and half-open. Empty when the guide matches nowhere. |
 | `element_id` | The element this site overlaps. Empty unless targeting. |
 | `element_category` | The elements BED's fifth column, when it has one. |

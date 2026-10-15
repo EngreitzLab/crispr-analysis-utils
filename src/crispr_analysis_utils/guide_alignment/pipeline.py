@@ -7,8 +7,8 @@ its own site is an exact match, and everything the tables report follows from
 that.
 
 `outdir` gets three folders and nothing else: ``alignments/`` with the
-results (``guides_alignment_metadata.tsv``, ``guides_mapping.bed``,
-``guides_alignment_metadata_columns.yaml``, ``qc.tsv``), ``run_metadata/`` with
+results (``guide_genome_annotation.tsv``, ``guide_mapping.bed``,
+``guide_genome_annotation_columns.yaml``, ``qc.tsv``), ``run_metadata/`` with
 this invocation's record, and ``logs/``.
 """
 
@@ -269,10 +269,10 @@ def _run(
         )
         tables = outdir / RESULTS_DIR
         write_guides_tsv(
-            tables / "guides_alignment_metadata.tsv", library, summaries, scan.sites
+            tables / "guide_genome_annotation.tsv", library, summaries, scan.sites
         )
-        write_guides_bed(tables / "guides_mapping.bed", library, scan.sites)
-        write_columns_yaml(tables / "guides_alignment_metadata_columns.yaml")
+        write_guides_bed(tables / "guide_mapping.bed", library, scan.sites)
+        write_columns_yaml(tables / "guide_genome_annotation_columns.yaml")
         write_qc_tsv(tables / "qc.tsv", summaries, counts=state["counts"])
 
     state["classes"] = _ordered((summary.site_class for summary in summaries), CLASSES)

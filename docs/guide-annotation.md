@@ -25,7 +25,7 @@ Then annotate:
 
 ```bash
 cau guide-annotation run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
     --store gencode.v43.protein_coding.parquet \
     --promoters gencode.v43.protein_coding.TSS1bp.bed6 \
     --outdir results/

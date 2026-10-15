@@ -19,7 +19,7 @@ everything the format asks for; this assembles it.
 
 ```bash
 cau igvf-export run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
     --mapping results/elements/guide_element_mapping.tsv \
     --elements elements.bed \
     --store gencode.v43.protein_coding.parquet \

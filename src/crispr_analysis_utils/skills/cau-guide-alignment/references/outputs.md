@@ -5,17 +5,17 @@
 beside its inputs:
 
 ```text
-alignments/      guides_alignment_metadata.tsv  guides_mapping.bed
-                 guides_alignment_metadata_columns.yaml  qc.tsv
+alignments/      guide_genome_annotation.tsv  guide_mapping.bed
+                 guide_genome_annotation_columns.yaml  qc.tsv
 run_metadata/    guide_alignment_<UTC timestamp>.json
 logs/            guide_alignment.log
 ```
 
-`guides_alignment_metadata_columns.yaml` is written from the same
+`guide_genome_annotation_columns.yaml` is written from the same
 definitions the tables are, so it is
 always an accurate data dictionary of the folder it sits in. Read it first.
 
-## `guides_alignment_metadata.tsv`
+## `guide_genome_annotation.tsv`
 
 **One row per library entry per site.** A guide matching three places gets
 three rows; one matching nowhere gets a single row whose site columns are
@@ -64,7 +64,7 @@ The protospacer occurs 89 times; one of those has a PAM. Cas9 cuts there and
 nowhere else. Every one of the 89 is a row in the table, 88 of them with
 `pam_matches` `FALSE`.
 
-## `guides_mapping.bed`
+## `guide_mapping.bed`
 
 BED6, no header, one row per **cuttable** site, so a guide that cuts twice
 gets two rows. `start`/`end` are the protospacer, without the PAM. The name

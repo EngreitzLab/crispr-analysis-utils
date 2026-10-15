@@ -353,7 +353,7 @@ def build_table(
     Parameters
     ----------
     alignment
-        ``guides_alignment_metadata.tsv``.
+        ``guide_genome_annotation.tsv``.
     mapping
         ``guide_element_mapping.tsv``.
     elements
@@ -523,7 +523,7 @@ def run(
     Parameters
     ----------
     alignment
-        ``guides_alignment_metadata.tsv``.
+        ``guide_genome_annotation.tsv``.
     mapping
         ``guide_element_mapping.tsv``.
     elements

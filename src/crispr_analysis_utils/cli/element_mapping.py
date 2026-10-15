@@ -23,7 +23,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     run_parser.add_argument(
         "--alignment",
         required=True,
-        help="guides_alignment_metadata.tsv from `cau guide-alignment run`.",
+        help="guide_genome_annotation.tsv from `cau guide-alignment run`.",
     )
     run_parser.add_argument(
         "--elements",
@@ -39,7 +39,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--annotation",
         default=None,
         help=(
-            "guides_gene_annotation.tsv from `cau guide-annotation run`, "
+            "guide_gene_annotation.tsv from `cau guide-annotation run`, "
             "which fills the distance_to_tss column."
         ),
     )

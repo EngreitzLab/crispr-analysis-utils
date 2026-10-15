@@ -45,7 +45,7 @@ def write_bed(path, rows=ELEMENTS, *, columns=5, header=None):
 
 
 def site(guide_id, chrom, start, strand="+", *, length=LENGTH, pam_matches=True):
-    """One row of guides_alignment_metadata.tsv, as `guide_alignment` writes it."""
+    """One row of guide_genome_annotation.tsv, as `guide_alignment` writes it."""
     return {
         "guide_id": guide_id,
         "chr": chrom,
@@ -69,7 +69,7 @@ def unmapped(guide_id, *, pam_matches=True):
 
 
 def sites_frame(*rows):
-    """The rows as a guides_alignment_metadata table."""
+    """The rows as a guide_genome_annotation table."""
     return pd.DataFrame(list(rows))
 
 
@@ -83,7 +83,7 @@ def write_alignment(path, rows, *, as_text=True):
 
 
 def annotation_frame(*pairs):
-    """guides_gene_annotation.tsv: the site columns and a distance for each."""
+    """guide_gene_annotation.tsv: the site columns and a distance for each."""
     frame = sites_frame(*(row for row, _ in pairs))[list(SITE_COLUMNS)].copy()
     frame["distance_to_tss"] = [distance for _, distance in pairs]
     return frame

@@ -4,17 +4,17 @@
 `--outdir` gets three folders and nothing loose:
 
 ```text
-annotations/     guides_gene_annotation.tsv
-                 guides_gene_annotation_columns.yaml
+annotations/     guide_gene_annotation.tsv
+                 guide_gene_annotation_columns.yaml
 run_metadata/    guide_annotation_<UTC timestamp>.json
 logs/            guide_annotation.log
 ```
 
-`guides_gene_annotation_columns.yaml` is written from the same definitions
+`guide_gene_annotation_columns.yaml` is written from the same definitions
 the table is, so it is
 always an accurate data dictionary of the folder it sits in.
 
-## `guides_gene_annotation.tsv`
+## `guide_gene_annotation.tsv`
 
 **One row per mapped site per overlapping gene.** A site in two genes gets
 two rows; a site in none gets one row, `intergenic`, with the gene columns
@@ -22,7 +22,7 @@ empty. Only sites with a PAM are annotated.
 
 | Column | Holds |
 | --- | --- |
-| `guide_id` | The aligned sequence. With the four site columns, the key back to `guides_alignment_metadata.tsv`. |
+| `guide_id` | The aligned sequence. With the four site columns, the key back to `guide_genome_annotation.tsv`. |
 | `chr`, `start`, `end`, `strand` | The protospacer, 0-based and half-open. |
 | `ensg`, `gene_symbol` | The gene this row is about, without a version. |
 | `enst` | Its reference transcript, when the protospacer hits one of that transcript's exons. |

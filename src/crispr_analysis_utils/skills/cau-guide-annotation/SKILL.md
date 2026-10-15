@@ -8,7 +8,7 @@ description: >-
   and transcript, how far it is from the nearest protein-coding TSS, whether it
   reads sense or antisense, where in the CDS it cuts, its GC content and its
   poly-T run. Also for building the GENCODE annotation store, for choosing a
-  promoter file, and for reading guides_gene_annotation.tsv or the columns file beside it.
+  promoter file, and for reading guide_gene_annotation.tsv or the columns file beside it.
 ---
 
 # Gene annotation (`cau guide-annotation`)
@@ -21,7 +21,7 @@ cau guide-annotation build-db gencode.v43.annotation.gtf.gz \
     --out gencode.v43.protein_coding.parquet
 
 cau guide-annotation run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
     --store gencode.v43.protein_coding.parquet \
     --promoters gencode.v43.protein_coding.TSS1bp.bed6 \
     --outdir results/
@@ -56,8 +56,8 @@ the store in about a second, and a 43,000-site library annotates in another.
 ## Reading the result
 
 `--outdir` gets `annotations/`, `run_metadata/` and `logs/`. The results are
-one table, `guides_gene_annotation.tsv`, and the
-`guides_gene_annotation_columns.yaml` that
+one table, `guide_gene_annotation.tsv`, and the
+`guide_gene_annotation_columns.yaml` that
 describes it, generated from the same definitions. See
 [`references/outputs.md`](references/outputs.md) for the columns in full.
 

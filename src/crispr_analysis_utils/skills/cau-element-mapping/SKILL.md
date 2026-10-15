@@ -20,8 +20,8 @@ is in, and this says which element of the screen it tests.
 
 ```bash
 cau element-mapping run \
-    --alignment results/alignments/guides_alignment_metadata.tsv \
-    --annotation results/annotations/guides_gene_annotation.tsv \
+    --alignment results/alignments/guide_genome_annotation.tsv \
+    --annotation results/annotations/guide_gene_annotation.tsv \
     --elements elements.bed \
     --outdir results/
 ```
@@ -73,7 +73,7 @@ in full.
 - **`element_id` comes from the BED's fourth column** when it has one, so an
   id used elsewhere keeps its spelling. Otherwise it is `chr:start-end`,
   1-based, as a locus is read aloud.
-- **It keys back** to `guides_alignment_metadata.tsv` on `guide_id` and the
+- **It keys back** to `guide_genome_annotation.tsv` on `guide_id` and the
   four site columns.
 
 ## Checking a library's own labels
