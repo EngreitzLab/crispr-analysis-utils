@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,6 +31,15 @@ logger = logging.getLogger(__name__)
 COLUMNS = {
     "guide_id": "Unique name of the guide.",
     "spacer": "The targeting sequence of the gRNA, read 5' to 3', in DNA bases.",
+    "oligo": (
+        "The sequence the library ordered, without the PAM: the spacer plus"
+        " any base 5' of it, such as a G added for U6 transcription."
+    ),
+    "n_oligos": (
+        "How many library entries share this spacer. Above one, they are one"
+        " feature in the counts and the reads cannot be told apart, so the"
+        " counts are a sum."
+    ),
     "targeting": (
         "TRUE when the guide targets a locus relevant to the experiment."
         " FALSE for a safe-targeting or non-targeting control."
@@ -212,9 +222,33 @@ def _element_kind(row, in_gene: set, in_exon: set, near: Mapping, window: int) -
     return DISTAL
 
 
+_COORDS = re.compile(r"^(?P<chrom>[^:]+):(?P<start>\d+)-(?P<end>\d+)$")
+
+
+def _measured_genes(known: Mapping[str, list[str]], element_id: str) -> list[str]:
+    """The measured genes of an element, matching on coordinates when needed.
+
+    ``chr:start-end`` is what a genome browser takes, and a browser is
+    1-based, so an element named that way starts one base after the BED row
+    it came from. A pairs table that concatenated the BED's own columns is
+    0-based instead, and the two spellings of one element differ by a single
+    base. All 26 validated enhancers of the hiPSC-to-EC library missed this
+    way. Only that one direction is tried: the reverse would not arise from
+    this convention, and would risk matching the element next door.
+    """
+    hit = known.get(element_id, [])
+    if hit:
+        return hit
+    found = _COORDS.match(str(element_id))
+    if not found:
+        return []
+    chrom, start, end = found["chrom"], int(found["start"]), int(found["end"])
+    return known.get(f"{chrom}:{start - 1}-{end}", [])
+
+
 def _genes_for(row, known: Mapping[str, list[str]]) -> list[str]:
     """Every gene associated with an element, measured ones first."""
-    measured = known.get(row.element_id, [])
+    measured = _measured_genes(known, row.element_id)
     if measured:
         return list(dict.fromkeys(measured))
     if row.genomic_element == PROMOTER and isinstance(row.nearest_ensg, str):
@@ -391,6 +425,12 @@ def build_table(
     out = pd.DataFrame(index=guides.index)
     out["guide_id"] = guides["alias"]
     out["spacer"] = guides["spacer"]
+    # Carried so the submitted table says which guides share a feature: their
+    # counts are a sum and are not comparable with a guide ordered once.
+    for column in ("oligo", "n_oligos"):
+        # An alignment table written before these existed has neither, and
+        # the column is then written empty rather than the table refused.
+        out[column] = guides[column] if column in guides.columns else pd.NA
 
     element = chosen.reindex(out.index)
     kind = element.map(info["genomic_element"])

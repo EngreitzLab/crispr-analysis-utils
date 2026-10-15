@@ -57,6 +57,17 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     run_parser.add_argument("--genome-accession", help="The genome's IGVF portal id.")
     run_parser.add_argument(
+        "--guide-annotation",
+        help=(
+            "guide_gene_annotation.tsv. Carried whole in guide.uns: it is "
+            "one row per guide per site per gene, so it cannot go in var."
+        ),
+    )
+    run_parser.add_argument(
+        "--element-mapping",
+        help="guide_element_mapping.tsv. Carried whole in guide.uns.",
+    )
+    run_parser.add_argument(
         "--covariates",
         help=(
             "Per-cell covariates, barcode in the first column. Carried into "
@@ -81,6 +92,8 @@ def run(args: argparse.Namespace) -> int:
             gtf_accession=args.gtf_accession,
             genome_accession=args.genome_accession,
             covariates=args.covariates,
+            guide_annotation=args.guide_annotation,
+            element_mapping=args.element_mapping,
         )
     except (BuildError, FileNotFoundError, OSError) as error:
         raise CommandError(str(error)) from error
@@ -97,5 +110,7 @@ def run(args: argparse.Namespace) -> int:
             f"Unannotated: {found['genes_unannotated']} genes, "
             f"{found['guides_unannotated']} guides"
         )
+    for name, rows in found.get("uns_tables", {}).items():
+        print(f"guide.uns[{name!r}]: {rows} rows")
     print(f"Outputs in {Path(result.outdir)}")
     return 0

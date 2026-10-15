@@ -26,6 +26,8 @@ empty. The guide's own columns repeat on each of its rows.
 | `guide_id` | The sequence that was aligned, ending in the PAM pattern. Identifies the guide. |
 | `alias` | The name the input table gives it. |
 | `spacer` | The protospacer: `guide_id` without any base 5' of it or the PAM. |
+| `oligo` | The sequence the library ordered, without the PAM: the spacer plus any base 5' of it. |
+| `n_oligos` | How many entries share this spacer. Above one the counts are a sum, because one feature is all the reads can resolve. |
 | `site_class` | `unique`, `multi` or `no_site`: how many places this guide can cut. |
 | `n_matches` | How many places the protospacer occurs in the genome. |
 | `n_target_sites` | How many of those have a PAM. |
