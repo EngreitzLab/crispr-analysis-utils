@@ -389,6 +389,8 @@ def metric_distributions(
     FigureError
         The frame has no columns, or no cell survives the `NaN` drop.
     """
+    from matplotlib import ticker
+
     plt = style()
 
     if frame.shape[1] == 0:
@@ -427,6 +429,17 @@ def metric_distributions(
             floor = float(positive.min()) if positive.size else 1.0
             edges = np.logspace(np.log10(floor), np.log10(np.nanmax(values)), bins + 1)
             axis.set_xscale("log")
+            # Over a span this narrow matplotlib labels minor ticks too, and
+            # four superscripts in an inch run into each other. Label 1, 2
+            # and 5 per decade instead, in the digits the caption uses.
+            decades = np.log10(edges[-1]) - np.log10(edges[0])
+            axis.xaxis.set_major_locator(
+                ticker.LogLocator(subs=(1.0,) if decades > 3 else (1.0, 2.0, 5.0))
+            )
+            axis.xaxis.set_major_formatter(
+                ticker.FuncFormatter(lambda value, _: _label(value))
+            )
+            axis.xaxis.set_minor_formatter(ticker.NullFormatter())
         else:
             floor = float(np.nanmin(values))
             edges = np.linspace(floor, np.nanmax(values), bins + 1)
@@ -472,7 +485,7 @@ def metric_distributions(
         # The panel's own result, since a cut this small leaves no grey
         # tall enough to see: with no count, one colour says nothing.
         axis.set_title(
-            f"{int((~within).sum()):,} of {len(values):,} beyond"
+            f"{int(cut_counts.sum()):,} of {int(kept_counts.sum() + cut_counts.sum()):,} beyond"
             if metric not in unthresholded
             else "no threshold",
             loc="right",
