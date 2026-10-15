@@ -564,6 +564,10 @@ def metric_scatter(
         if name in log:
             drawn &= values > 0
 
+    # A few hundred genes and ten thousand cells want different points: one
+    # needs to be seen, the other needs not to be a solid block.
+    size, alpha = (2.0, 0.4) if len(measured) > 2_000 else (14.0, 0.7)
+
     if marginals:
         figure = plt.figure(figsize=(6.0, 6.0))
         grid = figure.add_gridspec(
@@ -586,8 +590,8 @@ def metric_scatter(
             axis.scatter(
                 xs[mask],
                 ys[mask],
-                s=2,
-                alpha=0.4,
+                s=size,
+                alpha=alpha,
                 linewidths=0,
                 color=colour,
                 label=label,
