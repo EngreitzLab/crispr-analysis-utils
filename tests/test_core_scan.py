@@ -59,8 +59,11 @@ def oracle(contigs, spacers, pam, upstream):
                             up = ""
                     if len(pam_bases) != len(pam):
                         pam_bases = ""
+                    # N stands for every base, so it is satisfied by an
+                    # unsequenced one too; any other code names bases, and a
+                    # genomic N is not known to be one of them.
                     matched = len(pam_bases) == len(pam) and all(
-                        base in IUPAC[code]
+                        code == "N" or base in IUPAC[code]
                         for base, code in zip(pam_bases, pam, strict=True)
                     )
                     found.append((index, name, start, strand, pam_bases, up, matched))
@@ -78,9 +81,23 @@ def write_fasta(path, contigs, width=60):
 def run(tmp_path, contigs, spacers, pam="NGG", upstream=1):
     path = tmp_path / "genome.fa"
     write_fasta(path, contigs)
-    got = sorted(_core.scan_fasta(str(path), spacers, pam, upstream))
-    assert got == oracle(contigs, spacers, pam, upstream)
-    return got
+    hits, counts = _core.scan_fasta(str(path), spacers, pam, upstream)
+    expected = oracle(contigs, spacers, pam, upstream)
+    assert sorted(hits) == expected
+    assert counts == tally(expected, spacers, pam)
+    return sorted(hits)
+
+
+def tally(hits, spacers, pam):
+    """What the scan should report per spacer: found, off an end, no PAM."""
+    counts = [[0, 0, 0] for _ in spacers]
+    for index, _, _, _, pam_bases, _, matched in hits:
+        counts[index][0] += 1
+        if len(pam_bases) != len(pam):
+            counts[index][1] += 1
+        elif not matched:
+            counts[index][2] += 1
+    return [tuple(row) for row in counts]
 
 
 def random_sequence(rng, length, alphabet="ACGT"):
@@ -188,5 +205,39 @@ def test_contig_filter(tmp_path):
     contigs = {"keep": "TT" + spacer + "TGG", "drop": "AA" + spacer + "AGG"}
     path = tmp_path / "genome.fa"
     write_fasta(path, contigs)
-    got = _core.scan_fasta(str(path), [spacer], "NGG", 1, ["keep"])
+    got, _ = _core.scan_fasta(str(path), [spacer], "NGG", 1, ["keep"])
     assert {hit[1] for hit in got} == {"keep"}
+
+
+def test_pam_only_returns_the_matches_with_a_pam_and_counts_the_rest(tmp_path):
+    spacer = "ACGTTGCAAGCTTCGATCGA"
+    contigs = {
+        "cuts": "TT" + spacer + "TGG",
+        "blunt": "TT" + spacer + "TTT",
+        "also_blunt": "TT" + spacer + "CAT",
+    }
+    path = tmp_path / "genome.fa"
+    write_fasta(path, contigs)
+
+    everything, counts = _core.scan_fasta(str(path), [spacer], "NGG", 1)
+    only, same = _core.scan_fasta(str(path), [spacer], "NGG", 1, None, True)
+
+    # The counts are the scan's, not the returned matches', so they do not
+    # move: that is what lets the caller report what it never received.
+    assert counts == same == [(3, 0, 2)]
+    assert len(everything) == 3
+    assert only == [hit for hit in everything if hit[6]]
+
+
+def test_an_unsequenced_base_satisfies_an_n_of_the_pattern(tmp_path):
+    # NGG asks nothing of its first position, so an N there is still a PAM.
+    # Any other code names bases, and an N is not known to be one of them.
+    spacer = "ACGTTGCAAGCTTCGATCGA"
+    contigs = {"wild": "TT" + spacer + "NGG", "unknown": "TT" + spacer + "GNG"}
+    path = tmp_path / "genome.fa"
+    write_fasta(path, contigs)
+
+    hits, counts = _core.scan_fasta(str(path), [spacer], "NGG", 1)
+
+    assert {hit[1]: hit[6] for hit in hits} == {"wild": True, "unknown": False}
+    assert counts == [(2, 0, 1)]

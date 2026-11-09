@@ -98,7 +98,10 @@ Written out, that table is mostly rows nothing can be done with.
 
 `--pam-only` keeps the sites whose genomic PAM matches and drops the rest.
 
-- **It changes what is written, not what is searched or counted.**
+- **It changes what is written and what is held, not what is searched or
+  counted.** The compiled core drops a match with no PAM as it finds it, so
+  the peak memory of a run falls with the table rather than only after it.
+- **The counts are unmoved.**
   `n_matches` still counts every place the protospacer occurs, which under
   this flag is the only record that they exist, and `qc.tsv` still reports
   `n_sites` and `n_no_pam`, so two runs stay comparable. The rows written
