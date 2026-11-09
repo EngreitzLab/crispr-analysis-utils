@@ -241,3 +241,44 @@ def test_an_unsequenced_base_satisfies_an_n_of_the_pattern(tmp_path):
 
     assert {hit[1]: hit[6] for hit in hits} == {"wild": True, "unknown": False}
     assert counts == [(2, 0, 1)]
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_pam_only_agrees_with_filtering_the_full_scan(tmp_path, seed):
+    """The filter moved into the scan; it must still change nothing but cost.
+
+    The oracle checks only the unfiltered path, so this is what would catch
+    the tally drifting once it is kept somewhere else.
+    """
+    rng = random.Random(seed)
+    spacers = [random_sequence(rng, 8) for _ in range(6)]
+    contigs = {f"chr{n}": random_sequence(rng, 400, "ACGTN") for n in range(3)}
+    path = tmp_path / "genome.fa"
+    write_fasta(path, contigs)
+
+    full, counts = _core.scan_fasta(str(path), spacers, "NGG", 1)
+    only, same = _core.scan_fasta(str(path), spacers, "NGG", 1, None, True)
+
+    assert counts == same == tally(oracle(contigs, spacers, "NGG", 1), spacers, "NGG")
+    assert sorted(only) == sorted(hit for hit in full if hit[6])
+
+
+def test_a_minus_strand_match_against_the_very_start_of_a_contig(tmp_path):
+    # Its PAM lies 5' of base 0, which does not exist: the bounds check has
+    # to catch `start - 3` wrapping round rather than read somewhere else.
+    spacer = "ACGTTGCAAGCTTCGATCGA"
+    contigs = {"chrEdge": reverse_complement_py(spacer) + "TTTTT"}
+    path = tmp_path / "genome.fa"
+    write_fasta(path, contigs)
+
+    hits, counts = _core.scan_fasta(str(path), [spacer], "NGG", 1)
+
+    assert [hit[3] for hit in hits] == ["-"]
+    assert hits[0][4] == ""
+    assert counts == [(1, 1, 0)]
+    only, same = _core.scan_fasta(str(path), [spacer], "NGG", 1, None, True)
+    assert only == [] and same == counts
+
+
+def reverse_complement_py(sequence):
+    return sequence[::-1].translate(str.maketrans("ACGT", "TGCA"))
