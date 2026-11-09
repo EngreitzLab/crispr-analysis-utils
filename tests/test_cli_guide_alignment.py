@@ -59,6 +59,8 @@ def test_parse_run_defaults():
     assert args.orientation_check == "error"
     assert args.fix_orientation is False
     assert args.contigs is None
+    assert args.pam_only is False
+    assert args.bgzip is False
     # The columns stay strings here: `run` turns a digit into a position.
     assert (args.id_col, args.spacer_col, args.sep, args.header) == (
         "0",
@@ -89,6 +91,8 @@ def test_parse_run_every_flag():
         "--sep",
         ",",
         "--header",
+        "--pam-only",
+        "--bgzip",
     )
     assert args.pam == "NRG"
     assert args.spacer_length == 19
@@ -96,6 +100,8 @@ def test_parse_run_every_flag():
     assert args.orientation_check == "warn"
     assert args.fix_orientation is True
     assert args.contigs == "chr1, chr2"
+    assert args.pam_only is True
+    assert args.bgzip is True
     assert (args.id_col, args.spacer_col, args.sep, args.header) == (
         "id",
         "2",

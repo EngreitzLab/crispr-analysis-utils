@@ -51,6 +51,10 @@ class ScanResult:
         For a ``reverse_complement`` row, whether the reversed reading was a
         distinct sequence or only the spacer's reverse complement; None for
         every other row.
+    matches
+        How many places each guide row's protospacer occurs, counted whether
+        or not the site was kept. Under `pam_only` it is the only record of
+        the sites that were not.
     n_matches
         Exact spacer matches found, before any were set aside.
     n_outside_contigs
@@ -59,7 +63,9 @@ class ScanResult:
     n_off_contig_end
         Matches whose PAM would run off the end of their contig.
     n_no_pam
-        Matches kept with a genomic PAM that matches no pattern.
+        Matches kept with a genomic PAM that matches no pattern. Under
+        `pam_only` these are counted and not written, so the table holds
+        ``n_sites - n_no_pam`` rows.
     n_sites
         Matches kept.
     """
@@ -67,6 +73,7 @@ class ScanResult:
     sites: dict[int, list[Site]] = field(default_factory=dict)
     verdicts: dict[int, str] = field(default_factory=dict)
     evidence: dict[int, str | None] = field(default_factory=dict)
+    matches: dict[int, int] = field(default_factory=dict)
     n_matches: int = 0
     n_outside_contigs: int = 0
     n_off_contig_end: int = 0
@@ -90,6 +97,7 @@ def scan_guides(
     *,
     pam: str = "NGG",
     contigs: Collection[str] | None = None,
+    pam_only: bool = False,
 ) -> ScanResult:
     """Find every exact site of every guide in `reference`.
 
@@ -103,6 +111,13 @@ def scan_guides(
         The PAM pattern, in IUPAC codes, 3' of the protospacer.
     contigs
         If given, read only these contigs.
+    pam_only
+        Keep only the matches whose genomic PAM matches `pam`. The core
+        drops the rest as it finds them, so they never cross into Python
+        and nothing holds them. Every match is still counted, in
+        `ScanResult.matches` and `n_matches`: a short spacer matches
+        everywhere, and the places it cannot be cut at are the bulk of
+        them, but how many there were is worth knowing.
 
     Returns
     -------
@@ -121,6 +136,11 @@ def scan_guides(
     Each distinct spacer is scanned once and its matches are given to every
     guide that uses it, so two entries differing only in an added G cost one
     search between them.
+
+    `pam_only` shrinks what is held and what is written, not what is
+    searched: every match is found and counted either way. The counters
+    come from the scan rather than from the matches returned, which is what
+    lets them report what they never handed back.
     """
     from .. import _core
 
@@ -151,24 +171,32 @@ def scan_guides(
     queries = spacers + reversed_spacers
     upstream_width = max((guide.n_extra for guide in guides), default=0)
     listed = None if contigs is None else list(contigs)
-    matches = _core.scan_fasta(
-        os.fspath(reference), queries, primary, upstream_width, listed
+    matches, counts = _core.scan_fasta(
+        os.fspath(reference), queries, primary, upstream_width, listed, pam_only
     )
 
     result = ScanResult()
+    result.matches = dict.fromkeys(range(len(guides)), 0)
+    # The counts come from the scan itself rather than from the matches, so
+    # they say the same thing whether or not `pam_only` returned them all.
+    # The reversed readings are not sites and are not counted here.
+    for index, (found, off_end, no_pam) in enumerate(counts[: len(spacers)]):
+        result.n_matches += found
+        result.n_off_contig_end += off_end
+        result.n_no_pam += no_pam
+        result.n_sites += found - off_end
+        for row in rows_of[spacers[index]]:
+            result.matches[row] += found - off_end
+
     reversed_has_pam: set[int] = set()
     for index, chrom, start, strand, genomic_pam, upstream, matched in matches:
         if index >= len(spacers):
+            # Only evidence that the reversed reading could cut somewhere.
             if matched:
                 reversed_has_pam.update(flipped_rows[queries[index]])
             continue
-        result.n_matches += 1
         if len(genomic_pam) != len(primary):
-            result.n_off_contig_end += 1
             continue
-        if not matched:
-            result.n_no_pam += 1
-        result.n_sites += 1
         for row in rows_of[spacers[index]]:
             guide = guides[row]
             result.sites.setdefault(row, []).append(
@@ -176,7 +204,9 @@ def scan_guides(
             )
 
     for row, guide in enumerate(guides):
-        verdict = _verdict(result.sites.get(row, ()), row in reversed_has_pam)
+        verdict = _verdict(
+            result.sites.get(row, ()), row in reversed_has_pam, result.matches[row]
+        )
         result.verdicts[row] = verdict
         result.evidence[row] = (
             None
@@ -230,10 +260,15 @@ def _kept(extra: str, genomic: str | None) -> str:
     )
 
 
-def _verdict(sites: Sequence[Site], reversed_has_pam: bool) -> str:
-    """One guide's orientation, from both directions' matches."""
+def _verdict(sites: Sequence[Site], reversed_has_pam: bool, n_matches: int) -> str:
+    """One guide's orientation, from both directions' matches.
+
+    The last branch counts matches rather than kept sites: under `pam_only`
+    a guide that matched everywhere without a PAM keeps none of them, and
+    reading the empty list would call it unmatched.
+    """
     if any(site.pam_class != NO_PAM_CLASS for site in sites):
         return FORWARD
     if reversed_has_pam:
         return REVERSE_COMPLEMENT
-    return NO_PAM if sites else NO_MATCH
+    return NO_PAM if n_matches else NO_MATCH

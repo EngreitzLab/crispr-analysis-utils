@@ -10,6 +10,9 @@ use std::collections::HashMap;
 /// Base codes: 0-3 for ACGT, 4 for anything else.
 const INVALID: u8 = 4;
 
+/// The IUPAC mask of `N`: every base, and so every character.
+const ANY: u8 = 0b1111;
+
 fn code(base: u8) -> u8 {
     match base {
         b'A' | b'a' => 0,
@@ -41,7 +44,7 @@ fn iupac_mask(symbol: u8) -> Option<u8> {
         b'D' => 0b1101,
         b'H' => 0b1011,
         b'V' => 0b0111,
-        b'N' => 0b1111,
+        b'N' => ANY,
         _ => return None,
     })
 }
@@ -105,11 +108,23 @@ impl Spacers {
                 reverse |= ((3 - c) as u64) << (2 * offset);
             }
             let guide = index as u32;
-            found.insert(forward, Entry { guide, reverse: false });
+            found.insert(
+                forward,
+                Entry {
+                    guide,
+                    reverse: false,
+                },
+            );
             // A palindromic spacer keeps both entries on purpose: it really does
             // read 5' to 3' on either strand, and the two readings have
             // different flanks, so one can have a PAM where the other does not.
-            found.insert(reverse, Entry { guide, reverse: true });
+            found.insert(
+                reverse,
+                Entry {
+                    guide,
+                    reverse: true,
+                },
+            );
         }
         Ok(found)
     }
@@ -213,7 +228,10 @@ fn plain_slice(sequence: &[u8], from: usize, length: usize, limit: usize) -> Str
     if length == 0 {
         return String::new();
     }
-    if from > limit || from.saturating_add(length) > limit || from.saturating_add(length) > sequence.len() {
+    if from > limit
+        || from.saturating_add(length) > limit
+        || from.saturating_add(length) > sequence.len()
+    {
         return String::new();
     }
     sequence[from..from + length]
@@ -273,7 +291,12 @@ pub fn matches_pam(bases: &str, pattern: &str) -> bool {
     bases.bytes().zip(pattern.bytes()).all(|(base, symbol)| {
         let c = code(base);
         match (c, iupac_mask(symbol)) {
-            (INVALID, _) | (_, None) => false,
+            (_, None) => false,
+            // N stands for every base, so an unsequenced one satisfies it:
+            // NGG needs nothing of its first position. Any other code names
+            // bases, and an N in the reference is not known to be one of them.
+            (_, Some(ANY)) => true,
+            (INVALID, _) => false,
             (c, Some(mask)) => mask >> c & 1 == 1,
         }
     })
