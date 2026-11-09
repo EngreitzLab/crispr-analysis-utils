@@ -29,7 +29,7 @@ empty. The guide's own columns repeat on each of its rows.
 | `oligo` | The sequence the library ordered, without the PAM: the spacer plus any base 5' of it. |
 | `n_oligos` | How many entries share this spacer. Above one the counts are a sum, because one feature is all the reads can resolve. |
 | `site_class` | `unique`, `multi` or `no_site`: how many places this guide can cut. |
-| `n_matches` | How many places the protospacer occurs in the genome. |
+| `n_matches` | How many places the protospacer occurs in the genome, whether or not a PAM sits beside it. `--pam-only` does not change it. |
 | `n_target_sites` | How many of those have a PAM. |
 | `orientation` | `forward`, `reverse_complement`, `no_pam`, `no_match` or `not_checked`. |
 | `orientation_evidence` | For `reverse_complement` only: `distinct` or `ambiguous`. |
@@ -64,7 +64,9 @@ n_matches 89   n_target_sites 1   site_class unique
 
 The protospacer occurs 89 times; one of those has a PAM. Cas9 cuts there and
 nowhere else. Every one of the 89 is a row in the table, 88 of them with
-`pam_matches` `FALSE`.
+`pam_matches` `FALSE` -- unless the run was given `--pam-only`, which writes
+only the one. `n_matches` still reads 89 either way, and after a `--pam-only`
+run it is the only record that the other 88 places exist.
 
 ## `guide_mapping.bed`
 
@@ -73,11 +75,17 @@ gets two rows. `start`/`end` are the protospacer, without the PAM. The name
 field is the `spacer`, which is the same on every row of one guide, so rows
 group by name. Matches with no PAM are not here; they are in the TSV.
 
+With `--bgzip` this is `guide_mapping.bed.gz` with a `.tbi` beside it and no
+plain BED, same rows in the same order. An empty index is still an index: a
+library with nowhere to cut gets both files and no contigs.
+
 ## `qc.tsv`
 
 Three columns, `section`, `name`, `value`. The `class` and `orientation`
 sections each sum to the number of entries. `scan` holds what the pass saw:
-`n_matches`, `n_off_contig_end`, `n_no_pam`, `n_sites`.
+`n_matches`, `n_off_contig_end`, `n_no_pam`, `n_sites`. These count what was
+found, not what was written, so a `--pam-only` run is comparable with a full
+one: it wrote `n_sites - n_no_pam` site rows.
 
 ## `run_metadata/guide_alignment_<timestamp>.json`
 

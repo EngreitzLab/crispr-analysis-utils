@@ -57,6 +57,8 @@ the PAM, is the library designer's answer, not something to infer.
 | `--orientation-check` | `error` | `error`, `warn` or `off` |
 | `--fix-orientation` | off | Align the reverse complement of flagged entries |
 | `--contigs` | all | Comma-separated contig names |
+| `--pam-only` | off | Write only the sites that have a PAM |
+| `--bgzip` | off | Write `guide_mapping.bed.gz` and its `.tbi` |
 | `--id-col`, `--spacer-col` | `0`, `1` | Position or name |
 | `--sep`, `--header` | tab, off | `tab`, `comma`, or one character |
 
@@ -86,6 +88,35 @@ Three things trip people up:
   `no_match` is the check passing, not failing.
 - **`guide_id` and `mapped_sequence` line up base for base.** Diff them to see
   whether the 5' base paired and what the real PAM is.
+
+## Short spacers, and `--pam-only`
+
+A spacer's matches grow as the genome divided by 4 to its length. A 20-mer
+matches a handful of places; a 9-mer matches tens of thousands, and all but
+about one in sixteen of them have no PAM, so the nuclease cannot act there.
+Written out, that table is mostly rows nothing can be done with.
+
+`--pam-only` keeps the sites whose genomic PAM matches and drops the rest.
+
+- **It changes what is written, not what is searched or counted.**
+  `n_matches` still counts every place the protospacer occurs, which under
+  this flag is the only record that they exist, and `qc.tsv` still reports
+  `n_sites` and `n_no_pam`, so two runs stay comparable. The rows written
+  are `n_sites - n_no_pam`.
+- **A guide whose every site is dropped keeps one row**, with the site
+  columns empty, exactly as a guide with no match at all does. It is in the
+  library, and the table says so.
+- **The orientation verdict is unchanged.** A guide that matched everywhere
+  without a PAM is still `no_pam`, not `no_match`.
+- **`guide_mapping.bed` already held only these sites**, so it does not
+  change.
+- Leave it off for a 20-mer library: the non-PAM rows are what tell you a
+  spacer is promiscuous, and there are few enough of them to read.
+
+`--bgzip` goes with it. It writes `guide_mapping.bed.gz` and its tabix index
+in place of the plain BED, so `tabix region` or a browser can seek into a
+file too big to load. The rows are already in coordinate order, and they go
+straight into the compressed file: the plain text never reaches the disk.
 
 ## Orientation
 
