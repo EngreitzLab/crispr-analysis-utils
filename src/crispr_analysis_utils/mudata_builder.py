@@ -91,7 +91,40 @@ def read_counts(path: str | os.PathLike[str]):
         raise BuildError(f"{path} is not a readable h5ad: {error}") from error
 
 
-def gene_var(store, ids: pd.Index) -> pd.DataFrame:
+def read_readout_genes(path: str | os.PathLike[str]) -> pd.Series:
+    """The genes a targeted assay reads out, as unversioned ENSEMBL ids.
+
+    A TAP-seq panel measures a few hundred genes on purpose; every other
+    feature in the matrix is off-panel and near-empty. Which is which is not
+    in the counts, so it comes from the panel's own table: the first column
+    holding ENSEMBL ids is taken as the gene.
+
+    Returns
+    -------
+    pandas.Series
+        How many rows of the panel name each gene, indexed by unversioned
+        ENSEMBL id. Usually one; a gene measured through two amplicons has
+        two, and its counts are a sum of both.
+    """
+    path = Path(path)
+    if not path.is_file():
+        raise BuildError(f"The readout gene table {path} does not exist.")
+    frame = pd.read_csv(path, sep="\t" if path.suffix == ".tsv" else ",")
+    ensembl = [
+        column
+        for column in frame.columns
+        if frame[column].astype(str).str.startswith("ENSG").any()
+    ]
+    if not ensembl:
+        raise BuildError(
+            f"{path} has no column of ENSEMBL gene ids, so it cannot say "
+            "which genes are read out."
+        )
+    genes = _unversioned(frame[ensembl[0]].astype("string"))
+    return genes.value_counts()
+
+
+def gene_var(store, ids: pd.Index, readout: pd.Series | None = None) -> pd.DataFrame:
     """The annotation of every gene in the matrix, in the matrix's own order.
 
     Parameters
@@ -101,6 +134,10 @@ def gene_var(store, ids: pd.Index) -> pd.DataFrame:
         only the ones guides are annotated against.
     ids
         The matrix's gene ids, versioned or not.
+    readout
+        The genes the assay reads out, as `read_readout_genes` returns them.
+        Adds ``readout`` and ``readout_primers``; without it both are
+        absent, since a whole-transcriptome run reads out everything.
 
     Returns
     -------
@@ -125,8 +162,15 @@ def gene_var(store, ids: pd.Index) -> pd.DataFrame:
     # kb indexes genes as the GTF names them, with the version; the store
     # strips it. The rule has to be the store's own, or a PAR_Y gene, whose
     # id ends in neither, comes back annotated with nothing.
-    out = annotation.reindex(_unversioned(pd.Series(ids, dtype="string")))
+    bare = _unversioned(pd.Series(ids, dtype="string"))
+    out = annotation.reindex(bare)
     out.index = pd.Index(ids, name="gene_id")
+    if readout is not None:
+        counts = readout.reindex(bare).fillna(0).astype(int)
+        out["readout"] = (counts > 0).to_numpy()
+        # Above one, the panel measures the gene through two amplicons and
+        # the counts are their sum, as n_oligos means on the guide side.
+        out["readout_primers"] = counts.to_numpy()
     return out
 
 
@@ -403,6 +447,7 @@ def run(
     guide_annotation: str | os.PathLike[str] | None = None,
     element_mapping: str | os.PathLike[str] | None = None,
     metadata: dict[str, str] | None = None,
+    readout_genes: str | os.PathLike[str] | None = None,
 ) -> RunResult:
     """Assemble one channel's matrices into a MuData, and write it.
 
@@ -506,6 +551,13 @@ def run(
             state["inputs"][name] = str(path)
             state["inputs"][f"{name}_md5"] = file_md5(path)
 
+        readout = None
+        if readout_genes is not None:
+            readout = read_readout_genes(readout_genes)
+            state["inputs"]["readout_genes"] = str(readout_genes)
+            state["inputs"]["readout_genes_md5"] = file_md5(readout_genes)
+            logger.info("%d genes are read out by the assay", len(readout))
+
         reference = reference_block(
             loaded,
             gtf_accession=gtf_accession,
@@ -517,7 +569,7 @@ def run(
         data = build(
             rna_counts,
             guide_counts,
-            gene_table=gene_var(loaded, rna_counts.var_names),
+            gene_table=gene_var(loaded, rna_counts.var_names, readout=readout),
             guide_table=guide_var(guide_metadata, guide_counts.var_names),
             measurement_set=measurement_set,
             reference=reference,
@@ -539,6 +591,16 @@ def run(
             "genes": int(data["gene"].n_vars),
             "guides": int(data["guide"].n_vars),
             "genes_unannotated": int(data["gene"].var["symbol"].isna().sum()),
+            "genes_readout": (
+                int(data["gene"].var["readout"].sum())
+                if "readout" in data["gene"].var
+                else None
+            ),
+            "genes_multi_primer": (
+                int((data["gene"].var["readout_primers"] > 1).sum())
+                if "readout_primers" in data["gene"].var
+                else None
+            ),
             "guides_unannotated": int(data["guide"].var["spacer"].isna().sum()),
             "uns_tables": {k: int(len(v)) for k, v in tables.items()},
         }

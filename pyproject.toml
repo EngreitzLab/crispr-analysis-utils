@@ -45,6 +45,12 @@ dependencies = [
     # inside functions, like pysam, so `cau --help` loads neither.
     "anndata>=0.10",
     "mudata>=0.3",
+    # QC figures. Imported inside functions, so a run that draws nothing
+    # never loads it.
+    "matplotlib>=3.8",
+    # QC metrics. scanpy names them as the IGVF pipeline does, so ours are
+    # directly comparable with the pipeline's own.
+    "scanpy>=1.10",
 ]
 
 [project.scripts]

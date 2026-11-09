@@ -79,6 +79,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         ),
     )
     run_parser.add_argument(
+        "--readout-genes",
+        help=(
+            "The panel a targeted assay reads out, as a table with a column "
+            "of ENSEMBL ids. Adds a boolean readout column to gene.var; "
+            "without it the column is absent."
+        ),
+    )
+    run_parser.add_argument(
         "--covariates",
         help=(
             "Per-cell covariates, barcode in the first column. Carried into "
@@ -115,6 +123,7 @@ def run(args: argparse.Namespace) -> int:
             genome_accession=args.genome_accession,
             covariates=args.covariates,
             metadata=_channel(args.channel),
+            readout_genes=args.readout_genes,
             guide_annotation=args.guide_annotation,
             element_mapping=args.element_mapping,
         )
