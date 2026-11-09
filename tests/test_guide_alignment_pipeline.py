@@ -50,6 +50,7 @@ SITE_COLUMNS = (
     "strand",
     "target_site",
     "pam_matches",
+    "paired_5p",
     "mapped_sequence",
 )
 
@@ -175,7 +176,7 @@ def test_run_writes_every_output(setup):
     assert len(guides["g_g"]) == 2
     (g_nt,) = guides["g_nt"]
     assert g_nt["site_class"] == "no_site"
-    assert [g_nt[name] for name in SITE_COLUMNS] == [""] * 7
+    assert [g_nt[name] for name in SITE_COLUMNS] == [""] * 8
     (g_dup,) = guides["g_dup"]
     assert g_dup["guide_id"] == g_a["guide_id"]
     assert g_dup["start"] == str(a_start)
@@ -330,7 +331,7 @@ def test_a_pam_running_off_a_contig_end_is_counted_not_reported(tmp_path):
     )
     # Nothing was kept, so the guide gets its one row with no site in it.
     (row,) = table(result.outdir / "alignments" / "guide_genome_annotation.tsv")
-    assert [row[name] for name in SITE_COLUMNS] == [""] * 7
+    assert [row[name] for name in SITE_COLUMNS] == [""] * 8
     assert (row["n_matches"], row["n_target_sites"]) == ("0", "0")
     assert result.summaries[0].site_class == "no_site"
     assert result.summaries[0].orientation == "no_match"
@@ -809,3 +810,86 @@ def test_a_library_with_nowhere_to_cut_still_gets_a_readable_index(tmp_path):
     assert gz.with_suffix(".gz.tbi").is_file()
     with pysam.TabixFile(str(gz)) as handle:
         assert handle.contigs == []
+
+
+SPACER_9 = SPACER_A[:9]
+
+
+def write_ninemer(path, contigs):
+    reference = path / "ref" / "genome.fa"
+    reference.parent.mkdir(parents=True, exist_ok=True)
+    write_fasta(reference, contigs)
+    return reference
+
+
+def ninemer_run(tmp_path, contigs, **kwargs):
+    """A G + 9-mer library, as a U6 construct orders it, against `contigs`."""
+    guides = write_guides(tmp_path / "guides.tsv", [("g9", "G" + SPACER_9)])
+    return run(
+        guides,
+        write_ninemer(tmp_path, contigs),
+        tmp_path / "out",
+        spacer_length=9,
+        orientation_check="off",
+        **kwargs,
+    )
+
+
+def test_a_leading_g_the_genome_also_holds_is_mapped_with_the_protospacer(tmp_path):
+    # The G is there for the U6 transcription start, but a genome holding one
+    # pairs with it like any other base, so the site is ten long, not nine.
+    result = ninemer_run(tmp_path, {"chr1": "TTTG" + SPACER_9 + "TGG" + "TTT"})
+
+    (row,) = annotation(result)
+    assert row["paired_5p"] == "TRUE"
+    # The table reports the protospacer that was declared, which does not move.
+    assert (row["start"], row["end"]) == ("4", "13")
+    bed = (result.outdir / "alignments" / "guide_mapping.bed").read_text().split("\t")
+    assert bed[:3] == ["chr1", "3", "13"]
+
+
+def test_a_leading_g_the_genome_does_not_hold_leaves_the_site_nine_long(tmp_path):
+    result = ninemer_run(tmp_path, {"chr1": "TTTA" + SPACER_9 + "TGG" + "TTT"})
+
+    (row,) = annotation(result)
+    assert row["paired_5p"] == "FALSE"
+    bed = (result.outdir / "alignments" / "guide_mapping.bed").read_text().split("\t")
+    assert bed[:3] == ["chr1", "4", "13"]
+
+
+def test_on_the_minus_strand_it_is_the_end_that_moves(tmp_path):
+    # 5' of the protospacer is the higher coordinate there.
+    from crispr_analysis_utils.guide_alignment.iupac import reverse_complement
+
+    planted = reverse_complement("G" + SPACER_9 + "TGG")
+    result = ninemer_run(tmp_path, {"chr1": "TTT" + planted + "TTT"})
+
+    (row,) = annotation(result)
+    assert (row["strand"], row["paired_5p"]) == ("-", "TRUE")
+    assert (row["start"], row["end"]) == ("6", "15")
+    bed = (result.outdir / "alignments" / "guide_mapping.bed").read_text().split("\t")
+    assert bed[:3] == ["chr1", "6", "16"]
+
+
+def test_a_base_the_contig_ended_before_is_neither_paired_nor_unpaired(tmp_path):
+    # The protospacer starts at base 0, so there is nothing under the G to
+    # compare: that is not the same as a base that failed to pair.
+    result = ninemer_run(tmp_path, {"chr1": SPACER_9 + "TGG" + "TTT"})
+
+    (row,) = annotation(result)
+    assert row["paired_5p"] == ""
+    bed = (result.outdir / "alignments" / "guide_mapping.bed").read_text().split("\t")
+    assert bed[:3] == ["chr1", "0", "9"]
+
+
+def test_a_library_with_no_fifth_prime_base_says_nothing_either_way(setup):
+    # A bare-protospacer library has no such base, so the column is empty and
+    # no interval moves.
+    result = go(setup)
+
+    rows = annotation(result)
+    assert {row["paired_5p"] for row in rows} == {""}
+    for row in rows:
+        if not row["start"]:
+            continue
+        assert int(row["end"]) - int(row["start"]) == 20

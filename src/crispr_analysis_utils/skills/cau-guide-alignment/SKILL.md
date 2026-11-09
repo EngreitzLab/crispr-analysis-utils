@@ -121,6 +121,31 @@ in place of the plain BED, so `tabix region` or a browser can seek into a
 file too big to load. The rows are already in coordinate order, and they go
 straight into the compressed file: the plain text never reaches the disk.
 
+## The base 5' of the protospacer
+
+A U6 construct starts its transcript with a G, so a library is often ordered
+as G plus the protospacer. That G is not part of the design, and the tool
+never infers it from a first base: `n_extra` is the length over
+`--spacer-length`, so give the real spacer length and leave
+`--add-leading-g` for a table of bare protospacers.
+
+- **A genome holding that base pairs with it.** The G is there for the
+  promoter, but where the genome has a G it is recognised like any other
+  base, and the site is one longer than the spacer.
+- **`paired_5p` says where that happened**: `TRUE`, `FALSE`, or empty when
+  the guide has no such base or the match sat too close to a contig end to
+  read it. Three states, so a bare-protospacer library says nothing rather
+  than no.
+- **The table's `start`/`end` never move.** They are the protospacer that
+  was declared, which is what `spacer`, `target_site` and every downstream
+  join are built on.
+- **The BED's interval does.** It covers what pairs, so a row is 10 bases
+  where `paired_5p` is `TRUE` and 9 where it is not, and its `start` differs
+  from the table's by exactly one base there. On the minus strand 5' is the
+  higher coordinate, so it is `end` that moves.
+- The cut site does not move either way: Cas9 cuts 3 bases 5' of the PAM,
+  at the other end of the protospacer.
+
 ## Orientation
 
 Both readings of every guide go into the same scan, so an entry is

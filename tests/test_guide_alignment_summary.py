@@ -72,6 +72,7 @@ COLUMN_NAMES = [
     "strand",
     "target_site",
     "pam_matches",
+    "paired_5p",
     "mapped_sequence",
 ]
 SITE_COLUMN_NAMES = COLUMN_NAMES[11:]
@@ -350,12 +351,13 @@ def test_guides_tsv(tmp_path, guides, sites):
         # The fixture carries SPACER_A twice, as uniq and dup.
         + [SPACER_A, "2"]
         + ["unique", "2", "1", "forward", ""]
-        + ["chr1", "100", "120", "+", "117", "TRUE", SPACER_A + "TGG"]
+        # paired_5p is empty: these hand-built sites carry no 5' base.
+        + ["chr1", "100", "120", "+", "117", "TRUE", "", SPACER_A + "TGG"]
     )
     # The guide's own columns repeat on its second row; only the site changes.
     assert lines[2].split("\t")[:11] == lines[1].split("\t")[:11]
     assert lines[2].split("\t")[11:] == (
-        ["chr1", "500", "520", "+", "517", "FALSE", SPACER_A + "TTT"]
+        ["chr1", "500", "520", "+", "517", "FALSE", "", SPACER_A + "TTT"]
     )
     # One row per entry per site, so the 11 sites of the library are 11 rows.
     assert len(lines) == 1 + 11
@@ -412,7 +414,7 @@ def test_a_guide_matching_nowhere_gets_one_row_with_empty_site_columns(
     table, bed = write_tables(tmp_path, guides, summaries, sites)
 
     (row,) = rows_by_alias(table)["nothing"]
-    assert [row[name] for name in SITE_COLUMN_NAMES] == [""] * 7
+    assert [row[name] for name in SITE_COLUMN_NAMES] == [""] * 8
     assert (row["n_matches"], row["n_target_sites"]) == ("0", "0")
     assert (row["site_class"], row["orientation"]) == ("no_site", "no_match")
     assert row["spacer"] == SPACER_NOTHING
@@ -593,7 +595,16 @@ def test_coordinates_and_target_sites_from_a_hand_built_reference(tmp_path):
         "117",
         "156",
     ]
-    assert sorted(line[1] for line in bed) == ["100", "153", "201", "235"]
+    # 'kept_g' starts at 235 and its added G sits on the genomic G at 234,
+    # so the BED covers 21 bases there and 20 everywhere else: the declared
+    # protospacer in the table does not move, but what pairs is what maps.
+    assert sorted(line[1] for line in bed) == ["100", "153", "201", "234"]
+    widths = {line[3]: int(line[2]) - int(line[1]) for line in bed}
+    assert widths[SPACER_T] == 21
+    assert {widths[s] for s in (SPACER_G, SPACER_C, SPACER_A)} == {20}
+    assert {row["paired_5p"] for row in rows["kept_g"]} == {"TRUE"}
+    assert {row["paired_5p"] for row in rows["plus"]} == {"FALSE"}
+    assert [rows["kept_g"][0]["start"], rows["kept_g"][0]["end"]] == ["235", "255"]
 
 
 def test_guide_id_ends_in_the_pam_pattern_and_mapped_sequence_in_the_real_pam(tmp_path):
