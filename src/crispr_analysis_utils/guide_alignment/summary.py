@@ -139,6 +139,7 @@ def summarize(
     evidence: Mapping[int, str | None] | None = None,
     pam: str = "NGG",
     max_mismatches: int = 3,
+    matches: Mapping[int, int] | None = None,
 ) -> list[GuideSummary]:
     """Classify every guide from its sites.
 
@@ -155,6 +156,11 @@ def summarize(
         The PAM pattern the sites were classified with.
     max_mismatches
         The mismatch limit the sites were kept with.
+    matches
+        How many places each guide's protospacer occurs, as in
+        `ScanResult.matches`. None counts the sites given instead,
+        which is right only when every match became one: after a `pam_only`
+        scan it would count the PAM-bearing sites and call them every match.
 
     Returns
     -------
@@ -179,11 +185,11 @@ def summarize(
     per_spacer = Counter(guide.spacer for guide in guides)
     summaries = []
     for guide, source in zip(guides, _source_rows(guides), strict=True):
-        n_matches = 0
+        n_kept = 0
         n_sites = [0] * (max_mismatches + 1)
         perfect = []
         for site in sites.get(source, ()):
-            n_matches += 1
+            n_kept += 1
             if site.n_mismatches > max_mismatches:
                 raise ValueError(
                     f"A site of guide {site.guide_id!r} has {site.n_mismatches} "
@@ -199,6 +205,8 @@ def summarize(
                     f"{site.pam_class!r}, which is not one of the PAM patterns "
                     f"{', '.join(patterns)}."
                 )
+
+        n_matches = n_kept if matches is None else matches.get(source, 0)
 
         if orientation is None:
             verdict = NOT_CHECKED
@@ -320,8 +328,9 @@ COLUMNS = {
         "unique, multi or no_site: how many PAM-bearing places this guide matches."
     ),
     "n_matches": (
-        "How many places the protospacer matches, which is how many rows"
-        " this guide has below."
+        "How many places the protospacer matches, whether or not a PAM sits"
+        " beside it. That is one row each below, unless the run was given"
+        " --pam-only, which writes only the rows with a PAM."
     ),
     "n_target_sites": "How many of those have a PAM, so Cas9 can act there.",
     "orientation": (
@@ -410,7 +419,9 @@ def write_guides_tsv(
 
     ``n_matches`` is not ``site_class``: it counts every place the protospacer
     occurs, while ``multi`` counts only the matches with a PAM beside them, so
-    a guide can match many places and still bear a PAM at one.
+    a guide can match many places and still bear a PAM at one. It counts them
+    all after a `pam_only` scan too, which is the only place that count
+    survives.
     """
     if len(summaries) != len(guides):
         raise ValueError(f"Got {len(summaries)} summaries for {len(guides)} guides.")

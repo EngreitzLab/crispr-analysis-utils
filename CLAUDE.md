@@ -331,7 +331,10 @@ and narrowing it would buy nothing.
       has the comparison);
     - classes count sites whose genomic PAM matches. A site whose PAM does
       not stays in the table with `pam_matches` `FALSE` and counts nowhere,
-      so a spacer matching twice with one PAM is `unique`;
+      so a spacer matching twice with one PAM is `unique`. `--pam-only`
+      drops those rows instead, for a library short enough that they are
+      the bulk of the table: it changes what is written, never what is
+      searched or counted, so `n_matches` and `qc.tsv` are unmoved;
     - `run` writes only inside `outdir`, and only three folders: the results
       in `alignments/`, this invocation's record in `run_metadata/` and the
       log in `logs/`. Nothing of the run's own sits beside an input;

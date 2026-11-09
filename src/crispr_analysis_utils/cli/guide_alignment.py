@@ -109,6 +109,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="The guide table's first line holds column names.",
     )
+    search.add_argument(
+        "--pam-only",
+        action="store_true",
+        help=(
+            "Write only the sites whose genomic PAM matches, which is every "
+            "site the nuclease could act at. A short spacer matches far more "
+            "places than it can cut; n_matches still counts them all."
+        ),
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -128,6 +137,7 @@ def run(args: argparse.Namespace) -> int:
             orientation_check=args.orientation_check,
             fix_orientation=args.fix_orientation,
             contigs=_contigs(args.contigs),
+            pam_only=args.pam_only,
             id_col=_column(args.id_col),
             spacer_col=_column(args.spacer_col),
             sep=args.sep,

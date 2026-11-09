@@ -97,6 +97,7 @@ def run(
     orientation_check: str = "error",
     fix_orientation: bool = False,
     contigs: Collection[str] | None = None,
+    pam_only: bool = False,
     id_col: int | str = 0,
     spacer_col: int | str = 1,
     sep: str = "\t",
@@ -130,6 +131,10 @@ def run(
         instead of leaving them as given.
     contigs
         If given, read only these contigs.
+    pam_only
+        Write only the sites whose genomic PAM matches, which is every site
+        a nuclease could act at. A short spacer matches far more places than
+        it can cut, and the rest are what makes the table unusable.
     id_col, spacer_col, sep, header
         See `read_guides`.
 
@@ -173,6 +178,7 @@ def run(
         "orientation_check": orientation_check,
         "fix_orientation": fix_orientation,
         "contigs": None if contigs is None else list(contigs),
+        "pam_only": pam_only,
         "id_col": id_col,
         "spacer_col": spacer_col,
         "sep": sep,
@@ -252,6 +258,7 @@ def _run(
             reference,
             pam=parameters["pam"],
             contigs=parameters["contigs"],
+            pam_only=parameters["pam_only"],
         )
     state["counts"]["scan"] = scan.counts()
     write_json(record, state)
@@ -266,6 +273,7 @@ def _run(
             evidence=scan.evidence,
             pam=parameters["pam"],
             max_mismatches=0,
+            matches=scan.matches,
         )
         tables = outdir / RESULTS_DIR
         write_guides_tsv(
@@ -351,6 +359,7 @@ def _check_orientation(
             reference,
             pam=parameters["pam"],
             contigs=parameters["contigs"],
+            pam_only=parameters["pam_only"],
         )
     state["orientation_fixed"] = len(backwards)
     state["counts"]["scan"] = scan.counts()

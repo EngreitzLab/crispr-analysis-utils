@@ -617,3 +617,115 @@ def test_a_5prime_base_at_a_contig_edge_does_not_crash(setup, tmp_path):
     assert row.site_class == "unique"
     assert result.scan.sites[0][0].genomic_5p_base is None
     assert result.scan.sites[0][0].mapped_sequence == SPACER_A + "TGG"
+
+
+def build_blunt_reference(path):
+    """SPACER_A three times, a PAM beside one; SPACER_C once, with none.
+
+    This is the shape a short spacer makes at scale: it occurs far more often
+    than a nuclease could act on it. Every site carries TTT on its 5' side,
+    so no reversed reading finds a PAM there.
+    """
+    rng = random.Random(11)
+
+    def filler(n):
+        return "".join(rng.choice("ACGT") for _ in range(n))
+
+    chr1 = Contig()
+    chr1.add(filler(30) + "TTT")
+    chr1.add(SPACER_A + "TGG")
+    chr1.add(filler(30) + "TTT")
+    chr1.add(SPACER_A + "TTT")
+    chr1.add(filler(30) + "TTT")
+    chr1.add(SPACER_A + "CAT")
+    chr1.add(filler(30) + "TTT")
+    chr1.add(SPACER_C + "TTT")
+    chr1.add(filler(30))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_fasta(path, {"chr1": chr1.sequence})
+    return path
+
+
+@pytest.fixture
+def blunt(tmp_path):
+    """A library whose matches are mostly places it cannot be cut."""
+    return {
+        "reference": build_blunt_reference(tmp_path / "ref" / "genome.fa"),
+        "guides": write_guides(
+            tmp_path / "guides.tsv",
+            [("g_a", SPACER_A), ("g_c", SPACER_C), ("g_nt", SPACER_NT)],
+        ),
+        "outdir": tmp_path / "out",
+    }
+
+
+def both_ways(blunt):
+    """The same library aligned with the flag and without it."""
+    full = run(blunt["guides"], blunt["reference"], blunt["outdir"] / "full")
+    only = run(
+        blunt["guides"], blunt["reference"], blunt["outdir"] / "only", pam_only=True
+    )
+    return full, only
+
+
+def annotation(result):
+    return table(result.outdir / "alignments" / "guide_genome_annotation.tsv")
+
+
+def test_pam_only_writes_the_sites_the_nuclease_could_act_at(blunt):
+    full, only = both_ways(blunt)
+
+    # Two of g_a's three matches cannot be cut, and g_c's one cannot either.
+    assert len(annotation(full)) == 5
+    assert [row["pam_matches"] for row in annotation(only)] == ["TRUE", "", ""]
+    # Every site row left is one the full table also holds, PAM and all.
+    with_pam = [row for row in annotation(full) if row["pam_matches"] == "TRUE"]
+    assert [row for row in annotation(only) if row["pam_matches"]] == with_pam
+    # A guide whose every site went keeps the empty row a guide with no site
+    # gets: it is in the library, and the table still says so.
+    assert [row["alias"] for row in annotation(only)] == ["g_a", "g_c", "g_nt"]
+
+
+def test_a_match_without_a_pam_is_counted_even_when_it_is_not_written(blunt):
+    full, only = both_ways(blunt)
+
+    # n_matches is every place the protospacer occurs, and stays so: with
+    # the flag it is the only record that those places exist.
+    assert [row["n_matches"] for row in annotation(full)[:3]] == ["3", "3", "3"]
+    assert {row["alias"]: row["n_matches"] for row in annotation(only)} == {
+        "g_a": "3",
+        "g_c": "1",
+        "g_nt": "0",
+    }
+
+
+def test_every_per_guide_column_is_the_same_either_way(blunt):
+    full, only = both_ways(blunt)
+
+    assert [s.__dict__ for s in full.summaries] == [s.__dict__ for s in only.summaries]
+
+
+def test_a_guide_that_only_matches_without_a_pam_is_not_called_unmatched(blunt):
+    _, only = both_ways(blunt)
+
+    # Its sites are all dropped, so reading the empty list would call it
+    # unmatched. It matched; there is just nowhere to cut.
+    verdicts = {row["alias"]: row["orientation"] for row in annotation(only)}
+    assert verdicts["g_c"] == "no_pam"
+    assert verdicts["g_nt"] == "no_match"
+
+
+def test_the_counts_do_not_change_with_what_is_written(blunt):
+    full, only = both_ways(blunt)
+
+    # qc.tsv stays comparable between runs: n_sites is what was found and
+    # n_no_pam is how many of those the flag left out.
+    assert full.scan.counts() == only.scan.counts()
+    assert only.scan.counts()["n_no_pam"] == 3
+
+
+def test_the_run_records_whether_it_kept_only_the_pam_sites(blunt):
+    full, only = both_ways(blunt)
+
+    assert full.metadata["parameters"]["pam_only"] is False
+    assert only.metadata["parameters"]["pam_only"] is True
