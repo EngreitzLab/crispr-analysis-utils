@@ -186,9 +186,15 @@ def scan_guides(
         if not matched:
             result.n_no_pam += 1
         result.n_sites += 1
+        # Ask the question the `pam_matches` column answers, not the core's
+        # stricter `matched`: the two part company over a genomic N, which
+        # the column counts as a PAM at an N of the pattern and the core
+        # does not. Dropping a row the column would call TRUE is the one
+        # thing this flag must never do.
+        keep = not pam_only or pattern_matches(genomic_pam, primary)
         for row in rows_of[spacers[index]]:
             result.matches[row] += 1
-            if pam_only and not matched:
+            if not keep:
                 continue
             guide = guides[row]
             result.sites.setdefault(row, []).append(

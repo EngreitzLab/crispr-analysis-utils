@@ -729,3 +729,22 @@ def test_the_run_records_whether_it_kept_only_the_pam_sites(blunt):
 
     assert full.metadata["parameters"]["pam_only"] is False
     assert only.metadata["parameters"]["pam_only"] is True
+
+
+def test_a_genomic_n_in_the_pam_is_kept_because_the_column_calls_it_a_pam(tmp_path):
+    """`pam_matches` reads a genomic N at an N of the pattern as a PAM.
+
+    The Rust core's own flag does not, so a run that trusted it would drop
+    the very rows the table marks TRUE.
+    """
+    chr1 = Contig()
+    chr1.add("TTT")
+    chr1.add(SPACER_A + "NGG")
+    chr1.add("TTT")
+    reference = tmp_path / "ref.fa"
+    write_fasta(reference, {"chr1": chr1.sequence})
+    guides = write_guides(tmp_path / "guides.tsv", [("g_a", SPACER_A)])
+
+    kept = run(guides, reference, tmp_path / "only", pam_only=True)
+    (row,) = annotation(kept)
+    assert (row["pam_matches"], row["site_class"]) == ("TRUE", "unique")
