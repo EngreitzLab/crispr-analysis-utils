@@ -329,6 +329,13 @@ and narrowing it would buy nothing.
       `+`, `start + 3` on `-`). The IGVF-named columns keep these
       definitions, which differ from the lab's DC_TAP tables (the guide page
       has the comparison);
+    - **`N` in a PAM pattern is satisfied by a genomic `N`.** `NGG` asks
+      nothing of its first position, so an unsequenced base there is still a
+      PAM; every other code names bases, and an `N` is not known to be one of
+      them. The rule lives in `base_matches` and in the Rust `matches_pam`,
+      which disagreed with it until they were reconciled, and in the oracle
+      of `tests/test_core_scan.py`, which had encoded the Rust reading.
+      Change one and the other two are wrong;
     - classes count sites whose genomic PAM matches. A site whose PAM does
       not stays in the table with `pam_matches` `FALSE` and counts nowhere,
       so a spacer matching twice with one PAM is `unique`. `--pam-only`
