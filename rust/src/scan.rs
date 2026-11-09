@@ -165,6 +165,7 @@ pub struct Hit {
     pub reverse: bool,
     pub pam: String,
     pub upstream: String,
+    pub matched: bool,
 }
 
 /// Every exact match of `spacers` in `sequence`, with its flanks.
@@ -173,8 +174,16 @@ pub struct Hit {
 /// it is the left end whichever strand the guide reads on. `pam` and
 /// `upstream` are in guide orientation, and are empty when the flank would
 /// run off the end of the contig.
-pub fn scan(sequence: &[u8], spacers: &Spacers, pam_length: usize, upstream: usize) -> Vec<Hit> {
+pub fn scan(
+    sequence: &[u8],
+    spacers: &Spacers,
+    pattern: &str,
+    upstream: usize,
+    pam_only: bool,
+    counts: &mut [(u64, u64, u64)],
+) -> Vec<Hit> {
     let length = spacers.length;
+    let pam_length = pattern.len();
     let mut hits = Vec::new();
     if sequence.len() < length {
         return hits;
@@ -198,16 +207,37 @@ pub fn scan(sequence: &[u8], spacers: &Spacers, pam_length: usize, upstream: usi
         };
         let start = index + 1 - length;
         for entry in entries {
+            // The guide reading right to left has its PAM 5' of the match on
+            // the forward strand, reverse-complemented.
+            let (pam_from, pam_limit) = if entry.reverse {
+                (start.wrapping_sub(pam_length), start)
+            } else {
+                (start + length, sequence.len())
+            };
+            let whole = fits(sequence, pam_from, pam_length, pam_limit);
+            let matched = whole && pam_ok_at(sequence, pam_from, pam_limit, pattern, entry.reverse);
+
+            let tally = &mut counts[entry.guide as usize];
+            tally.0 += 1;
+            if !whole {
+                tally.1 += 1;
+            } else if !matched {
+                tally.2 += 1;
+            }
+            // Nineteen of twenty matches stop here, before either string of
+            // the `Hit` they would otherwise have been built into.
+            if pam_only && !matched {
+                continue;
+            }
+
             let (pam, up) = if entry.reverse {
-                // The guide reads right to left here: its PAM is 5' of the
-                // match on the forward strand, reverse-complemented.
                 (
-                    revcomp_slice(sequence, start.wrapping_sub(pam_length), pam_length, start),
+                    revcomp_slice(sequence, pam_from, pam_length, pam_limit),
                     revcomp_slice(sequence, start + length, upstream, sequence.len()),
                 )
             } else {
                 (
-                    plain_slice(sequence, start + length, pam_length, sequence.len()),
+                    plain_slice(sequence, pam_from, pam_length, pam_limit),
                     plain_slice(sequence, start.wrapping_sub(upstream), upstream, start),
                 )
             };
@@ -217,6 +247,7 @@ pub fn scan(sequence: &[u8], spacers: &Spacers, pam_length: usize, upstream: usi
                 reverse: entry.reverse,
                 pam,
                 upstream: up,
+                matched,
             });
         }
     }
@@ -228,10 +259,7 @@ fn plain_slice(sequence: &[u8], from: usize, length: usize, limit: usize) -> Str
     if length == 0 {
         return String::new();
     }
-    if from > limit
-        || from.saturating_add(length) > limit
-        || from.saturating_add(length) > sequence.len()
-    {
+    if !fits(sequence, from, length, limit) {
         return String::new();
     }
     sequence[from..from + length]
@@ -283,21 +311,45 @@ pub fn pam_length(pattern: &str) -> Result<usize, String> {
     Ok(pattern.len())
 }
 
-/// Whether a stretch of genomic bases matches an IUPAC pattern.
-pub fn matches_pam(bases: &str, pattern: &str) -> bool {
-    if bases.len() != pattern.len() {
+/// Whether one base code satisfies one IUPAC symbol.
+///
+/// N stands for every base, so an unsequenced one satisfies it: NGG needs
+/// nothing of its first position. Any other code names bases, and an N in
+/// the reference is not known to be one of them. This is the rule
+/// `base_matches` states in Python; the two have to agree.
+fn code_ok(c: u8, symbol: u8) -> bool {
+    match iupac_mask(symbol) {
+        None => false,
+        Some(ANY) => true,
+        Some(mask) => c != INVALID && mask >> c & 1 == 1,
+    }
+}
+
+/// Whether the PAM at `from` matches `pattern`, read in guide orientation.
+///
+/// The point of it is what it does not do: a match whose PAM fails is the
+/// common case by nineteen to one, and this answers without building the
+/// two strings a `Hit` would carry.
+fn pam_ok_at(sequence: &[u8], from: usize, limit: usize, pattern: &str, reverse: bool) -> bool {
+    if !fits(sequence, from, pattern.len(), limit) {
         return false;
     }
-    bases.bytes().zip(pattern.bytes()).all(|(base, symbol)| {
-        let c = code(base);
-        match (c, iupac_mask(symbol)) {
-            (_, None) => false,
-            // N stands for every base, so an unsequenced one satisfies it:
-            // NGG needs nothing of its first position. Any other code names
-            // bases, and an N in the reference is not known to be one of them.
-            (_, Some(ANY)) => true,
-            (INVALID, _) => false,
-            (c, Some(mask)) => mask >> c & 1 == 1,
-        }
+    let bases = &sequence[from..from + pattern.len()];
+    pattern.bytes().enumerate().all(|(i, symbol)| {
+        // Reading right to left and complementing, as `revcomp_slice` does.
+        let raw = if reverse {
+            bases[pattern.len() - 1 - i]
+        } else {
+            bases[i]
+        };
+        let c = code(raw);
+        code_ok(if reverse && c != INVALID { 3 - c } else { c }, symbol)
     })
+}
+
+/// Whether `length` bases from `from` all exist within `limit`.
+fn fits(sequence: &[u8], from: usize, length: usize, limit: usize) -> bool {
+    from <= limit
+        && from.saturating_add(length) <= limit
+        && from.saturating_add(length) <= sequence.len()
 }

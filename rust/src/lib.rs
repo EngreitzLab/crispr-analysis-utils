@@ -14,7 +14,7 @@ use std::io::{BufRead, BufReader};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::prelude::*;
 
-use scan::{matches_pam, pam_length, Spacers};
+use scan::{pam_length, Spacers};
 
 /// The crate version, so Python can check which core it loaded.
 #[pyfunction]
@@ -56,7 +56,8 @@ fn scan_fasta(
     contigs: Option<Vec<String>>,
     pam_only: bool,
 ) -> PyResult<(Vec<PyHit>, Vec<PyCounts>)> {
-    let width = pam_length(pam).map_err(PyValueError::new_err)?;
+    // Validates the pattern; the scan reads it base by base from here on.
+    pam_length(pam).map_err(PyValueError::new_err)?;
     let table = Spacers::new(&spacers).map_err(PyValueError::new_err)?;
     let wanted: Option<HashSet<String>> = contigs.map(|names| names.into_iter().collect());
     let mut seen: HashSet<String> = HashSet::new();
@@ -84,19 +85,11 @@ fn scan_fasta(
             if !name.is_empty() && wanted.as_ref().is_none_or(|set| set.contains(&name)) {
                 // Releasing the GIL here is what makes a whole genome bearable
                 // from Python: the scan touches nothing the interpreter owns.
-                let found = py.detach(|| scan::scan(&sequence, &table, width, upstream));
+                // The scan tallies and filters as it goes, so a match with
+                // no PAM costs neither a string nor a row of this list.
+                let found = py
+                    .detach(|| scan::scan(&sequence, &table, pam, upstream, pam_only, &mut counts));
                 for hit in found {
-                    let matched = matches_pam(&hit.pam, pam);
-                    let tally = &mut counts[hit.guide as usize];
-                    tally.0 += 1;
-                    if hit.pam.len() != width {
-                        tally.1 += 1;
-                    } else if !matched {
-                        tally.2 += 1;
-                    }
-                    if pam_only && !matched {
-                        continue;
-                    }
                     hits.push((
                         hit.guide,
                         name.clone(),
@@ -104,7 +97,7 @@ fn scan_fasta(
                         if hit.reverse { "-" } else { "+" },
                         hit.pam,
                         hit.upstream,
-                        matched,
+                        hit.matched,
                     ));
                 }
             }

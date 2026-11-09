@@ -337,10 +337,12 @@ and narrowing it would buy nothing.
     - **`N` in a PAM pattern is satisfied by a genomic `N`.** `NGG` asks
       nothing of its first position, so an unsequenced base there is still a
       PAM; every other code names bases, and an `N` is not known to be one of
-      them. The rule lives in `base_matches` and in the Rust `matches_pam`,
+      them. The rule lives in `base_matches` and in the Rust `code_ok`,
       which disagreed with it until they were reconciled, and in the oracle
       of `tests/test_core_scan.py`, which had encoded the Rust reading.
-      Change one and the other two are wrong;
+      Change one and the other two are wrong. `code_ok` is read twice per
+      match, once by `pam_ok_at` on the raw bytes before anything is
+      allocated, so keep it branch-light;
     - classes count sites whose genomic PAM matches. A site whose PAM does
       not stays in the table with `pam_matches` `FALSE` and counts nowhere,
       so a spacer matching twice with one PAM is `unique`. `--pam-only`
