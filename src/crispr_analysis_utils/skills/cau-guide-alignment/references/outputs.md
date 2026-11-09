@@ -75,6 +75,10 @@ gets two rows. `start`/`end` are the protospacer, without the PAM. The name
 field is the `spacer`, which is the same on every row of one guide, so rows
 group by name. Matches with no PAM are not here; they are in the TSV.
 
+With `--bgzip` this is `guide_mapping.bed.gz` with a `.tbi` beside it and no
+plain BED, same rows in the same order. An empty index is still an index: a
+library with nowhere to cut gets both files and no contigs.
+
 ## `qc.tsv`
 
 Three columns, `section`, `name`, `value`. The `class` and `orientation`

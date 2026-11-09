@@ -15,10 +15,12 @@ does not apply is an empty field, and booleans are ``TRUE`` or ``FALSE``.
 
 from __future__ import annotations
 
+import io
 import os
 from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from ..accession import guide_accession
@@ -463,7 +465,8 @@ def write_guides_bed(
     path: str | os.PathLike[str],
     guides: Sequence[Guide],
     sites: Mapping[int, Sequence[Site]],
-) -> None:
+    bgzip: bool = False,
+) -> Path:
     """Write guide_mapping.bed: every site a guide could act at.
 
     Parameters
@@ -474,6 +477,15 @@ def write_guides_bed(
         The library, as returned by `read_guides`.
     sites
         The sites by guide row, as in `ScanResult.sites`.
+    bgzip
+        Write `path` with ``.gz`` appended, block-compressed, and build its
+        tabix index beside it. The rows are already in coordinate order, so
+        nothing is sorted twice.
+
+    Returns
+    -------
+    pathlib.Path
+        The file written, which carries ``.gz`` under `bgzip`.
 
     Notes
     -----
@@ -499,9 +511,25 @@ def write_guides_bed(
             if site.pam_class != NO_PAM_CLASS
         )
     rows.sort()
-    with _open_table(path, None) as handle:
+    if not bgzip:
+        with _open_table(path, None) as handle:
+            for chrom, start, end, name, strand in rows:
+                _write_row(handle, [chrom, start, end, name, 0, strand])
+        return Path(path)
+
+    import pysam
+
+    # Straight into BGZF: a library short enough to need an index is one
+    # whose plain BED nobody wants on disk even for a moment.
+    path = Path(f"{os.fspath(path)}.gz")
+    with pysam.BGZFile(os.fspath(path), "wb") as raw:
+        handle = io.TextIOWrapper(raw, encoding="utf-8", newline="\n")
         for chrom, start, end, name, strand in rows:
             _write_row(handle, [chrom, start, end, name, 0, strand])
+        handle.flush()
+        handle.detach()
+    pysam.tabix_index(os.fspath(path), preset="bed", force=True)
+    return path
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:

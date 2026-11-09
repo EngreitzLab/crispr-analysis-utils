@@ -58,6 +58,7 @@ the PAM, is the library designer's answer, not something to infer.
 | `--fix-orientation` | off | Align the reverse complement of flagged entries |
 | `--contigs` | all | Comma-separated contig names |
 | `--pam-only` | off | Write only the sites that have a PAM |
+| `--bgzip` | off | Write `guide_mapping.bed.gz` and its `.tbi` |
 | `--id-col`, `--spacer-col` | `0`, `1` | Position or name |
 | `--sep`, `--header` | tab, off | `tab`, `comma`, or one character |
 
@@ -111,6 +112,11 @@ Written out, that table is mostly rows nothing can be done with.
   change.
 - Leave it off for a 20-mer library: the non-PAM rows are what tell you a
   spacer is promiscuous, and there are few enough of them to read.
+
+`--bgzip` goes with it. It writes `guide_mapping.bed.gz` and its tabix index
+in place of the plain BED, so `tabix region` or a browser can seek into a
+file too big to load. The rows are already in coordinate order, and they go
+straight into the compressed file: the plain text never reaches the disk.
 
 ## Orientation
 

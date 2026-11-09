@@ -762,3 +762,50 @@ def test_qc_counts_the_matches_without_a_pam_the_way_the_table_marks_them(blunt)
     assert len(annotation(only)) - 2 == (
         only.scan.counts()["n_sites"] - only.scan.counts()["n_no_pam"]
     )
+
+
+def test_bgzip_writes_an_indexed_bed_a_browser_can_seek_into(setup):
+    import pysam
+
+    result = run(setup["guides"], setup["reference"], setup["outdir"], bgzip=True)
+
+    tables = result.outdir / "alignments"
+    assert not (tables / "guide_mapping.bed").exists()
+    assert (tables / "guide_mapping.bed.gz").is_file()
+    assert (tables / "guide_mapping.bed.gz.tbi").is_file()
+    assert result.metadata["parameters"]["bgzip"] is True
+
+    # The index is the point: it has to answer a region query.
+    chrom, start, _ = setup["sites"]["g_a"]
+    with pysam.TabixFile(str(tables / "guide_mapping.bed.gz")) as handle:
+        assert chrom in handle.contigs
+        (row,) = handle.fetch(chrom, start, start + 1)
+    assert row.split("\t")[:2] == [chrom, str(start)]
+
+
+def test_the_indexed_bed_holds_exactly_what_the_plain_one_would(setup):
+    import gzip
+
+    plain = run(setup["guides"], setup["reference"], setup["outdir"] / "plain")
+    zipped = run(
+        setup["guides"], setup["reference"], setup["outdir"] / "gz", bgzip=True
+    )
+
+    expected = (plain.outdir / "alignments" / "guide_mapping.bed").read_bytes()
+    with gzip.open(zipped.outdir / "alignments" / "guide_mapping.bed.gz") as handle:
+        assert handle.read() == expected
+
+
+def test_a_library_with_nowhere_to_cut_still_gets_a_readable_index(tmp_path):
+    import pysam
+
+    reference = build_blunt_reference(tmp_path / "ref" / "genome.fa")
+    guides = write_guides(tmp_path / "guides.tsv", [("g_c", SPACER_C)])
+
+    result = run(guides, reference, tmp_path / "out", bgzip=True)
+
+    # No PAM anywhere, so the BED is empty. An empty index is still an index.
+    gz = result.outdir / "alignments" / "guide_mapping.bed.gz"
+    assert gz.with_suffix(".gz.tbi").is_file()
+    with pysam.TabixFile(str(gz)) as handle:
+        assert handle.contigs == []

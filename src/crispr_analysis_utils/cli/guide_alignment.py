@@ -118,6 +118,14 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "places than it can cut; n_matches still counts them all."
         ),
     )
+    search.add_argument(
+        "--bgzip",
+        action="store_true",
+        help=(
+            "Write guide_mapping.bed.gz and its tabix index instead of a "
+            "plain BED, so a browser or tabix can seek into it."
+        ),
+    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -138,6 +146,7 @@ def run(args: argparse.Namespace) -> int:
             fix_orientation=args.fix_orientation,
             contigs=_contigs(args.contigs),
             pam_only=args.pam_only,
+            bgzip=args.bgzip,
             id_col=_column(args.id_col),
             spacer_col=_column(args.spacer_col),
             sep=args.sep,
