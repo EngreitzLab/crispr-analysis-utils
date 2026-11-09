@@ -112,10 +112,12 @@ def scan_guides(
     contigs
         If given, read only these contigs.
     pam_only
-        Keep only the matches whose genomic PAM matches `pam`. Every match
-        is still counted, in `ScanResult.matches` and `n_matches`; what
-        changes is which of them become a `Site`. A short spacer matches
-        everywhere, and the sites it cannot be cut at are the bulk of them.
+        Keep only the matches whose genomic PAM matches `pam`. The core
+        drops the rest as it finds them, so they never cross into Python
+        and nothing holds them. Every match is still counted, in
+        `ScanResult.matches` and `n_matches`: a short spacer matches
+        everywhere, and the places it cannot be cut at are the bulk of
+        them, but how many there were is worth knowing.
 
     Returns
     -------
@@ -136,7 +138,9 @@ def scan_guides(
     search between them.
 
     `pam_only` shrinks what is held and what is written, not what is
-    searched: every match is found and counted either way.
+    searched: every match is found and counted either way. The counters
+    come from the scan rather than from the matches returned, which is what
+    lets them report what they never handed back.
     """
     from .. import _core
 
@@ -167,39 +171,33 @@ def scan_guides(
     queries = spacers + reversed_spacers
     upstream_width = max((guide.n_extra for guide in guides), default=0)
     listed = None if contigs is None else list(contigs)
-    matches = _core.scan_fasta(
-        os.fspath(reference), queries, primary, upstream_width, listed
+    matches, counts = _core.scan_fasta(
+        os.fspath(reference), queries, primary, upstream_width, listed, pam_only
     )
 
     result = ScanResult()
     result.matches = dict.fromkeys(range(len(guides)), 0)
+    # The counts come from the scan itself rather than from the matches, so
+    # they say the same thing whether or not `pam_only` returned them all.
+    # The reversed readings are not sites and are not counted here.
+    for index, (found, off_end, no_pam) in enumerate(counts[: len(spacers)]):
+        result.n_matches += found
+        result.n_off_contig_end += off_end
+        result.n_no_pam += no_pam
+        result.n_sites += found - off_end
+        for row in rows_of[spacers[index]]:
+            result.matches[row] += found - off_end
+
     reversed_has_pam: set[int] = set()
     for index, chrom, start, strand, genomic_pam, upstream, matched in matches:
         if index >= len(spacers):
-            # The core's verdict is enough here: this is only evidence that
-            # the reversed reading could cut somewhere, and no column of
-            # any table reports it.
+            # Only evidence that the reversed reading could cut somewhere.
             if matched:
                 reversed_has_pam.update(flipped_rows[queries[index]])
             continue
-        result.n_matches += 1
         if len(genomic_pam) != len(primary):
-            result.n_off_contig_end += 1
             continue
-        # The core's own `matched` is stricter than this over a genomic N,
-        # which `base_matches` reads as a PAM at an N of the pattern and
-        # the core reads as no PAM at all. The `pam_matches` column has
-        # always followed this one, so the counter and the flag do too:
-        # otherwise qc.tsv contradicts the table beside it.
-        has_pam = pattern_matches(genomic_pam, primary)
-        if not has_pam:
-            result.n_no_pam += 1
-        result.n_sites += 1
-        keep = has_pam or not pam_only
         for row in rows_of[spacers[index]]:
-            result.matches[row] += 1
-            if not keep:
-                continue
             guide = guides[row]
             result.sites.setdefault(row, []).append(
                 _site(guide, chrom, start, strand, genomic_pam, upstream, primary)
