@@ -294,7 +294,7 @@ def fan_out_sites(
 GROUPS = (
     ("from the guide table, before anything is aligned", 6),
     ("about the whole guide, repeated on each of its rows", 5),
-    ("about this row's match; empty when the guide matches nowhere", 7),
+    ("about this row's match; empty when the guide matches nowhere", 8),
 )
 """The column groups, in order, and how many columns each has."""
 
@@ -356,6 +356,12 @@ COLUMNS = {
     "pam_matches": (
         "TRUE when the genomic PAM fits the pattern, so Cas9 can act here."
     ),
+    "paired_5p": (
+        "TRUE when the guide's base 5' of the protospacer is the base the"
+        " genome holds there, so it pairs and the site is one longer than"
+        " the spacer. Empty when the guide has no such base, or the match"
+        " sits too close to a contig end for it to have been read."
+    ),
     "mapped_sequence": (
         "What the genome holds here, to compare against guide_id: the"
         " protospacer and the real PAM, keeping the 5' base only where the"
@@ -366,7 +372,10 @@ COLUMNS = {
 
 BED_COLUMNS = {
     "chr": "Contig of the match.",
-    "start": "First base of the protospacer, 0-based.",
+    "start": (
+        "First base of what pairs, 0-based: the protospacer, and the base 5'"
+        " of it where that one pairs too."
+    ),
     "end": "One past its last base.",
     "name": "The protospacer, as spacer in the metadata table.",
     "score": "Always 0; BED6 wants the field.",
@@ -444,7 +453,7 @@ def write_guides_tsv(
             ]
             found = sites.get(source, ())
             if not found:
-                _write_row(handle, [*head, *[None] * 7])
+                _write_row(handle, [*head, *[None] * 8])
             for site in found:
                 _write_row(
                     handle,
@@ -456,6 +465,7 @@ def write_guides_tsv(
                         site.strand,
                         _target_site(site),
                         site.pam_class != NO_PAM_CLASS,
+                        site.paired_5p,
                         site.mapped_sequence,
                     ],
                 )
@@ -491,8 +501,11 @@ def write_guides_bed(
     -----
     BED6 without a header, fields as in `BED_COLUMNS`, one row per site whose
     genomic PAM matches, so a spacer with two PAM-bearing sites gets a row for
-    each. The name field is the protospacer, which is the same on every row
-    of a guide that matches more than once. Sorted by contig, then position.
+    each. The interval covers what pairs, so it is one longer wherever the
+    guide's 5' base pairs too, and the table's `paired_5p` says where that
+    is. The name field stays the protospacer either way, which is what
+    groups a guide's rows when one of its sites pairs there and another does
+    not. Sorted by contig, then position.
     A match with no PAM
     is not somewhere Cas9 can act, so it is left out;
     guide_genome_annotation.tsv has them all.
@@ -506,7 +519,7 @@ def write_guides_bed(
             continue
         seen.add(guide.guide_id)
         rows.extend(
-            (site.chr, site.start, site.end, guide.spacer, site.strand)
+            (site.chr, *_pairing_extent(site), guide.spacer, site.strand)
             for site in sites.get(source, ())
             if site.pam_class != NO_PAM_CLASS
         )
@@ -530,6 +543,21 @@ def write_guides_bed(
         handle.detach()
     pysam.tabix_index(os.fspath(path), preset="bed", force=True)
     return path
+
+
+def _pairing_extent(site: Site) -> tuple[int, int]:
+    """The site's bases that pair, as a 0-based half-open interval.
+
+    The declared protospacer, widened by one at its 5' end where the guide's
+    own 5' base pairs: the U6 transcription start is not part of the design,
+    but a genome holding that base is recognised there like any other. On
+    the minus strand 5' is the higher coordinate, so it is `end` that moves.
+    """
+    if not site.paired_5p:
+        return site.start, site.end
+    return (
+        (site.start - 1, site.end) if site.strand == "+" else (site.start, site.end + 1)
+    )
 
 
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:

@@ -322,8 +322,13 @@ and narrowing it would buy nothing.
       added G of a `GG` 21-mer and then called it a duplicate;
     - `mapped_sequence` is the guide's own bases that pair with the genome:
       the spacer, keeping a base 5' of it only where the genome holds the
-      same base. The coordinates stay on the declared protospacer, so a G that
-      pairs by chance never shifts a start;
+      same base, and `paired_5p` says whether it did (empty when the guide
+      has no such base, or the contig ended before it). **The table's
+      coordinates stay on the declared protospacer** -- `spacer`,
+      `target_site` and `guide_annotation`'s join are built on them --
+      **while the BED's cover what pairs**, so a G sitting on a genomic G
+      makes that row one base longer. On the minus strand 5' is the higher
+      coordinate, so that moves `end`, not `start`;
     - coordinates are 0-based half-open protospacers, without the PAM or the
       added base, and `target_site` is a column, the boundary `b` (`end - 3` on
       `+`, `start + 3` on `-`). The IGVF-named columns keep these

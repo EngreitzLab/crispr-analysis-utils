@@ -36,6 +36,7 @@ empty. The guide's own columns repeat on each of its rows.
 | `chr`, `start`, `end`, `strand` | This row's match. 0-based, half-open, the protospacer alone. |
 | `target_site` | The boundary the cut falls on: between `target_site - 1` and `target_site`. |
 | `pam_matches` | `TRUE` when the genomic PAM fits the pattern. |
+| `paired_5p` | `TRUE` when the guide's 5' base is the base the genome holds there, so the site is one longer than the spacer. Empty when the guide has no such base, or the contig ended before it. |
 | `mapped_sequence` | What the genome holds here, to compare against `guide_id`. |
 
 ### The two sequence columns
@@ -74,6 +75,15 @@ BED6, no header, one row per **cuttable** site, so a guide that cuts twice
 gets two rows. `start`/`end` are the protospacer, without the PAM. The name
 field is the `spacer`, which is the same on every row of one guide, so rows
 group by name. Matches with no PAM are not here; they are in the TSV.
+
+**The interval covers what pairs, not what was declared.** Where the guide's
+base 5' of the protospacer is the base the genome holds there, it pairs, and
+the row is one longer: 10 bases for a G plus a 9-mer, 9 where the genome has
+something else. So `start` here differs from the TSV's by exactly one base
+wherever `paired_5p` is `TRUE`, and matches it everywhere else. On the minus
+strand 5' is the higher coordinate, so `end` moves instead. The TSV's
+coordinates are the declared protospacer and never move, because `spacer`,
+`target_site` and every downstream join are built on them.
 
 With `--bgzip` this is `guide_mapping.bed.gz` with a `.tbi` beside it and no
 plain BED, same rows in the same order. An empty index is still an index: a

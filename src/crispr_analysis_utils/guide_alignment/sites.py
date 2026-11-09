@@ -60,3 +60,17 @@ class Site:
     mapped_sequence: str
     genomic_protospacer: str
     genomic_5p_base: str | None
+
+    @property
+    def paired_5p(self) -> bool | None:
+        """Whether the guide's base 5' of the spacer pairs with the genome.
+
+        None when there is nothing to ask: a guide with no 5' base, or a
+        match so close to a contig end that the base under it was never
+        read. A 5' base that pairs is recognised like any other, which is
+        why the BED's interval covers it and the declared protospacer does
+        not move.
+        """
+        if self.genomic_5p_base is None:
+            return None
+        return len(self.mapped_sequence) > len(self.genomic_protospacer) + len(self.pam)
