@@ -176,6 +176,9 @@ def scan_guides(
     reversed_has_pam: set[int] = set()
     for index, chrom, start, strand, genomic_pam, upstream, matched in matches:
         if index >= len(spacers):
+            # The core's verdict is enough here: this is only evidence that
+            # the reversed reading could cut somewhere, and no column of
+            # any table reports it.
             if matched:
                 reversed_has_pam.update(flipped_rows[queries[index]])
             continue
@@ -183,15 +186,16 @@ def scan_guides(
         if len(genomic_pam) != len(primary):
             result.n_off_contig_end += 1
             continue
-        if not matched:
+        # The core's own `matched` is stricter than this over a genomic N,
+        # which `base_matches` reads as a PAM at an N of the pattern and
+        # the core reads as no PAM at all. The `pam_matches` column has
+        # always followed this one, so the counter and the flag do too:
+        # otherwise qc.tsv contradicts the table beside it.
+        has_pam = pattern_matches(genomic_pam, primary)
+        if not has_pam:
             result.n_no_pam += 1
         result.n_sites += 1
-        # Ask the question the `pam_matches` column answers, not the core's
-        # stricter `matched`: the two part company over a genomic N, which
-        # the column counts as a PAM at an N of the pattern and the core
-        # does not. Dropping a row the column would call TRUE is the one
-        # thing this flag must never do.
-        keep = not pam_only or pattern_matches(genomic_pam, primary)
+        keep = has_pam or not pam_only
         for row in rows_of[spacers[index]]:
             result.matches[row] += 1
             if not keep:

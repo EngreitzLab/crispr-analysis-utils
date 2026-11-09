@@ -748,3 +748,17 @@ def test_a_genomic_n_in_the_pam_is_kept_because_the_column_calls_it_a_pam(tmp_pa
     kept = run(guides, reference, tmp_path / "only", pam_only=True)
     (row,) = annotation(kept)
     assert (row["pam_matches"], row["site_class"]) == ("TRUE", "unique")
+
+
+def test_qc_counts_the_matches_without_a_pam_the_way_the_table_marks_them(blunt):
+    full, only = both_ways(blunt)
+
+    # qc.tsv sitting beside a table that contradicts it is worse than
+    # either being wrong alone.
+    rows = annotation(full)
+    assert full.scan.counts()["n_no_pam"] == sum(
+        row["pam_matches"] == "FALSE" for row in rows
+    )
+    assert len(annotation(only)) - 2 == (
+        only.scan.counts()["n_sites"] - only.scan.counts()["n_no_pam"]
+    )
