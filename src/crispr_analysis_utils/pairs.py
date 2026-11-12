@@ -64,7 +64,7 @@ COLUMNS = {
 """Every column of the pairs table, and what it holds."""
 
 TABLE = "pairs_to_test.csv"
-"""Comma-separated, because the CRISPR pipeline reads its pairs with read_csv."""
+"""Comma-separated, like the CRISPR pipeline's own pairs file."""
 
 RESULTS_DIR = "pairs"
 METADATA_DIR = "run_metadata"

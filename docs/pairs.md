@@ -40,11 +40,8 @@ written outside `--outdir`.
 
 ## Outputs
 
-`pairs/pairs_to_test.csv` is comma-separated, the format the CRISPR
-pipeline's `INFERENCE_predefined_pairs_to_test` reads. The symbol column is
-`gene_symbol`, not `gene_name`: the pipeline takes a `gene_name` column, when
-there is one, as the gene id, and no symbol would match. One row per guide and
-gene:
+`pairs/pairs_to_test.csv` is comma-separated, like the CRISPR pipeline's own
+pairs file. One row per guide and gene:
 
 | Column | Holds |
 | --- | --- |
@@ -58,3 +55,10 @@ gene:
 
 Beside it are `pairs_to_test_columns.yaml`, `qc.tsv` (pairs, guides,
 elements and genes per pair type) and `panel_genes_without_pairs.tsv`.
+
+The file is not a drop-in for the pipeline's
+`INFERENCE_predefined_pairs_to_test`. The pipeline names the gene id column
+`gene_name` and renames it to `gene_id` on reading, so a file that already
+has `gene_id` ends up with two and crashes when the pairs are written back.
+Rename `gene_id` to `gene_name` for that route; the symbols are in
+`gene_symbol` so that nothing else is called `gene_name`.
