@@ -42,6 +42,10 @@ COMMANDS: dict[str, tuple[str, str]] = {
         "pairs",
         "Build the discovery and positive-control pairs a screen tests.",
     ),
+    "inference-input": (
+        "inference_input",
+        "Join QC'd channels with guide calls into one inference object.",
+    ),
     "mudata-builder": (
         "mudata_builder",
         "Assemble a gene and a guide count matrix into one MuData.",

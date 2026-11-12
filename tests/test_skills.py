@@ -35,6 +35,7 @@ COVERAGE = {
     "cau-pairs": ("pairs",),
     "cau-mudata-builder": ("mudata_builder",),
     "cau-qc": ("qc",),
+    "cau-inference-input": ("inference_input",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.

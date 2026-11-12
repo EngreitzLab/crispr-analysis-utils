@@ -52,6 +52,7 @@ nav:
       - IGVF export: igvf-export.md
       - Pairs to test: pairs.md
       - MuData builder: mudata-builder.md
+      - Inference input: inference-input.md
   - Agents and skills: agents-and-skills.md
   - API reference:
       - Overview: reference/index.md
@@ -72,6 +73,7 @@ nav:
       - Element mapping: reference/element-mapping.md
       - IGVF export: reference/igvf-export.md
       - Pairs: reference/pairs.md
+      - Inference input: reference/inference-input.md
       - Accession: reference/accession.md
       - Normalization:
           - counts_per_million: reference/counts-per-million.md

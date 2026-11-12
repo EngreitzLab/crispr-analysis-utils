@@ -32,7 +32,10 @@ the readout genes and nothing sequenced.
 Once a screen has been sequenced, `cau-mudata-builder` assembles a channel's
 gene and guide counts into one MuData, taking `guide_metadata.tsv` from step 4
 as the guide annotation. It assembles only: no statistics, no filtering, no
-guide calls.
+guide calls. After the `cau-qc` pass and a guide call per channel,
+`cau inference-input run` (skill `cau-inference-input`) joins the channels
+into one object with the pairs from `cau pairs` attached, ready for the
+inference.
 
 Two modules sit outside the chain and need no predecessor:
 `cau-accession` (a lab-independent id encoded from the protospacer) and
@@ -111,3 +114,5 @@ A step whose inputs are missing is a request for the step before it.
 - A count matrix to normalize: `cau-normalization`, no chain needed.
 - The guide table and a readout gene list, and the question is what to test:
   `cau-pairs`.
+- QC'd channels with guide calls, and pairs, and the question is the object
+  an inference reads: `cau-inference-input`.
