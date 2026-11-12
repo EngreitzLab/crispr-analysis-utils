@@ -50,6 +50,7 @@ nav:
       - Gene annotation: guide-annotation.md
       - Element mapping: element-mapping.md
       - IGVF export: igvf-export.md
+      - Pairs to test: pairs.md
       - MuData builder: mudata-builder.md
   - Agents and skills: agents-and-skills.md
   - API reference:
@@ -70,6 +71,7 @@ nav:
           - Columns and tables: reference/guide-annotation-summary.md
       - Element mapping: reference/element-mapping.md
       - IGVF export: reference/igvf-export.md
+      - Pairs: reference/pairs.md
       - Accession: reference/accession.md
       - Normalization:
           - counts_per_million: reference/counts-per-million.md

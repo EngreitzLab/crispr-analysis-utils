@@ -54,6 +54,8 @@ per platform serves every supported Python rather than one per version.
     - `igvf_export.py`    -- the guide design in the IGVF per-guide metadata
                              format, for submission or for the CRISPR
                              Perturb-seq pipeline.
+    - `pairs.py`          -- the discovery and positive-control pairs an
+                             inference tests, from that table.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
     - `_files.py`         -- checksums, gzip sniffing, atomic JSON. Shared by
                              both pipelines.
@@ -258,6 +260,12 @@ and narrowing it would buy nothing.
       bidirectional promoter loses neither;
     - `pam` is the genome's own bases. A file with `NGG` in every row has not
       reported a PAM, and a released IGVF file does exactly that.
+- **`pairs` decides a pair per element, and only `type` makes a positive
+  control.** A peak within 2 kb of a TSS is `promoter` in the IGVF table but
+  pairs with its gene as `discovery`: proximity is not a known effect. An
+  element and gene that are a positive control's are `positive_control` for
+  every guide of that element. The table is comma-separated because the
+  CRISPR pipeline reads predefined pairs with `read_csv`.
 - **`element_mapping` is where a design's own labels get tested**, so
   disagreement is the output, not a bug:
     - the classes are decided per site, not per guide, because a guide whose
