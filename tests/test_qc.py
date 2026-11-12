@@ -1042,6 +1042,29 @@ def test_the_density_counts_every_cell_once_and_reports_zeros_and_quadrants():
     assert "both below" in caption
 
 
+def test_the_density_gives_every_low_integer_count_its_own_bin():
+    from crispr_analysis_utils.qc import metric_density
+
+    rng = np.random.default_rng(1)
+    frame = pd.DataFrame(
+        {
+            "gene": np.round(10 ** rng.uniform(2, 4, 2000)),
+            "guide": rng.integers(1, 8, 2000).astype(float),
+        }
+    )
+    _, numbers, caption = metric_density(frame, "gene", "guide", bins=120)
+    per_value = numbers.groupby("guide_low")["cells"].sum()
+    assert len(per_value) == 7
+    assert np.allclose(per_value.index.to_numpy(), np.arange(1, 8) - 0.5)
+    assert per_value.sum() == 2000
+    assert "divided by its size" in caption
+
+    _, _, caption = metric_density(frame, "gene", "guide", x_threshold=1000)
+    above = int((frame["gene"] >= 1000).sum())
+    assert f"{above:,} cells at or above it, {2000 - above:,} below" in caption
+    assert "quadrant" not in caption
+
+
 def test_the_density_needs_a_cell_above_zero():
     from crispr_analysis_utils.qc import metric_density
 

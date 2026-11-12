@@ -1062,7 +1062,9 @@ def metric_density(
         Cuts, drawn as dashed lines; the caption counts the cells in each
         quadrant they make.
     bins : int
-        Bins per axis, evenly spaced on the log scale.
+        Bins per axis, evenly spaced on the log scale. On an axis whose
+        values are all whole numbers the edges move to the nearest half
+        integer, so a low count never falls in a bin no integer can reach.
     xlabel, ylabel : str, optional
         Axis labels; the column names by default.
 
@@ -1080,7 +1082,11 @@ def metric_density(
     Notes
     -----
     A zero cannot sit on a log axis. Such cells are left out of the bins and
-    the margins, counted in the caption, and still counted in the quadrants.
+    the margins, counted in the caption, and still counted against the cuts.
+
+    Moving the edges to half integers widens the bins at low counts, so each
+    bin's count, and each margin bar, is divided by its size relative to an
+    even bin. That keeps the colour a density rather than a bin width.
     """
     import matplotlib.colors as mcolors
 
@@ -1096,9 +1102,10 @@ def metric_density(
         raise FigureError("No cell has both metrics above zero.")
 
     lx, ly = np.log10(xs[drawn]), np.log10(ys[drawn])
-    x_edges = np.linspace(lx.min(), lx.max(), bins + 1)
-    y_edges = np.linspace(ly.min(), ly.max(), bins + 1)
+    x_edges, x_size = _density_edges(xs[drawn], lx, bins)
+    y_edges, y_size = _density_edges(ys[drawn], ly, bins)
     counts, _, _ = np.histogram2d(lx, ly, bins=(x_edges, y_edges))
+    scaled = counts / np.outer(x_size, y_size)
 
     figure = plt.figure(figsize=(6.0, 6.0))
     grid = figure.add_gridspec(
@@ -1109,21 +1116,27 @@ def metric_density(
     right = figure.add_subplot(grid[1, 1], sharey=axis)
     bar_axis = figure.add_subplot(grid[1, 2])
 
-    shown = np.ma.masked_equal(counts.T, 0)
+    shown = np.ma.masked_where(counts.T == 0, scaled.T)
     mesh = axis.pcolormesh(
         10**x_edges,
         10**y_edges,
         shown,
         cmap="cividis",
-        norm=mcolors.LogNorm(vmin=1, vmax=max(2, counts.max())),
+        norm=mcolors.LogNorm(vmin=min(1, shown.min()), vmax=max(2, shown.max())),
         rasterized=True,
     )
     colourbar = figure.colorbar(mesh, cax=bar_axis)
     colourbar.set_label("cells per bin")
     axis.set(xscale="log", yscale="log", xlabel=xlabel or x, ylabel=ylabel or y)
     axis.grid(False)
-    top.hist(10**lx, bins=10**x_edges, color="0.55")
-    right.hist(10**ly, bins=10**y_edges, color="0.55", orientation="horizontal")
+    top.stairs(counts.sum(axis=1) / x_size, 10**x_edges, fill=True, color="0.55")
+    right.stairs(
+        counts.sum(axis=0) / y_size,
+        10**y_edges,
+        fill=True,
+        color="0.55",
+        orientation="horizontal",
+    )
     for margin in (top, right):
         margin.grid(False)
         margin.tick_params(labelbottom=False, labelleft=False)
@@ -1150,6 +1163,7 @@ def metric_density(
             f"{y}_low": 10 ** y_edges[j],
             f"{y}_high": 10 ** y_edges[j + 1],
             "cells": counts[i, j].astype(int),
+            "cells_per_even_bin": scaled[i, j],
         }
     )
     quadrants = {
@@ -1168,19 +1182,45 @@ def metric_density(
         f" colour is the number of cells per bin ({bins} bins per axis), and the"
         " margins are each metric's own distribution."
     )
-    if cut:
+    if (x_size > 1).any() or (y_size > 1).any():
+        caption += (
+            " At low counts a bin spans whole numbers, so it is wider than the rest and"
+            " its count is divided by its size relative to an even bin."
+        )
+    if len(cut) == 2:
         caption += (
             f" Dashed lines are the cuts ({', '.join(cut)}). Cells per quadrant: "
             + ", ".join(f"{name} {n:,}" for name, n in quadrants.items())
             + "."
         )
+    elif cut:
+        above = above_x if x_threshold is not None else above_y
+        caption += (
+            f" The dashed line is the cut ({cut[0]}): {int(above.sum()):,} cells at or"
+            f" above it, {int((~above).sum()):,} below."
+        )
     zeros = int((~drawn).sum())
     if zeros:
         caption += (
             f" {zeros:,} {'cell holds' if zeros == 1 else 'cells hold'} a zero, which a log axis cannot"
-            " show; they are left out of the bins but counted in the quadrants."
+            " show; they are left out of the bins but counted against the cuts."
         )
     return figure, numbers, caption
+
+
+def _density_edges(values: np.ndarray, logs: np.ndarray, bins: int):
+    """Log-spaced bin edges for `metric_density`, and each bin's size.
+
+    For whole-number values the edges move to the nearest half integer, and
+    duplicates merge. The size is each bin's log width over an even bin's.
+    """
+    even = np.linspace(logs.min(), logs.max(), bins + 1)
+    if not np.array_equal(values, np.round(values)):
+        return even, np.ones(bins)
+    linear = np.unique(np.append(np.round(10**even) - 0.5, values.max() + 0.5))
+    edges = np.log10(linear)
+    width = (even[-1] - even[0]) / bins if even[-1] > even[0] else 1.0
+    return edges, np.diff(edges) / width
 
 
 def mean_upm(counts) -> np.ndarray:
