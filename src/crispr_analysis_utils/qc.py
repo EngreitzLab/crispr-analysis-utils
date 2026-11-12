@@ -1034,6 +1034,155 @@ def metric_scatter(
     return figure, numbers, caption
 
 
+def metric_density(
+    frame: pd.DataFrame,
+    x: str,
+    y: str,
+    x_threshold: float | None = None,
+    y_threshold: float | None = None,
+    bins: int = 120,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+):
+    """Two count metrics against each other as a density, both axes log.
+
+    `metric_scatter` draws a point per cell, which at a hundred thousand
+    cells is a solid block that hides where the cells are. This counts the
+    cells in each bin and colours the bin, so the populations and the
+    valleys between them show.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        One row per cell, with columns `x` and `y`. Rows with ``NaN`` in
+        either are dropped.
+    x, y : str
+        The two metrics, both counts.
+    x_threshold, y_threshold : float, optional
+        Cuts, drawn as dashed lines; the caption counts the cells in each
+        quadrant they make.
+    bins : int
+        Bins per axis, evenly spaced on the log scale.
+    xlabel, ylabel : str, optional
+        Axis labels; the column names by default.
+
+    Returns
+    -------
+    tuple
+        The figure, the numbers (one row per non-empty bin: its edges and
+        the cells in it), and the caption, ready for `publish`.
+
+    Raises
+    ------
+    FigureError
+        A column is missing, or no cell has both metrics above zero.
+
+    Notes
+    -----
+    A zero cannot sit on a log axis. Such cells are left out of the bins and
+    the margins, counted in the caption, and still counted in the quadrants.
+    """
+    import matplotlib.colors as mcolors
+
+    plt = style()
+    for name in (x, y):
+        if name not in frame:
+            raise FigureError(f"{name!r} is not a column of the frame.")
+    measured = frame[[x, y]].dropna()
+    xs = measured[x].to_numpy(dtype=float)
+    ys = measured[y].to_numpy(dtype=float)
+    drawn = (xs > 0) & (ys > 0)
+    if not drawn.any():
+        raise FigureError("No cell has both metrics above zero.")
+
+    lx, ly = np.log10(xs[drawn]), np.log10(ys[drawn])
+    x_edges = np.linspace(lx.min(), lx.max(), bins + 1)
+    y_edges = np.linspace(ly.min(), ly.max(), bins + 1)
+    counts, _, _ = np.histogram2d(lx, ly, bins=(x_edges, y_edges))
+
+    figure = plt.figure(figsize=(6.0, 6.0))
+    grid = figure.add_gridspec(
+        2, 3, width_ratios=(5, 1, 0.18), height_ratios=(1, 5), wspace=0.05, hspace=0.05
+    )
+    axis = figure.add_subplot(grid[1, 0])
+    top = figure.add_subplot(grid[0, 0], sharex=axis)
+    right = figure.add_subplot(grid[1, 1], sharey=axis)
+    bar_axis = figure.add_subplot(grid[1, 2])
+
+    shown = np.ma.masked_equal(counts.T, 0)
+    mesh = axis.pcolormesh(
+        10**x_edges,
+        10**y_edges,
+        shown,
+        cmap="cividis",
+        norm=mcolors.LogNorm(vmin=1, vmax=max(2, counts.max())),
+        rasterized=True,
+    )
+    colourbar = figure.colorbar(mesh, cax=bar_axis)
+    colourbar.set_label("cells per bin")
+    axis.set(xscale="log", yscale="log", xlabel=xlabel or x, ylabel=ylabel or y)
+    axis.grid(False)
+    top.hist(10**lx, bins=10**x_edges, color="0.55")
+    right.hist(10**ly, bins=10**y_edges, color="0.55", orientation="horizontal")
+    for margin in (top, right):
+        margin.grid(False)
+        margin.tick_params(labelbottom=False, labelleft=False)
+    top.spines["left"].set_visible(False)
+    top.set_yticks([])
+    right.spines["bottom"].set_visible(False)
+    right.set_xticks([])
+
+    above_x = xs >= x_threshold if x_threshold is not None else np.ones(len(xs), bool)
+    above_y = ys >= y_threshold if y_threshold is not None else np.ones(len(ys), bool)
+    for threshold, line in ((x_threshold, axis.axvline), (y_threshold, axis.axhline)):
+        if threshold is not None:
+            line(threshold, color="white", linewidth=1.0, linestyle="--")
+    if x_threshold is not None:
+        top.axvline(x_threshold, color="0.3", linewidth=0.8, linestyle="--")
+    if y_threshold is not None:
+        right.axhline(y_threshold, color="0.3", linewidth=0.8, linestyle="--")
+
+    i, j = np.nonzero(counts)
+    numbers = pd.DataFrame(
+        {
+            f"{x}_low": 10 ** x_edges[i],
+            f"{x}_high": 10 ** x_edges[i + 1],
+            f"{y}_low": 10 ** y_edges[j],
+            f"{y}_high": 10 ** y_edges[j + 1],
+            "cells": counts[i, j].astype(int),
+        }
+    )
+    quadrants = {
+        "both above": int((above_x & above_y).sum()),
+        f"{x} below only": int((~above_x & above_y).sum()),
+        f"{y} below only": int((above_x & ~above_y).sum()),
+        "both below": int((~above_x & ~above_y).sum()),
+    }
+    cut = []
+    if x_threshold is not None:
+        cut.append(f"{x} {x_threshold:,g}")
+    if y_threshold is not None:
+        cut.append(f"{y} {y_threshold:,g}")
+    caption = (
+        f"{y} against {x} for {len(measured):,} cells, both axes logarithmic;"
+        f" colour is the number of cells per bin ({bins} bins per axis), and the"
+        " margins are each metric's own distribution."
+    )
+    if cut:
+        caption += (
+            f" Dashed lines are the cuts ({', '.join(cut)}). Cells per quadrant: "
+            + ", ".join(f"{name} {n:,}" for name, n in quadrants.items())
+            + "."
+        )
+    zeros = int((~drawn).sum())
+    if zeros:
+        caption += (
+            f" {zeros:,} {'cell holds' if zeros == 1 else 'cells hold'} a zero, which a log axis cannot"
+            " show; they are left out of the bins but counted in the quadrants."
+        )
+    return figure, numbers, caption
+
+
 def mean_upm(counts) -> np.ndarray:
     """Mean UMIs per million per gene, over the cells of one modality.
 

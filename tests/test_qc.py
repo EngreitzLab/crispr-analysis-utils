@@ -1015,3 +1015,35 @@ def test_the_overlay_without_groups_draws_one_mean_over_every_channel():
     assert set(mean["group"]) == {"all"}
     assert set(mean["n_channels"]) == {3}
     assert caption.startswith("(a) Barcode-rank curves of 3 channels, both axes")
+
+
+def test_the_density_counts_every_cell_once_and_reports_zeros_and_quadrants():
+    from crispr_analysis_utils.qc import metric_density
+
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(
+        {
+            "gene": np.r_[
+                10 ** rng.normal(3.5, 0.2, 500),
+                10 ** rng.normal(2.3, 0.2, 300),
+                [500.0],
+            ],
+            "guide": np.r_[
+                10 ** rng.normal(3.0, 0.3, 500), 10 ** rng.normal(1.3, 0.2, 300), [0.0]
+            ],
+        }
+    )
+    _, numbers, caption = metric_density(
+        frame, "gene", "guide", x_threshold=1000, y_threshold=150
+    )
+    assert numbers["cells"].sum() == 800
+    assert "1 cell holds a zero" in caption
+    assert "for 801 cells" in caption
+    assert "both below" in caption
+
+
+def test_the_density_needs_a_cell_above_zero():
+    from crispr_analysis_utils.qc import metric_density
+
+    with pytest.raises(FigureError, match="above zero"):
+        metric_density(pd.DataFrame({"a": [0.0], "b": [1.0]}), "a", "b")

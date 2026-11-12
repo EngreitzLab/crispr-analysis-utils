@@ -181,6 +181,16 @@ on its margin, and the quadrant counts in the caption.
   readable makes a handful of points invisible, and Okabe-Ito's yellow is
   a pale fill on a white page.
 
+## Two counts as a density
+
+`qc.metric_density(frame, "gene_umis", "guide_umis", x_threshold=...)` is
+`metric_scatter` for a hundred thousand cells: the cells in each bin are
+counted and coloured on a log `cividis` scale, so populations and the valleys
+between them show where a scatter is a solid block. Both axes are log; the
+margins are each metric's own histogram. The data file is one row per
+non-empty bin, and the caption counts each quadrant the thresholds make. A
+cell with a zero is left out of the bins and counted in the caption.
+
 ## Does the panel dominate?
 
 `qc.panel_expression(data)` boxplots the mean expression per gene, in UMIs
