@@ -265,7 +265,9 @@ and narrowing it would buy nothing.
   pairs with its gene as `discovery`: proximity is not a known effect. An
   element and gene that are a positive control's are `positive_control` for
   every guide of that element. The table is comma-separated because the
-  CRISPR pipeline reads predefined pairs with `read_csv`.
+  CRISPR pipeline reads predefined pairs with `read_csv`, and the symbol
+  column is `gene_symbol` because the pipeline takes a `gene_name` column, when
+  there is one, as the gene id.
 - **`element_mapping` is where a design's own labels get tested**, so
   disagreement is the output, not a bug:
     - the classes are decided per site, not per guide, because a guide whose

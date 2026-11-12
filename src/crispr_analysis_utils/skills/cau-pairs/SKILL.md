@@ -64,10 +64,12 @@ cau pairs run \
 
 `pairs/pairs_to_test.csv`, comma-separated because the CRISPR pipeline's
 `INFERENCE_predefined_pairs_to_test` reads it with `read_csv`. One row per
-guide and gene: `guide_id`, `gene_id`, `gene_name`, the four
+guide and gene: `guide_id`, `gene_id`, `gene_symbol`, the four
 `intended_target_*` columns, `pair_type`, `distance_to_tss`, `in_panel`.
 Beside it: `pairs_to_test_columns.yaml`, `qc.tsv` (counts per pair type)
 and `panel_genes_without_pairs.tsv`. Plus `run_metadata/` and `logs/`.
+Don't rename `gene_symbol` to `gene_name`: the pipeline reads a
+`gene_name` column as the gene id.
 
 ## Then what
 

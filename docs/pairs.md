@@ -41,14 +41,16 @@ written outside `--outdir`.
 ## Outputs
 
 `pairs/pairs_to_test.csv` is comma-separated, the format the CRISPR
-pipeline's `INFERENCE_predefined_pairs_to_test` reads. One row per guide and
+pipeline's `INFERENCE_predefined_pairs_to_test` reads. The symbol column is
+`gene_symbol`, not `gene_name`: the pipeline takes a `gene_name` column, when
+there is one, as the gene id, and no symbol would match. One row per guide and
 gene:
 
 | Column | Holds |
 | --- | --- |
 | `guide_id` | the guide, as `guide_metadata.tsv` names it |
 | `gene_id` | ENSEMBL gene id, without its version |
-| `gene_name` | the gene's symbol in the store |
+| `gene_symbol` | the gene's symbol in the store |
 | `intended_target_name`, `_chr`, `_start`, `_end` | the element, 0-based half-open |
 | `pair_type` | `positive_control` or `discovery` |
 | `distance_to_tss` | element midpoint to TSS, signed in the gene's orientation |

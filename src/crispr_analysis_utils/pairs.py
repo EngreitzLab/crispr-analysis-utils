@@ -46,7 +46,7 @@ TARGET_COLUMNS = (
 COLUMNS = {
     "guide_id": "The guide, as guide_metadata.tsv names it.",
     "gene_id": "ENSEMBL gene id, without its version.",
-    "gene_name": "The gene's symbol in the annotation store.",
+    "gene_symbol": "The gene's symbol in the annotation store.",
     "intended_target_name": "The element, as guide_metadata.tsv names it.",
     "intended_target_chr": "Chromosome of the element.",
     "intended_target_start": "Start of the element, 0-based.",
@@ -126,7 +126,7 @@ def gene_tss(store) -> pd.DataFrame:
     Returns
     -------
     pandas.DataFrame
-        Indexed by ``gene_id``: ``gene_name``, ``chr``, ``tss`` (0-based) and
+        Indexed by ``gene_id``: ``gene_symbol``, ``chr``, ``tss`` (0-based) and
         ``strand``. The reference transcript is MANE Select, else Ensembl
         canonical, else the longest CDS; a gene without one falls back to its
         own row.
@@ -140,7 +140,7 @@ def gene_tss(store) -> pd.DataFrame:
     plus = rows["Strand"] == "+"
     return pd.DataFrame(
         {
-            "gene_name": rows["gene_symbol"].to_numpy(),
+            "gene_symbol": rows["gene_symbol"].to_numpy(),
             "chr": rows["Chromosome"].astype(str).to_numpy(),
             "tss": np.where(plus, rows["Start"], rows["End"] - 1).astype("int64"),
             "strand": rows["Strand"].astype(str).to_numpy(),
@@ -268,7 +268,7 @@ def _with_gene(rows: pd.DataFrame, tss: pd.DataFrame, pair_type: str) -> pd.Data
     ).to_numpy(dtype="int64")
     offset = midpoint - gene["tss"].to_numpy()
     out = rows[["guide_id", "gene_id", *TARGET_COLUMNS]].reset_index(drop=True)
-    out["gene_name"] = gene["gene_name"].to_numpy()
+    out["gene_symbol"] = gene["gene_symbol"].to_numpy()
     out["pair_type"] = pair_type
     out["distance_to_tss"] = np.where(gene["strand"].to_numpy() == "-", -offset, offset)
     return out
@@ -397,7 +397,7 @@ def run(
         found = counts(pairs, genes)
         write_qc_tsv(outdir / RESULTS_DIR / "qc.tsv", found)
         unpaired = genes[~genes.isin(pairs["gene_id"])]
-        tss.loc[unpaired, ["gene_name", "chr", "tss", "strand"]].reset_index().to_csv(
+        tss.loc[unpaired, ["gene_symbol", "chr", "tss", "strand"]].reset_index().to_csv(
             outdir / RESULTS_DIR / "panel_genes_without_pairs.tsv",
             sep="\t",
             index=False,

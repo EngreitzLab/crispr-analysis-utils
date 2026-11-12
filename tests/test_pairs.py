@@ -37,7 +37,7 @@ def tss_frame():
     """Three readout genes and one the panel leaves out."""
     return pd.DataFrame(
         {
-            "gene_name": ["PLUS", "MINUS", "FAR", "OUTSIDE"],
+            "gene_symbol": ["PLUS", "MINUS", "FAR", "OUTSIDE"],
             "chr": ["chr1", "chr1", "chr2", "chr1"],
             "tss": [10_000, 20_000, 10_000, 30_000],
             "strand": ["+", "-", "+", "+"],
