@@ -264,13 +264,11 @@ and narrowing it would buy nothing.
   control.** A peak within 2 kb of a TSS is `promoter` in the IGVF table but
   pairs with its gene as `discovery`: proximity is not a known effect. An
   element and gene that are a positive control's are `positive_control` for
-  every guide of that element. The table is comma-separated, like the
-  CRISPR pipeline's own, but it is not a drop-in for
-  `INFERENCE_predefined_pairs_to_test`: the pipeline names the ENSG column
-  `gene_name` and renames it to `gene_id`, so a file that already has a
-  `gene_id` ends up with two and crashes at the write-back. Rename `gene_id`
-  to `gene_name` for that route (checked on R1-D4-A-b1). The symbol column is
-  `gene_symbol` so that the rename leaves no other `gene_name` behind.
+  every guide of that element. The gene id column is `gene_id`, the name
+  the inference object uses, and stays so: the CRISPR pipeline's
+  `INFERENCE_predefined_pairs_to_test` wants it called `gene_name` and
+  crashes on a `gene_id` column, and that route is not supported. The symbol
+  column is `gene_symbol`.
 - **`element_mapping` is where a design's own labels get tested**, so
   disagreement is the output, not a bug:
     - the classes are decided per site, not per guide, because a guide whose

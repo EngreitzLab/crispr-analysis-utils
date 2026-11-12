@@ -55,10 +55,3 @@ pairs file. One row per guide and gene:
 
 Beside it are `pairs_to_test_columns.yaml`, `qc.tsv` (pairs, guides,
 elements and genes per pair type) and `panel_genes_without_pairs.tsv`.
-
-The file is not a drop-in for the pipeline's
-`INFERENCE_predefined_pairs_to_test`. The pipeline names the gene id column
-`gene_name` and renames it to `gene_id` on reading, so a file that already
-has `gene_id` ends up with two and crashes when the pairs are written back.
-Rename `gene_id` to `gene_name` for that route; the symbols are in
-`gene_symbol` so that nothing else is called `gene_name`.

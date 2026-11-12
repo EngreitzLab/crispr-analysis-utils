@@ -67,10 +67,6 @@ cau pairs run \
 `pair_type`, `distance_to_tss`, `in_panel`.
 Beside it: `pairs_to_test_columns.yaml`, `qc.tsv` (counts per pair type)
 and `panel_genes_without_pairs.tsv`. Plus `run_metadata/` and `logs/`.
-To hand the file to the CRISPR pipeline as
-`INFERENCE_predefined_pairs_to_test`, rename `gene_id` to `gene_name` first:
-the pipeline names the gene id `gene_name`, and a file with a `gene_id`
-column crashes it.
 
 ## Then what
 
