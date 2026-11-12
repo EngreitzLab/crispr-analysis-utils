@@ -927,3 +927,81 @@ def test_the_caption_refuses_to_call_a_channels_gap_a_library_gap():
     _, _, caption = guide_abundance(guide_counts(guide_library()))
     assert "over 4 cells" in caption
     assert "channels pooled" in caption
+
+
+# --- knees across channels -----------------------------------------------------
+
+
+def test_a_knee_curve_keeps_exact_counts_at_log_spaced_ranks():
+    from crispr_analysis_utils.qc import knee_curve
+
+    umis = np.array([0, 5, 100, 3, 0, 40, 1000])
+    curve = knee_curve(umis, n_points=50)
+    assert list(curve["rank"]) == [1, 2, 3, 4, 5]
+    assert list(curve["umis"]) == [1000, 100, 40, 5, 3]
+    assert knee_curve(np.zeros(4)).empty
+
+
+def test_a_knee_curve_of_many_barcodes_keeps_its_ends():
+    from crispr_analysis_utils.qc import knee_curve
+
+    umis = np.arange(1, 100_001)
+    curve = knee_curve(umis, n_points=100)
+    assert len(curve) <= 100
+    assert curve["rank"].iloc[0] == 1 and curve["umis"].iloc[0] == 100_000
+    assert curve["rank"].iloc[-1] == 100_000 and curve["umis"].iloc[-1] == 1
+
+
+def _curves():
+    rows = []
+    for channel, day, scale, n in (
+        ("c1", "0", 1.0, 1000),
+        ("c2", "0", 4.0, 800),
+        ("c3", "2", 2.0, 1000),
+    ):
+        rank = np.arange(1, n + 1)
+        rows.append(
+            pd.DataFrame(
+                {
+                    "channel": channel,
+                    "day": day,
+                    "rank": rank,
+                    "umis": scale * 1e4 / rank,
+                }
+            )
+        )
+    return pd.concat(rows, ignore_index=True)
+
+
+def test_the_overlay_mean_is_geometric_and_stops_where_a_channel_runs_out():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    figure, numbers, caption = knee_overlay(_curves(), group="day", floor=100)
+    mean = numbers[numbers["panel"] == "mean"]
+    day0 = mean[mean["group"] == "0"]
+    # c1 and c2 are 1x and 4x the same curve: the geometric mean is 2x.
+    first = day0.iloc[0]
+    assert first["rank"] == 1
+    assert 10 ** first["mean_log10_umis"] == pytest.approx(2e4)
+    assert day0["rank"].max() <= 800
+    assert set(mean["n_channels"]) == {1, 2}
+    assert "3 channels (2 in 0, 1 in 2)" in caption
+    assert "floor of 100 UMIs" in caption
+    assert len(figure.axes) == 2
+
+
+def test_the_overlay_refuses_more_groups_than_colours_stay_apart():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    curves = pd.concat(
+        [_curves().assign(channel=f"c{i}", day=str(i)) for i in range(5)]
+    )
+    with pytest.raises(FigureError, match="at most 4"):
+        knee_overlay(curves, group="day")
+
+
+def test_the_overlay_needs_its_columns():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    with pytest.raises(FigureError, match="lack day"):
+        knee_overlay(_curves().drop(columns="day"), group="day")

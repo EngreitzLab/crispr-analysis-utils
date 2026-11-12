@@ -240,6 +240,223 @@ def knee(data, modalities: tuple[str, ...] = ("gene", "guide")):
     return figure, numbers, caption
 
 
+KNEE_POINTS = 400
+"""Ranks a stored knee curve keeps, log-spaced: enough to redraw it exactly."""
+
+GROUP_COLOURS = (OKABE_ITO[4], OKABE_ITO[0], OKABE_ITO[2], OKABE_ITO[6])
+"""Fixed slots for up to four groups. No yellow: a thin line on white loses it."""
+
+
+def knee_curve(umis, n_points: int = KNEE_POINTS) -> pd.DataFrame:
+    """A channel's barcode-rank curve at log-spaced ranks.
+
+    A million barcodes are too many to keep per channel and too many to draw
+    110 times; a few hundred ranks spaced evenly on the log axis draw the same
+    curve. Each kept point is the exact UMI count at that rank: the curve is
+    sampled, not smoothed.
+
+    Parameters
+    ----------
+    umis : array-like
+        Total UMIs per barcode, as `umis_per_cell` returns.
+    n_points : int
+        How many ranks to keep, at most.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``rank`` (1 is the deepest barcode) and ``umis``, over the barcodes
+        with at least one UMI. Empty when there are none.
+    """
+    values = np.asarray(umis, dtype=float)
+    ranked = np.sort(values[values > 0])[::-1]
+    if not len(ranked):
+        return pd.DataFrame(
+            {"rank": pd.Series(dtype=int), "umis": pd.Series(dtype=int)}
+        )
+    ranks = np.unique(np.geomspace(1, len(ranked), n_points).round().astype(int))
+    return pd.DataFrame({"rank": ranks, "umis": ranked[ranks - 1].astype(int)})
+
+
+def knee_overlay(
+    curves: pd.DataFrame,
+    group: str | None = None,
+    floor: float | None = None,
+    ylabel: str = "gene UMIs per barcode",
+):
+    """Many channels' knees on one panel, and each group's mean beside it.
+
+    Small multiples of a hundred knees are a hundred figures to read; one
+    panel shows how they spread, and the second says where a group sits on
+    average and how much its channels vary.
+
+    Parameters
+    ----------
+    curves : pandas.DataFrame
+        One row per point: ``channel``, ``rank``, ``umis``, and the `group`
+        column, as `knee_curve` gives per channel.
+    group : str, optional
+        Column to colour by, such as ``day``. At most four groups.
+    floor : float, optional
+        A UMI floor, drawn as a dashed line on both panels.
+    ylabel : str
+        What the UMIs are, for the axis.
+
+    Returns
+    -------
+    tuple
+        The figure, the numbers (every channel's points, then each group's
+        mean and spread by rank), and the caption, ready for `publish`.
+
+    Raises
+    ------
+    FigureError
+        No curve, a column missing, or more than four groups.
+
+    Notes
+    -----
+    The mean is of log10 UMIs, so it is a geometric mean, and the band is one
+    standard deviation of log10 UMIs either side. A group's mean is drawn
+    only at ranks every one of its channels reaches, so the line never
+    averages over a channel that has run out of barcodes.
+    """
+    plt = style()
+    needed = {"channel", "rank", "umis"} | ({group} if group else set())
+    missing = needed - set(curves.columns)
+    if missing:
+        raise FigureError(f"The curves lack {', '.join(sorted(missing))}.")
+    curves = curves[curves["umis"] > 0]
+    if curves.empty:
+        raise FigureError("No curve has a barcode with a UMI.")
+
+    labels = (
+        curves[group].astype(str) if group else pd.Series("all", index=curves.index)
+    )
+    if group and isinstance(curves[group].dtype, pd.CategoricalDtype):
+        names = [str(c) for c in curves[group].cat.categories if str(c) in set(labels)]
+    else:
+        names = sorted(pd.unique(labels), key=_natural)
+    if len(names) > len(GROUP_COLOURS):
+        raise FigureError(
+            f"{len(names)} groups; at most {len(GROUP_COLOURS)} colours stay"
+            " distinguishable. Facet, or fold the rest into one group."
+        )
+    colour = dict(zip(names, GROUP_COLOURS, strict=False))
+
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(7.2, 3.4), sharey=True, gridspec_kw={"wspace": 0.08}
+    )
+    figure.subplots_adjust(left=0.1, right=0.98, bottom=0.15, top=0.9)
+    channels = curves.assign(_group=labels).groupby("channel", sort=False)
+    n_channels = {name: 0 for name in names}
+    for _, part in channels:
+        name = part["_group"].iloc[0]
+        n_channels[name] += 1
+        left.plot(
+            part["rank"], part["umis"], color=colour[name], linewidth=0.5, alpha=0.45
+        )
+
+    top = curves["rank"].max()
+    grid = np.unique(np.geomspace(1, top, 200).round().astype(int))
+    summaries = []
+    for name in names:
+        logs = []
+        for _, part in channels:
+            if part["_group"].iloc[0] != name:
+                continue
+            reach = grid <= part["rank"].max()
+            values = np.full(len(grid), np.nan)
+            values[reach] = np.interp(
+                np.log10(grid[reach]),
+                np.log10(part["rank"].to_numpy(dtype=float)),
+                np.log10(part["umis"].to_numpy(dtype=float)),
+            )
+            logs.append(values)
+        stack = np.vstack(logs)
+        every = ~np.isnan(stack).any(axis=0)
+        mean = stack[:, every].mean(axis=0)
+        sd = stack[:, every].std(axis=0, ddof=1) if len(stack) > 1 else 0 * mean
+        ranks = grid[every]
+        right.fill_between(
+            ranks,
+            10 ** (mean - sd),
+            10 ** (mean + sd),
+            color=colour[name],
+            alpha=0.25,
+            linewidth=0,
+        )
+        right.plot(ranks, 10**mean, color=colour[name], linewidth=1.5, label=name)
+        summaries.append(
+            pd.DataFrame(
+                {
+                    "panel": "mean",
+                    "group": name,
+                    "rank": ranks,
+                    "mean_log10_umis": mean,
+                    "sd_log10_umis": sd,
+                    "n_channels": len(stack),
+                }
+            )
+        )
+
+    for axis in (left, right):
+        axis.set(xscale="log", yscale="log", xlabel="barcode rank")
+        axis.grid(axis="x", visible=False)
+        if floor is not None:
+            axis.axhline(floor, color="0.3", linewidth=0.8, linestyle="--")
+    left.set_ylabel(ylabel)
+    if floor is not None:
+        left.annotate(
+            f"floor {floor:,g}",
+            xy=(1, floor),
+            xytext=(3, 3),
+            textcoords="offset points",
+            fontsize=8,
+            color="0.3",
+        )
+    if group:
+        right.legend(frameon=False, fontsize=8)
+    for letter, axis in (("a", left), ("b", right)):
+        axis.text(
+            -0.02 if axis is right else -0.16,
+            1.04,
+            letter,
+            transform=axis.transAxes,
+            fontweight="bold",
+            fontsize=11,
+            va="bottom",
+        )
+
+    points = curves.assign(panel="channels", group=labels)[
+        ["panel", "group", "channel", "rank", "umis"]
+    ]
+    numbers = pd.concat([points, *summaries], ignore_index=True)
+    counted = ", ".join(f"{n_channels[name]} in {name}" for name in names)
+    by = f" by {group}" if group else ""
+    total = sum(n_channels.values())
+    caption = (
+        f"(a) Barcode-rank curves of {total} channel{'s' * (total != 1)}"
+        f" ({counted}), coloured{by}, both axes logarithmic; each curve is the"
+        " channel's barcodes with at least one UMI. (b) The mean of log10 UMIs"
+        f" at each rank{by}, with one standard deviation either side shaded,"
+        " drawn only at ranks every channel of the group reaches."
+        + (
+            f" The dashed line is the floor of {floor:,g} UMIs."
+            if floor is not None
+            else ""
+        )
+    )
+    return figure, numbers, caption
+
+
+def _natural(value: str):
+    """Sort "2" before "10": a number as a number, anything else as text."""
+    try:
+        return (0, float(value), "")
+    except ValueError:
+        return (1, 0.0, value)
+
+
 def mad_outlier(
     values,
     nmads: float = 5.0,
