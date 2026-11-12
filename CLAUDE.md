@@ -278,8 +278,9 @@ and narrowing it would buy nothing.
       `non-targeting|N` buckets matched it guide for guide, and the
       pipeline's `prepare_inference.main` kept the same 500,203 pairs and
       covariates. Change either and rerun that comparison;
-    - the pipeline reads `targeting` with `read_csv`, so a categorical
-      `TRUE`/`FALSE` column crashes its `~targeting`. Our copy coerces;
+    - the pipeline's `~targeting` crashes on a categorical `TRUE`/`FALSE`
+      column, which is how the guide var reads back from an h5mu. Our copy
+      coerces;
     - it never calls guides. A missing or non-binary `guide_assignment`
       layer is refused, because how a guide is called is the analysis's
       decision;

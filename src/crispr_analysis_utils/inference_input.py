@@ -177,6 +177,7 @@ def cell_covariates(gene, guide) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     classes = gene_classes(gene.var)
     x = gene.X.tocsr()
+    x.eliminate_zeros()
     total = np.asarray(x.sum(axis=1)).ravel()
     with np.errstate(divide="ignore", invalid="ignore"):
         share = {
@@ -193,6 +194,7 @@ def cell_covariates(gene, guide) -> tuple[pd.DataFrame, pd.DataFrame]:
         index=gene.obs_names,
     )
     g = guide.X.tocsr()
+    g.eliminate_zeros()
     guides = pd.DataFrame(
         {
             "total_guide_umis": np.asarray(g.sum(axis=1)).ravel(),
@@ -336,6 +338,8 @@ def build(
                 " this step does not."
             )
         calls = sp.csr_matrix(guide.layers[ASSIGNMENT])
+        calls.eliminate_zeros()
+        guide.layers[ASSIGNMENT] = calls
         if calls.nnz and not np.isin(calls.data, (0, 1)).all():
             raise InputError(f"mod['guide'].layers[{ASSIGNMENT!r}] is not binary.")
         if not gene.var_names.equals(

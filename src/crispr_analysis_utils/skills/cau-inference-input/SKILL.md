@@ -48,10 +48,10 @@ cau inference-input run \
 - Keeps the cells both modalities hold, then concatenates the channels.
   Cell ids are `{barcode}_{measurement_set}` already, so they cannot clash.
 - Drops the version from gene ids (`gene_id_versioned` keeps it). A
-  `_PAR_Y` id keeps its suffix, so the index stays unique.
+  `_PAR_Y` id is left whole, version included, so the index stays unique.
 - Adds `intended_target_key` to every guide and buckets the controls as
   `non-targeting|N`, by the pipeline's rule: control guides (`targeting`
-  false, or typed non-targeting or safe-targeting) sorted by guide id and
+  false, or typed non-targeting, safe-targeting or negative control) sorted by guide id and
   cut into groups the size of the median targeting element.
 - Writes the covariates under the pipeline's names. Root `obs`: `batch`
   (the measurement set), `total_gene_umis`, `total_guide_umis`,

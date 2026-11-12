@@ -32,7 +32,7 @@ and 15. Nothing is written outside `--outdir`.
 | --- | --- |
 | cell index | `{barcode}_{measurement_set}`, the cells both modalities hold |
 | `obs` | `batch` (the measurement set), `total_gene_umis`, `total_guide_umis`, `num_expressed_genes`, `percent_mito` |
-| `mod['gene'].var_names` | ENSEMBL ids without their version; `gene_id_versioned` keeps it |
+| `mod['gene'].var_names` | ENSEMBL ids without their version, except a `_PAR_Y` id, left whole; `gene_id_versioned` keeps the original |
 | `mod['gene'].obs` | the covariates above, plus `pct_counts_ribo` and the channel's own columns |
 | `mod['guide'].var` | `guide_id`, the IGVF guide columns, and `intended_target_key` |
 | `mod['guide'].obs` | `total_guide_umis`, `num_expressed_guides` |
@@ -42,7 +42,8 @@ and 15. Nothing is written outside `--outdir`.
 | `uns['qc']` | each channel's QC record, by measurement set |
 | `uns['inference_input']` | the cells and pairs this step dropped |
 
-Control guides (`targeting` false, or typed non-targeting or safe-targeting)
+Control guides (`targeting` false, or typed non-targeting, safe-targeting or
+negative control)
 are grouped as `non-targeting|N` by the pipeline's own rule: sorted by guide
 id and cut into groups the size of the median targeting element. On one
 channel of a 43,766-guide screen, the keys and groups match the pipeline's

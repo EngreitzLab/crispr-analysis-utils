@@ -370,3 +370,10 @@ def test_the_command_reports_a_missing_file(tmp_path, files, capsys):
             ]
         )
     assert "does not exist" in capsys.readouterr().err
+
+
+def test_a_stored_zero_is_not_a_call():
+    calls = sp.csr_matrix(np.eye(3, 8, dtype=np.uint8))
+    calls.data[0] = 0  # AAA's call, kept as an explicit zero
+    _, report = built(channel("MS1", calls=calls), min_guides=1)
+    assert report["cells"]["below_min_guides"] == 1
