@@ -314,8 +314,7 @@ def build(
     ------
     InputError
         A channel lacks a modality or the guide calls, the channels disagree
-        on their features, the gene ids collide once unversioned, or a cell
-        has no gene or guide UMIs.
+        on their features, or the gene ids collide once unversioned.
     """
     import anndata as ad
     import mudata as md
@@ -425,18 +424,16 @@ def build(
     guide.uns["moi"] = np.array([moi], dtype=object)
     guide.uns["capture_method"] = np.array([capture_method], dtype=object)
 
-    # SCEPTRE fits these as log terms, and the pipeline refuses a zero.
-    for column, frame in (
-        ("total_gene_umis", gene_cov),
-        ("num_expressed_genes", gene_cov),
-        ("total_guide_umis", guide_cov),
-    ):
-        zero = int((frame[column] <= 0).sum())
-        if zero:
-            raise InputError(
-                f"{zero} cells have no {column.replace('_', ' ')}; the inference fits"
-                f" log({column}). Remove them, or pass --min-guides 1."
-            )
+    # SCEPTRE fits these as log terms and the pipeline refuses a zero, but
+    # filtering is the analysis's: count such cells, keep them.
+    report["cells"]["zero_covariate"] = {
+        column: int((frame[column] <= 0).sum())
+        for column, frame in (
+            ("total_gene_umis", gene_cov),
+            ("num_expressed_genes", gene_cov),
+            ("total_guide_umis", guide_cov),
+        )
+    }
 
     data = md.MuData({"gene": gene, "guide": guide})
     data.obs = pd.DataFrame(
@@ -586,6 +583,11 @@ def _report_lines(report: dict) -> list[str]:
         f" {cells['out']} kept",
         f"{pairs['pairs_out']} of {pairs['pairs_in']} pairs kept: {pairs['guide_absent']} name a guide"
         f" the counts lack, {pairs['gene_absent']} a gene",
+    ] + [
+        f"{n} cells have {column} 0, which SCEPTRE cannot take the log of: filter them"
+        " before the inference"
+        for column, n in cells.get("zero_covariate", {}).items()
+        if n
     ]
 
 

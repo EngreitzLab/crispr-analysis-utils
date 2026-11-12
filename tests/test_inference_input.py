@@ -258,7 +258,7 @@ def test_the_guide_filters_count_what_they_drop():
     calls[0, [0, 1]] = 1
     calls[1, 0] = 1
     data, report = built(channel("MS1", calls=calls), min_guides=1, max_guides=1)
-    assert report["cells"] == {
+    assert {k: v for k, v in report["cells"].items() if k != "zero_covariate"} == {
         "in": 3,
         "below_min_guides": 1,
         "above_max_guides": 1,
@@ -379,9 +379,10 @@ def test_a_stored_zero_is_not_a_call():
     assert report["cells"]["below_min_guides"] == 1
 
 
-def test_a_cell_without_guide_umis_is_refused_because_the_inference_takes_its_log():
+def test_a_cell_without_guide_umis_is_kept_and_counted_since_filtering_comes_later():
     data = channel("MS1")
     data["guide"].X = sp.csr_matrix(data["guide"].X.multiply(np.array([[1], [1], [0]])))
     data["guide"].layers[ASSIGNMENT] = sp.csr_matrix((3, 8), dtype=np.uint8)
-    with pytest.raises(InputError, match="no total guide umis"):
-        built(data)
+    out, report = built(data)
+    assert out.n_obs == 3
+    assert report["cells"]["zero_covariate"]["total_guide_umis"] == 1

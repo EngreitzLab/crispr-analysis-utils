@@ -39,8 +39,8 @@ cau inference-input run \
   default: without them every cell is kept. The CRISPR pipeline uses 1 and
   15. A minimum of 1 drops every cell with no call, which at a strict
   threshold can be a large share; ask, and report how many each would drop.
-  A cell with no guide UMIs at all is refused either way: the inference fits
-  `log(total_guide_umis)`.
+  A cell with no guide UMIs is kept but counted in the log: the inference fits
+  `log(total_guide_umis)`, so such cells must be filtered before it runs.
 - **Same guide table?** The pairs must come from the guide table the
   channels carry. A pair whose element disagrees with its guide's stops the
   run.
