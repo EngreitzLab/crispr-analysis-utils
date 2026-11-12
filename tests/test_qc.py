@@ -1005,3 +1005,13 @@ def test_the_overlay_needs_its_columns():
 
     with pytest.raises(FigureError, match="lack day"):
         knee_overlay(_curves().drop(columns="day"), group="day")
+
+
+def test_the_overlay_without_groups_draws_one_mean_over_every_channel():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    _, numbers, caption = knee_overlay(_curves(), floor=100)
+    mean = numbers[numbers["panel"] == "mean"]
+    assert set(mean["group"]) == {"all"}
+    assert set(mean["n_channels"]) == {3}
+    assert caption.startswith("(a) Barcode-rank curves of 3 channels, both axes")

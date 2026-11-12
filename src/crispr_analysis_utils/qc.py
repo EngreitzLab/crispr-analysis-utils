@@ -342,6 +342,14 @@ def knee_overlay(
             " distinguishable. Facet, or fold the rest into one group."
         )
     colour = dict(zip(names, GROUP_COLOURS, strict=False))
+    # One group needs no colour: grey curves and a dark mean say it all.
+    line = (
+        {name: ("0.55", 0.35) for name in names}
+        if not group
+        else {name: (colour[name], 0.45) for name in names}
+    )
+    if not group:
+        colour = {name: "0.15" for name in names}
 
     figure, (left, right) = plt.subplots(
         1, 2, figsize=(7.2, 3.4), sharey=True, gridspec_kw={"wspace": 0.08}
@@ -353,7 +361,11 @@ def knee_overlay(
         name = part["_group"].iloc[0]
         n_channels[name] += 1
         left.plot(
-            part["rank"], part["umis"], color=colour[name], linewidth=0.5, alpha=0.45
+            part["rank"],
+            part["umis"],
+            color=line[name][0],
+            linewidth=0.5,
+            alpha=line[name][1],
         )
 
     top = curves["rank"].max()
@@ -381,8 +393,8 @@ def knee_overlay(
             ranks,
             10 ** (mean - sd),
             10 ** (mean + sd),
-            color=colour[name],
-            alpha=0.25,
+            color=colour[name] if group else "0.6",
+            alpha=0.25 if group else 0.4,
             linewidth=0,
         )
         right.plot(ranks, 10**mean, color=colour[name], linewidth=1.5, label=name)
@@ -436,7 +448,7 @@ def knee_overlay(
     total = sum(n_channels.values())
     caption = (
         f"(a) Barcode-rank curves of {total} channel{'s' * (total != 1)}"
-        f" ({counted}), coloured{by}, both axes logarithmic; each curve is the"
+        f"{f' ({counted}), coloured{by}' if group else ''}, both axes logarithmic; each curve is the"
         " channel's barcodes with at least one UMI. (b) The mean of log10 UMIs"
         f" at each rank{by}, with one standard deviation either side shaded,"
         " drawn only at ranks every channel of the group reaches."
