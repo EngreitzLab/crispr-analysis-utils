@@ -51,7 +51,9 @@ channel of a 43,766-guide screen, the keys and groups match the pipeline's
 step keeps the same pairs and covariates.
 
 A pair whose element disagrees with its guide's stops the run: the pairs and
-the counts were built from different guide tables.
+the counts were built from different guide tables. So does a cell with no gene
+UMIs, no expressed genes or no guide UMIs, since SCEPTRE fits the log of each
+and the pipeline refuses a zero.
 
 ## Then what
 

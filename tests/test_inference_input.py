@@ -377,3 +377,11 @@ def test_a_stored_zero_is_not_a_call():
     calls.data[0] = 0  # AAA's call, kept as an explicit zero
     _, report = built(channel("MS1", calls=calls), min_guides=1)
     assert report["cells"]["below_min_guides"] == 1
+
+
+def test_a_cell_without_guide_umis_is_refused_because_the_inference_takes_its_log():
+    data = channel("MS1")
+    data["guide"].X = sp.csr_matrix(data["guide"].X.multiply(np.array([[1], [1], [0]])))
+    data["guide"].layers[ASSIGNMENT] = sp.csr_matrix((3, 8), dtype=np.uint8)
+    with pytest.raises(InputError, match="no total guide umis"):
+        built(data)

@@ -314,7 +314,8 @@ def build(
     ------
     InputError
         A channel lacks a modality or the guide calls, the channels disagree
-        on their features, or the gene ids collide once unversioned.
+        on their features, the gene ids collide once unversioned, or a cell
+        has no gene or guide UMIs.
     """
     import anndata as ad
     import mudata as md
@@ -423,6 +424,19 @@ def build(
     guide.layers[ASSIGNMENT] = sp.csr_matrix(guide.layers[ASSIGNMENT]).astype(np.uint8)
     guide.uns["moi"] = np.array([moi], dtype=object)
     guide.uns["capture_method"] = np.array([capture_method], dtype=object)
+
+    # SCEPTRE fits these as log terms, and the pipeline refuses a zero.
+    for column, frame in (
+        ("total_gene_umis", gene_cov),
+        ("num_expressed_genes", gene_cov),
+        ("total_guide_umis", guide_cov),
+    ):
+        zero = int((frame[column] <= 0).sum())
+        if zero:
+            raise InputError(
+                f"{zero} cells have no {column.replace('_', ' ')}; the inference fits"
+                f" log({column}). Remove them, or pass --min-guides 1."
+            )
 
     data = md.MuData({"gene": gene, "guide": guide})
     data.obs = pd.DataFrame(
