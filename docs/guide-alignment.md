@@ -43,6 +43,14 @@ of it — typically the G added for the U6 promoter — is aligned too, but a
 mismatch there is tolerated and reported rather than counted. That is what
 makes the two sequence columns of the output worth comparing.
 
+A design that *wrote* a G at position 1 of the protospacer, where the genome
+holds another base, is a different matter: that base is inside the
+protospacer, so an exact search finds nothing and the guide reads `no_site`.
+`--tolerate-5p 1` searches the 3'-most 19 bases exactly, leaves the
+protospacer and its coordinates at 20, and reports what the genome holds at
+position 1 in `genomic_spacer_5p`. It is off by default, since a shorter core
+matches more places by chance.
+
 If your table holds bare protospacers and the construct adds a G that is not
 in the file, pass `--add-leading-g`.
 
@@ -58,6 +66,7 @@ in the file, pass `--add-leading-g`.
 | `--guides`, `--reference`, `--outdir` | required | |
 | `--pam` | `NGG` | IUPAC codes, 3' of the protospacer |
 | `--spacer-length` | `20` | The protospacer is the 3'-most this many bases |
+| `--tolerate-5p` | `0` | PAM-distal protospacer bases the genome need not hold |
 | `--add-leading-g` | off | Put a G in front of every sequence |
 | `--orientation-check` | `error` | `error`, `warn` or `off` |
 | `--fix-orientation` | off | Align the reverse complement of flagged entries |

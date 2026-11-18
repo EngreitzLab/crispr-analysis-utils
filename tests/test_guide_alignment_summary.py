@@ -73,6 +73,8 @@ COLUMN_NAMES = [
     "target_site",
     "pam_matches",
     "paired_5p",
+    "genomic_5p_base",
+    "genomic_spacer_5p",
     "mapped_sequence",
 ]
 SITE_COLUMN_NAMES = COLUMN_NAMES[11:]
@@ -351,13 +353,14 @@ def test_guides_tsv(tmp_path, guides, sites):
         # The fixture carries SPACER_A twice, as uniq and dup.
         + [SPACER_A, "2"]
         + ["unique", "2", "1", "forward", ""]
-        # paired_5p is empty: these hand-built sites carry no 5' base.
-        + ["chr1", "100", "120", "+", "117", "TRUE", "", SPACER_A + "TGG"]
+        # The 5' columns are empty: these hand-built sites carry no 5' base,
+        # and nothing was tolerated at the PAM-distal end.
+        + ["chr1", "100", "120", "+", "117", "TRUE", "", "", "", SPACER_A + "TGG"]
     )
     # The guide's own columns repeat on its second row; only the site changes.
     assert lines[2].split("\t")[:11] == lines[1].split("\t")[:11]
     assert lines[2].split("\t")[11:] == (
-        ["chr1", "500", "520", "+", "517", "FALSE", "", SPACER_A + "TTT"]
+        ["chr1", "500", "520", "+", "517", "FALSE", "", "", "", SPACER_A + "TTT"]
     )
     # One row per entry per site, so the 11 sites of the library are 11 rows.
     assert len(lines) == 1 + 11
@@ -414,7 +417,7 @@ def test_a_guide_matching_nowhere_gets_one_row_with_empty_site_columns(
     table, bed = write_tables(tmp_path, guides, summaries, sites)
 
     (row,) = rows_by_alias(table)["nothing"]
-    assert [row[name] for name in SITE_COLUMN_NAMES] == [""] * 8
+    assert [row[name] for name in SITE_COLUMN_NAMES] == [""] * 10
     assert (row["n_matches"], row["n_target_sites"]) == ("0", "0")
     assert (row["site_class"], row["orientation"]) == ("no_site", "no_match")
     assert row["spacer"] == SPACER_NOTHING

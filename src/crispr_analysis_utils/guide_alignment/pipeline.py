@@ -94,6 +94,7 @@ def run(
     *,
     pam: str = "NGG",
     spacer_length: int = 20,
+    tolerate_5p: int = 0,
     add_leading_g: bool = False,
     orientation_check: str = "error",
     fix_orientation: bool = False,
@@ -120,6 +121,9 @@ def run(
         The PAM, in IUPAC codes, 3' of the protospacer.
     spacer_length
         See `read_guides`.
+    tolerate_5p
+        See `scan_guides`. The protospacer and its coordinates are unchanged;
+        only the exact search is shorter.
     add_leading_g
         See `read_guides`.
     orientation_check
@@ -179,6 +183,7 @@ def run(
     parameters = {
         "pam": patterns[0],
         "spacer_length": spacer_length,
+        "tolerate_5p": tolerate_5p,
         "add_leading_g": add_leading_g,
         "orientation_check": orientation_check,
         "fix_orientation": fix_orientation,
@@ -265,6 +270,7 @@ def _run(
             pam=parameters["pam"],
             contigs=parameters["contigs"],
             pam_only=parameters["pam_only"],
+            tolerate_5p=parameters["tolerate_5p"],
         )
     state["counts"]["scan"] = scan.counts()
     write_json(record, state)
@@ -278,7 +284,8 @@ def _run(
             scan.verdicts or None,
             evidence=scan.evidence,
             pam=parameters["pam"],
-            max_mismatches=0,
+            max_mismatches=parameters["tolerate_5p"],
+            tolerate_5p=parameters["tolerate_5p"],
             matches=scan.matches,
         )
         tables = outdir / RESULTS_DIR
@@ -371,6 +378,7 @@ def _check_orientation(
             pam=parameters["pam"],
             contigs=parameters["contigs"],
             pam_only=parameters["pam_only"],
+            tolerate_5p=parameters["tolerate_5p"],
         )
     state["orientation_fixed"] = len(backwards)
     state["counts"]["scan"] = scan.counts()

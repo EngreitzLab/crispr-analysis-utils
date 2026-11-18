@@ -343,9 +343,24 @@ and narrowing it would buy nothing.
       Change one and the other two are wrong. `code_ok` is read twice per
       match, once by `pam_ok_at` on the raw bytes before anything is
       allocated, so keep it branch-light;
-    - classes count sites whose genomic PAM matches. A site whose PAM does
-      not stays in the table with `pam_matches` `FALSE` and counts nowhere,
-      so a spacer matching twice with one PAM is `unique`. `--pam-only`
+    - classes count the best sites whose genomic PAM matches. A site whose
+      PAM does not stays in the table with `pam_matches` `FALSE` and counts
+      nowhere, so a spacer matching twice with one PAM is `unique`. Best
+      means fewest mismatches, and only `--tolerate-5p` lets a site carry
+      any, so without it every PAM-bearing site is equally good and the rule
+      is invisible;
+    - **`--tolerate-5p N` searches a shorter core, not a shorter
+      protospacer.** A designer who needs a G-starting protospacer and has
+      none writes the G anyway, so the oligo pairs at 19 of its 20
+      positions and an exact search returns `no_site`; `element_mapping`
+      then calls the guide non-targeting. The flag searches the 3'-most
+      `spacer_length - N` bases and lets the PAM-distal N differ, while
+      `spacer`, the accession and the coordinates stay the declared length.
+      `genomic_spacer_5p` reports what the genome holds there. On the
+      hiPSC-EC v2 library `--tolerate-5p 1` rescued 45 guides, all starting
+      with G and all unpaired at position 1, and moved nothing else: the 128
+      guides that gained a chance site kept `unique`, because a site that
+      pairs throughout outranks one that does not; `--pam-only`
       drops those rows instead, for a library short enough that they are
       the bulk of the table: it changes what is written, never what is
       searched or counted, so `n_matches` and `qc.tsv` are unmoved;
