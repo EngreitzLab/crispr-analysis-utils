@@ -37,6 +37,10 @@ check rather than assume:
   length; anything 5' of it is treated as an added base whose mismatch is
   tolerated. If the table holds bare protospacers and the construct adds a G,
   pass `--add-leading-g`.
+- **Does every sequence start with G?** Then ask whether the design *chose*
+  G-starting protospacers or *wrote* a G where none existed. The second
+  leaves position 1 disagreeing with the genome, and those guides come back
+  `no_site` until the run is given `--tolerate-5p 1`.
 - **Is the PAM in the column?** It should not be. The tool appends `--pam`
   (default `NGG`) itself. One spacer in sixteen ends in `GG`, so a table that
   silently includes the PAM will look fine and be wrong by three bases.
@@ -53,6 +57,7 @@ the PAM, is the library designer's answer, not something to infer.
 | --- | --- | --- |
 | `--pam` | `NGG` | IUPAC, 3' of the protospacer |
 | `--spacer-length` | `20` | The protospacer is the 3'-most this many bases |
+| `--tolerate-5p` | `0` | PAM-distal protospacer bases the genome need not hold |
 | `--add-leading-g` | off | Put a G in front of every sequence |
 | `--orientation-check` | `error` | `error`, `warn` or `off` |
 | `--fix-orientation` | off | Align the reverse complement of flagged entries |
@@ -145,6 +150,36 @@ never infers it from a first base: `n_extra` is the length over
   higher coordinate, so it is `end` that moves.
 - The cut site does not move either way: Cas9 cuts 3 bases 5' of the PAM,
   at the other end of the protospacer.
+
+## When position 1 of the protospacer is not genomic
+
+A designer who needs a G-starting protospacer and has none at the target
+writes the G anyway. The oligo is then a 20-mer the genome holds at 19 of its
+positions, and an exact 20-base search finds nothing: the guide reads
+`no_site` and any downstream mapping calls it non-targeting.
+
+`--tolerate-5p 1` searches the 3'-most 19 bases exactly and lets position 1
+differ. Cas9 cuts there regardless, the position being the PAM-distal one.
+
+- **Nothing about the protospacer changes.** `spacer`, `accession`,
+  `start`/`end` and the joins built on them stay 20 bases. Only the search
+  is shorter.
+- **`genomic_spacer_5p` reports what the genome holds** at the tolerated
+  positions, so comparing it with the first base of `spacer` says whether
+  the design paired. It is empty unless the run tolerated a position.
+- **A site that pairs outranks one that does not.** The shorter core reaches
+  places the guide pairs with at 19 positions but not 20, and those are
+  written with `pam_matches` `TRUE` but count toward `site_class` only for a
+  guide that has nothing better. So the flag rescues the substituted guides
+  without turning well-behaved ones into `multi`; `n_target_sites` counts the
+  weaker sites, and `site_class` does not.
+- **It is off by default and applies to the whole run.** A 19-base core
+  matches more places by chance, so turn it on for a library whose design
+  needs it rather than as a habit, and read `n_matches` knowing it counts
+  those too.
+- **Ask the designer first.** Whether position 1 was substituted is their
+  answer; a run that comes back with tens of `no_site` guides among
+  otherwise clean ones is the hint, not the proof.
 
 ## Orientation
 

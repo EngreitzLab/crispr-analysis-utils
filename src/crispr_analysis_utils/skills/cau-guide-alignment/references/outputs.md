@@ -28,15 +28,17 @@ empty. The guide's own columns repeat on each of its rows.
 | `spacer` | The protospacer: `guide_id` without any base 5' of it or the PAM. |
 | `oligo` | The sequence the library ordered, without the PAM: the spacer plus any base 5' of it. |
 | `n_oligos` | How many entries share this spacer. Above one the counts are a sum, because one feature is all the reads can resolve. |
-| `site_class` | `unique`, `multi` or `no_site`: how many places this guide can cut. |
+| `site_class` | `unique`, `multi` or `no_site`: how many places this guide can cut. With `--tolerate-5p`, how many of its *best* places: a site it pairs with throughout outranks one found only by letting a PAM-distal base differ. |
 | `n_matches` | How many places the protospacer occurs in the genome, whether or not a PAM sits beside it. `--pam-only` does not change it. |
-| `n_target_sites` | How many of those have a PAM. |
+| `n_target_sites` | How many of those have a PAM. Under `--tolerate-5p` it counts the weaker sites too, so it can exceed what `site_class` counts. |
 | `orientation` | `forward`, `reverse_complement`, `no_pam`, `no_match` or `not_checked`. |
 | `orientation_evidence` | For `reverse_complement` only: `distinct` or `ambiguous`. |
 | `chr`, `start`, `end`, `strand` | This row's match. 0-based, half-open, the protospacer alone. |
 | `target_site` | The boundary the cut falls on: between `target_site - 1` and `target_site`. |
 | `pam_matches` | `TRUE` when the genomic PAM fits the pattern. |
 | `paired_5p` | `TRUE` when the guide's 5' base is the base the genome holds there, so the site is one longer than the spacer. Empty when the guide has no such base, or the contig ended before it. |
+| `genomic_5p_base` | What the genome holds under that 5' base, to compare with the first base of `oligo`. Empty in the same two cases. |
+| `genomic_spacer_5p` | What the genome holds at the PAM-distal protospacer positions `--tolerate-5p` allowed to differ, so a difference from the start of `spacer` is a position the design did not pair. Empty unless the run tolerated one. |
 | `mapped_sequence` | What the genome holds here, to compare against `guide_id`. |
 
 ### The two sequence columns

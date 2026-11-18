@@ -46,6 +46,11 @@ class Site:
     genomic_5p_base
         The genomic base under the sequence's base 5' of the protospacer, in
         guide orientation; None when it has none.
+    genomic_spacer_5p
+        The genome's bases under the PAM-distal protospacer positions the scan
+        was told to tolerate, in guide orientation, so they differ from the
+        start of the spacer exactly where the design did not pair. Empty when
+        the scan tolerated none, which is every run that did not ask.
     """
 
     guide_id: str
@@ -60,6 +65,7 @@ class Site:
     mapped_sequence: str
     genomic_protospacer: str
     genomic_5p_base: str | None
+    genomic_spacer_5p: str = ""
 
     @property
     def paired_5p(self) -> bool | None:

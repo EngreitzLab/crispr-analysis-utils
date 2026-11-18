@@ -1,9 +1,12 @@
 """Per-guide classes, and the guide alignment's output tables.
 
-A guide's class counts the matches whose genomic PAM matches: ``unique`` with
-exactly one, ``multi`` with more, ``no_site`` with none. A match whose PAM does
-not is still written, with ``pam_matches`` FALSE, and counted nowhere. An entry
-that duplicates an earlier one's sequence gets that entry's sites.
+A guide's class counts its best matches whose genomic PAM matches: ``unique``
+with exactly one, ``multi`` with more, ``no_site`` with none. Best means the
+fewest mismatches, which only a tolerated 5' position can carry, so without
+`scan_guides`'s `tolerate_5p` it is simply every match with a PAM. A match
+whose PAM does not match is still written, with ``pam_matches`` FALSE, and
+counted nowhere. An entry that duplicates an earlier one's sequence gets that
+entry's sites.
 
 Coordinates are 0-based and half-open on the reference's forward strand, and
 the protospacer excludes the PAM and any base 5' of it. The target site is a
@@ -74,7 +77,9 @@ class GuideSummary:
         The genomic PAM of the unique site, in guide orientation; None unless
         the class is ``unique``.
     has_perfect_site
-        Whether the guide has at least one perfect site with a matching PAM.
+        Whether the guide has at least one PAM-bearing site it pairs with
+        throughout. It is `site_class` other than ``no_site`` unless the scan
+        tolerated a 5' mismatch and the guide's best site carries one.
     guide_chr
         The unique site's contig; None unless unique.
     guide_start
@@ -87,7 +92,8 @@ class GuideSummary:
         The unique site's target boundary (see the module description); None
         unless unique.
     site_class
-        ``unique``, ``multi`` or ``no_site``.
+        ``unique``, ``multi`` or ``no_site``, counting the guide's best
+        PAM-bearing sites (see the module description).
     orientation
         The orientation verdict, or ``not_checked``.
     orientation_evidence
@@ -142,6 +148,7 @@ def summarize(
     pam: str = "NGG",
     max_mismatches: int = 3,
     matches: Mapping[int, int] | None = None,
+    tolerate_5p: int = 0,
 ) -> list[GuideSummary]:
     """Classify every guide from its sites.
 
@@ -163,6 +170,11 @@ def summarize(
         `ScanResult.matches`. None counts the sites given instead,
         which is right only when every match became one: after a `pam_only`
         scan it would count the PAM-bearing sites and call them every match.
+    tolerate_5p
+        How many mismatches a site may carry and still count toward the
+        class, as `scan_guides` was told to tolerate at the protospacer's
+        PAM-distal end. At 0 only the sites a guide pairs with throughout
+        count, which is every site of a scan that tolerated nothing.
 
     Returns
     -------
@@ -189,7 +201,7 @@ def summarize(
     for guide, source in zip(guides, _source_rows(guides), strict=True):
         n_kept = 0
         n_sites = [0] * (max_mismatches + 1)
-        perfect = []
+        on_pam = []
         for site in sites.get(source, ()):
             n_kept += 1
             if site.n_mismatches > max_mismatches:
@@ -199,8 +211,8 @@ def summarize(
                 )
             if site.pam_class == primary:
                 n_sites[site.n_mismatches] += 1
-                if site.n_mismatches == 0:
-                    perfect.append(site)
+                if site.n_mismatches <= tolerate_5p:
+                    on_pam.append(site)
             elif site.pam_class != NO_PAM_CLASS:
                 raise ValueError(
                     f"A site of guide {site.guide_id!r} has PAM class "
@@ -217,13 +229,19 @@ def summarize(
         else:
             raise ValueError(f"No orientation verdict for guide {guide.alias!r}.")
 
-        if len(perfect) == 1:
+        # A site found only by tolerating a 5' mismatch is weaker evidence
+        # than one the guide pairs with throughout, so the class counts the
+        # best the guide has. A site carrying more mismatches than were
+        # tolerated is an off-target, and counts for nothing.
+        fewest = min((site.n_mismatches for site in on_pam), default=0)
+        best = [site for site in on_pam if site.n_mismatches == fewest]
+        if len(best) == 1:
             site_class = UNIQUE
-        elif perfect:
+        elif best:
             site_class = MULTI
         else:
             site_class = NO_SITE
-        unique = perfect[0] if site_class == UNIQUE else None
+        unique = best[0] if site_class == UNIQUE else None
 
         summaries.append(
             GuideSummary(
@@ -234,7 +252,7 @@ def summarize(
                 spacer=guide.spacer,
                 mapped_sequence=unique.mapped_sequence if unique else None,
                 site_pam=unique.pam if unique else None,
-                has_perfect_site=bool(perfect),
+                has_perfect_site=bool(n_sites[0]),
                 guide_chr=unique.chr if unique else None,
                 guide_start=unique.start if unique else None,
                 guide_end=unique.end if unique else None,
@@ -294,7 +312,7 @@ def fan_out_sites(
 GROUPS = (
     ("from the guide table, before anything is aligned", 6),
     ("about the whole guide, repeated on each of its rows", 5),
-    ("about this row's match; empty when the guide matches nowhere", 8),
+    ("about this row's match; empty when the guide matches nowhere", 10),
 )
 """The column groups, in order, and how many columns each has."""
 
@@ -361,6 +379,24 @@ COLUMNS = {
         " genome holds there, so it pairs and the site is one longer than"
         " the spacer. Empty when the guide has no such base, or the match"
         " sits too close to a contig end for it to have been read."
+    ),
+    "genomic_5p_base": (
+        "What the genome holds under the guide's base 5' of the protospacer,"
+        " to compare with the first base of oligo. A guide G over some other"
+        " genomic base is the G a U6 construct adds; any other disagreement is"
+        " a mismatch the design did not intend. Cas9 tolerates either, the"
+        " position being the PAM-distal one, so this says which it was rather"
+        " than whether the guide cuts. Empty when the guide has no base 5' of"
+        " its protospacer, or the match sits too close to a contig end for the"
+        " base to have been read."
+    ),
+    "genomic_spacer_5p": (
+        "What the genome holds at the PAM-distal protospacer positions the run"
+        " was told to tolerate with --tolerate-5p, so a difference from the"
+        " start of spacer is a position the design did not pair. Cas9 acts"
+        " there either way, which is why the site is reported; a guide whose"
+        " position 1 was written G is the usual reason. Empty unless the run"
+        " tolerated a position."
     ),
     "mapped_sequence": (
         "What the genome holds here, to compare against guide_id: the"
@@ -447,13 +483,13 @@ def write_guides_tsv(
                 summary.n_oligos,
                 summary.site_class,
                 summary.n_matches,
-                summary.n_sites[0],
+                sum(summary.n_sites),
                 summary.orientation,
                 summary.orientation_evidence,
             ]
             found = sites.get(source, ())
             if not found:
-                _write_row(handle, [*head, *[None] * 8])
+                _write_row(handle, [*head, *[None] * 10])
             for site in found:
                 _write_row(
                     handle,
@@ -466,6 +502,8 @@ def write_guides_tsv(
                         _target_site(site),
                         site.pam_class != NO_PAM_CLASS,
                         site.paired_5p,
+                        site.genomic_5p_base,
+                        site.genomic_spacer_5p,
                         site.mapped_sequence,
                     ],
                 )
