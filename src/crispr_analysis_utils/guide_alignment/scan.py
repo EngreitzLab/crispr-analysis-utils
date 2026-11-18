@@ -98,6 +98,7 @@ def scan_guides(
     pam: str = "NGG",
     contigs: Collection[str] | None = None,
     pam_only: bool = False,
+    tolerate_5p: int = 0,
 ) -> ScanResult:
     """Find every exact site of every guide in `reference`.
 
@@ -118,6 +119,13 @@ def scan_guides(
         `ScanResult.matches` and `n_matches`: a short spacer matches
         everywhere, and the places it cannot be cut at are the bulk of
         them, but how many there were is worth knowing.
+    tolerate_5p
+        How many bases at the protospacer's PAM-distal end need not pair with
+        the genome. The exact search is that much shorter, while the
+        protospacer and its coordinates keep their declared length: 1 finds
+        the site of a guide whose designer wrote a G at position 1 where the
+        genome holds another base. What the genome holds there is reported in
+        `Site.genomic_spacer_5p` and counted nowhere, as the added G's base is.
 
     Returns
     -------
@@ -127,15 +135,16 @@ def scan_guides(
     Raises
     ------
     ValueError
-        If `pam` is not IUPAC codes, or the guides' spacers differ in length.
+        If `pam` is not IUPAC codes, the guides' spacers differ in length, or
+        `tolerate_5p` is negative or leaves no bases to search.
     OSError
         If `reference` cannot be read.
 
     Notes
     -----
-    Each distinct spacer is scanned once and its matches are given to every
-    guide that uses it, so two entries differing only in an added G cost one
-    search between them.
+    Each distinct search core is scanned once and its matches are given to
+    every guide that uses it, so two entries differing only in an added G cost
+    one search between them.
 
     `pam_only` shrinks what is held and what is written, not what is
     searched: every match is found and counted either way. The counters
@@ -148,28 +157,41 @@ def scan_guides(
     primary = patterns[0]
     if not guides:
         return ScanResult()
+    if (
+        isinstance(tolerate_5p, bool)
+        or not isinstance(tolerate_5p, int)
+        or tolerate_5p < 0
+    ):
+        raise ValueError("tolerate_5p must be a non-negative integer.")
 
+    # The core is what is searched: the spacer, less the PAM-distal bases the
+    # run tolerates. The spacer itself still decides the coordinates.
     rows_of: dict[str, list[int]] = {}
     flipped_rows: dict[str, list[int]] = {}
     for row, guide in enumerate(guides):
-        rows_of.setdefault(guide.spacer, []).append(row)
+        rows_of.setdefault(guide.spacer[tolerate_5p:], []).append(row)
         # Not reverse_complement(spacer): the trim moves to the other end, so
         # a guide with an added G reverses to a different 20-mer entirely.
         flipped = reverse_complement(guide.aligned_sequence)[-len(guide.spacer) :]
-        flipped_rows.setdefault(flipped, []).append(row)
-    spacers = list(rows_of)
-    reversed_spacers = [s for s in flipped_rows if s not in rows_of]
-    lengths = {len(spacer) for spacer in spacers}
+        flipped_rows.setdefault(flipped[tolerate_5p:], []).append(row)
+    cores = list(rows_of)
+    reversed_cores = [s for s in flipped_rows if s not in rows_of]
+    lengths = {len(core) for core in cores}
     if len(lengths) > 1:
         raise ValueError(
             "Every guide must have the same spacer length; found "
-            f"{', '.join(str(length) for length in sorted(lengths))}."
+            f"{', '.join(str(length + tolerate_5p) for length in sorted(lengths))}."
+        )
+    if min(lengths) < 1:
+        raise ValueError(
+            f"tolerate_5p={tolerate_5p} leaves no bases of a "
+            f"{tolerate_5p}-base protospacer to search."
         )
 
-    # Both directions in one pass: the second block of spacers is only there
+    # Both directions in one pass: the second block of cores is only there
     # to answer the orientation question, and never yields a site.
-    queries = spacers + reversed_spacers
-    upstream_width = max((guide.n_extra for guide in guides), default=0)
+    queries = cores + reversed_cores
+    upstream_width = tolerate_5p + max((guide.n_extra for guide in guides), default=0)
     listed = None if contigs is None else list(contigs)
     matches, counts = _core.scan_fasta(
         os.fspath(reference), queries, primary, upstream_width, listed, pam_only
@@ -180,28 +202,30 @@ def scan_guides(
     # The counts come from the scan itself rather than from the matches, so
     # they say the same thing whether or not `pam_only` returned them all.
     # The reversed readings are not sites and are not counted here.
-    for index, (found, off_end, no_pam) in enumerate(counts[: len(spacers)]):
+    for index, (found, off_end, no_pam) in enumerate(counts[: len(cores)]):
         result.n_matches += found
         result.n_off_contig_end += off_end
         result.n_no_pam += no_pam
         result.n_sites += found - off_end
-        for row in rows_of[spacers[index]]:
+        for row in rows_of[cores[index]]:
             result.matches[row] += found - off_end
 
     reversed_has_pam: set[int] = set()
     for index, chrom, start, strand, genomic_pam, upstream, matched in matches:
-        if index >= len(spacers):
+        if index >= len(cores):
             # Only evidence that the reversed reading could cut somewhere.
             if matched:
                 reversed_has_pam.update(flipped_rows[queries[index]])
             continue
         if len(genomic_pam) != len(primary):
             continue
-        for row in rows_of[spacers[index]]:
+        for row in rows_of[cores[index]]:
             guide = guides[row]
-            result.sites.setdefault(row, []).append(
-                _site(guide, chrom, start, strand, genomic_pam, upstream, primary)
+            site = _site(
+                guide, chrom, start, strand, genomic_pam, upstream, primary, tolerate_5p
             )
+            if site is not None:
+                result.sites.setdefault(row, []).append(site)
 
     for row, guide in enumerate(guides):
         verdict = _verdict(
@@ -225,29 +249,56 @@ def _site(
     genomic_pam: str,
     upstream: str,
     pam: str,
-) -> Site:
-    """One match, as a `Site`. An exact match has no mismatches by definition."""
+    tolerate_5p: int = 0,
+) -> Site | None:
+    """One match, as a `Site`, or None when no whole protospacer fits here.
+
+    The core matched exactly, so the genome can differ only at the
+    `tolerate_5p` bases the search left out, which it supplies here. `start`
+    is the core's left end, and the tolerated bases lie 5' of it: on ``+``
+    that is the lower coordinate, on ``-`` the higher one.
+    """
+    needed = tolerate_5p + guide.n_extra
+    flank = upstream[len(upstream) - needed :] if needed else ""
+    if len(flank) < tolerate_5p:
+        # The protospacer would run off the contig, so there is no site here.
+        return None
+    genomic_5p = flank[len(flank) - tolerate_5p :] if tolerate_5p else ""
+    before = flank[: len(flank) - tolerate_5p]
     extra = guide.aligned_sequence[: guide.n_extra]
     # The core returns an empty flank when it would run off the contig, so a
     # guide with a 5' base matching at base 0 has nothing under that base.
     genomic_extra = (
-        upstream[-guide.n_extra :]
-        if guide.n_extra and len(upstream) >= guide.n_extra
+        before[-guide.n_extra :]
+        if guide.n_extra and len(before) >= guide.n_extra
         else None
     )
+    genomic_protospacer = genomic_5p + guide.spacer[tolerate_5p:]
+    # The core matched exactly, so only the tolerated positions can differ.
+    mismatches = tuple(
+        position + 1
+        for position, (want, found) in enumerate(
+            zip(guide.spacer[:tolerate_5p], genomic_5p, strict=True)
+        )
+        if want != found
+    )
+    first = start - tolerate_5p if strand == "+" else start
     return Site(
         guide_id=guide.guide_id,
         chr=chrom,
-        start=start,
-        end=start + len(guide.spacer),
+        start=first,
+        end=first + len(guide.spacer),
         strand=strand,
         pam=genomic_pam,
         pam_class=pam if pattern_matches(genomic_pam, pam) else NO_PAM_CLASS,
-        n_mismatches=0,
-        mismatch_positions=(),
-        mapped_sequence=(_kept(extra, genomic_extra) + guide.spacer + genomic_pam),
-        genomic_protospacer=guide.spacer,
+        n_mismatches=len(mismatches),
+        mismatch_positions=mismatches,
+        mapped_sequence=(
+            _kept(extra, genomic_extra) + genomic_protospacer + genomic_pam
+        ),
+        genomic_protospacer=genomic_protospacer,
         genomic_5p_base=genomic_extra,
+        genomic_spacer_5p=genomic_5p,
     )
 
 

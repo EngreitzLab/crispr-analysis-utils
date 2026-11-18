@@ -55,6 +55,20 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         help="The protospacer length, 3'-most in each sequence (default: 20).",
     )
     search.add_argument(
+        "--tolerate-5p",
+        type=int,
+        default=0,
+        metavar="N",
+        help=(
+            "Search only the 3'-most spacer_length - N bases exactly, letting "
+            "the N PAM-distal protospacer bases differ from the genome. "
+            "Coordinates, accessions and the protospacer are unchanged; "
+            "genomic_spacer_5p reports what the genome holds there. Use 1 for "
+            "a library whose designer wrote a G at position 1 where no "
+            "G-starting protospacer existed (default: 0)."
+        ),
+    )
+    search.add_argument(
         "--add-leading-g",
         action="store_true",
         help=(
@@ -141,6 +155,7 @@ def run(args: argparse.Namespace) -> int:
             args.outdir,
             pam=args.pam,
             spacer_length=args.spacer_length,
+            tolerate_5p=args.tolerate_5p,
             add_leading_g=args.add_leading_g,
             orientation_check=args.orientation_check,
             fix_orientation=args.fix_orientation,
