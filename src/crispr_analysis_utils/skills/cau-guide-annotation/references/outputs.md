@@ -18,7 +18,9 @@ always an accurate data dictionary of the folder it sits in.
 
 **One row per mapped site per overlapping gene.** A site in two genes gets
 two rows; a site in none gets one row, `intergenic`, with the gene columns
-empty. Only sites with a PAM are annotated.
+empty. Only the sites the guide's class counts are annotated: the alignment
+table's `best_site` rows, or its `pam_matches` rows in a table written before
+`best_site` existed.
 
 | Column | Holds |
 | --- | --- |

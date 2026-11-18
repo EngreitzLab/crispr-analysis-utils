@@ -472,11 +472,7 @@ def build_table(
         ("strand", "strand"),
     ):
         out[column] = rows[source].reindex(out.index).where(mapped)
-    out["pam"] = (
-        guides["mapped_sequence"]
-        .str[-3:]
-        .where(mapped & guides["mapped_sequence"].notna())
-    )
+    out["pam"] = _site_pams(alignment, rows).reindex(out.index).where(mapped)
 
     for column, source in (
         ("element_location", "element_location"),
@@ -499,6 +495,29 @@ def build_table(
     ):
         out[column] = out[column].astype("Float64").astype("Int64")
     return out.reset_index(drop=True)[list(COLUMNS)]
+
+
+def _site_pams(alignment: pd.DataFrame, rows: pd.DataFrame) -> pd.Series:
+    """The genomic PAM at each guide's chosen site, indexed by guide_id.
+
+    It comes from that site's own alignment row, matched on the guide and the
+    four site columns. A guide's first row can be another of its sites, whose
+    PAM need not even match.
+    """
+    key = ["guide_id", "chr", "start", "end", "strand"]
+
+    def placed(frame: pd.DataFrame) -> pd.DataFrame:
+        frame = frame[frame["chr"].notna() & (frame["chr"].astype(str) != "")]
+        return frame.assign(
+            chr=frame["chr"].astype(str),
+            start=pd.to_numeric(frame["start"]).astype("int64"),
+            end=pd.to_numeric(frame["end"]).astype("int64"),
+        )
+
+    sites = placed(alignment)[[*key, "mapped_sequence"]].drop_duplicates(key)
+    chosen = placed(rows.reset_index())[key]
+    found = chosen.merge(sites, on=key, how="left", validate="one_to_one")
+    return found.set_index("guide_id")["mapped_sequence"].str[-3:]
 
 
 def _chosen_rows(mapping: pd.DataFrame, elements: pd.DataFrame) -> pd.DataFrame:

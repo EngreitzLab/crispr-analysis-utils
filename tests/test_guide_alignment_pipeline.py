@@ -50,6 +50,7 @@ SITE_COLUMNS = (
     "strand",
     "target_site",
     "pam_matches",
+    "best_site",
     "paired_5p",
     "mapped_sequence",
 )
@@ -176,7 +177,7 @@ def test_run_writes_every_output(setup):
     assert len(guides["g_g"]) == 2
     (g_nt,) = guides["g_nt"]
     assert g_nt["site_class"] == "no_site"
-    assert [g_nt[name] for name in SITE_COLUMNS] == [""] * 8
+    assert [g_nt[name] for name in SITE_COLUMNS] == [""] * len(SITE_COLUMNS)
     (g_dup,) = guides["g_dup"]
     assert g_dup["guide_id"] == g_a["guide_id"]
     assert g_dup["start"] == str(a_start)
@@ -331,7 +332,7 @@ def test_a_pam_running_off_a_contig_end_is_counted_not_reported(tmp_path):
     )
     # Nothing was kept, so the guide gets its one row with no site in it.
     (row,) = table(result.outdir / "alignments" / "guide_genome_annotation.tsv")
-    assert [row[name] for name in SITE_COLUMNS] == [""] * 8
+    assert [row[name] for name in SITE_COLUMNS] == [""] * len(SITE_COLUMNS)
     assert (row["n_matches"], row["n_target_sites"]) == ("0", "0")
     assert result.summaries[0].site_class == "no_site"
     assert result.summaries[0].orientation == "no_match"

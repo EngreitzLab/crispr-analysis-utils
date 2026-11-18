@@ -165,6 +165,13 @@ def test_a_table_without_a_pam_column_annotates_every_row(store, tmp_path):
     assert run(frame, store, tmp_path / "out").metadata["counts"]["sites"] == 4
 
 
+def test_only_the_sites_the_class_counts_are_annotated(store, tmp_path):
+    # Every PAM-bearing site but the exon one is outranked by another site.
+    frame = sites_frame(*SITES)
+    frame["best_site"] = [True, False, False, False]
+    assert run(frame, store, tmp_path / "out").metadata["counts"]["sites"] == 1
+
+
 def test_nothing_mapped_is_an_annotation_error(store, tmp_path):
     rows = [site("no_pam", "chr1", 1700, "+", pam_matches=False)]
     with pytest.raises(AnnotationError, match="holds no mapped site"):
