@@ -67,8 +67,10 @@ describes it, generated from the same definitions. See
 Seven things trip people up:
 
 - **One row per site per gene.** A site in two overlapping genes gets two
-  rows, so the row count is not the site count. Only the sites with a PAM are
-  annotated, so a multi-mapper appears once per cuttable site.
+  rows, so the row count is not the site count. Only the sites the guide's
+  class counts are annotated (`best_site` in the alignment table, or
+  `pam_matches` in one written before it), so a multi-mapper appears once per
+  such site.
 - **`location`, `feature` and `promoter` are three axes, not one.**
   `location` is `genic` or `intergenic`, `feature` is `exon` or `intron`
   inside the reference transcript, and `promoter` is independent of both: a

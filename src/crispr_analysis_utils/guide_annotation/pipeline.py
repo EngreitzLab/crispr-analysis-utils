@@ -209,7 +209,11 @@ def _run(
 
 
 def _read_sites(alignment: str | os.PathLike[str] | pd.DataFrame) -> pd.DataFrame:
-    """The alignment table's mapped sites: the rows whose genomic PAM matched."""
+    """The alignment table's mapped sites: those the guide's class counts.
+
+    Those are the rows `best_site` marks, or, in a table written before that
+    column, every row whose genomic PAM matched.
+    """
     if isinstance(alignment, pd.DataFrame):
         frame = alignment.copy()
     else:
@@ -218,9 +222,9 @@ def _read_sites(alignment: str | os.PathLike[str] | pd.DataFrame) -> pd.DataFram
             raise FileNotFoundError(f"The alignment table {path} does not exist.")
         frame = pd.read_csv(path, sep="\t", dtype={"chr": str}, low_memory=False)
 
-    if "pam_matches" in frame:
-        matched = frame["pam_matches"]
-        frame = frame[matched.map(_truthy).fillna(False)]
+    flag = "best_site" if "best_site" in frame else "pam_matches"
+    if flag in frame:
+        frame = frame[frame[flag].map(_truthy).fillna(False)]
     frame = frame[frame["chr"].notna()] if "chr" in frame else frame
     if frame.empty:
         raise AnnotationError(
