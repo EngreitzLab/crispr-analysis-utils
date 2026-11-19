@@ -25,10 +25,17 @@ detail; this one decides which step the user is actually asking for.
 | 3. Which element of the screen does it test? | `cau element-mapping run` | `cau-element-mapping` |
 | 4. Write the IGVF table | `cau igvf-export run` | `cau-igvf-export` |
 
+From the same `guide_metadata.tsv`, `cau pairs run` (skill `cau-pairs`)
+builds the discovery and positive-control pairs an inference tests. It needs
+the readout genes and nothing sequenced.
+
 Once a screen has been sequenced, `cau-mudata-builder` assembles a channel's
 gene and guide counts into one MuData, taking `guide_metadata.tsv` from step 4
 as the guide annotation. It assembles only: no statistics, no filtering, no
-guide calls.
+guide calls. After the `cau-qc` pass and a guide call per channel,
+`cau inference-input run` (skill `cau-inference-input`) joins the channels
+into one object with the pairs from `cau pairs` attached, ready for the
+inference.
 
 Two modules sit outside the chain and need no predecessor:
 `cau-accession` (a lab-independent id encoded from the protospacer) and
@@ -105,3 +112,7 @@ A step whose inputs are missing is a request for the step before it.
 - A question about one guide's identity across libraries: `cau-accession`,
   no chain needed.
 - A count matrix to normalize: `cau-normalization`, no chain needed.
+- The guide table and a readout gene list, and the question is what to test:
+  `cau-pairs`.
+- QC'd channels with guide calls, and pairs, and the question is the object
+  an inference reads: `cau-inference-input`.

@@ -927,3 +927,146 @@ def test_the_caption_refuses_to_call_a_channels_gap_a_library_gap():
     _, _, caption = guide_abundance(guide_counts(guide_library()))
     assert "over 4 cells" in caption
     assert "channels pooled" in caption
+
+
+# --- knees across channels -----------------------------------------------------
+
+
+def test_a_knee_curve_keeps_exact_counts_at_log_spaced_ranks():
+    from crispr_analysis_utils.qc import knee_curve
+
+    umis = np.array([0, 5, 100, 3, 0, 40, 1000])
+    curve = knee_curve(umis, n_points=50)
+    assert list(curve["rank"]) == [1, 2, 3, 4, 5]
+    assert list(curve["umis"]) == [1000, 100, 40, 5, 3]
+    assert knee_curve(np.zeros(4)).empty
+
+
+def test_a_knee_curve_of_many_barcodes_keeps_its_ends():
+    from crispr_analysis_utils.qc import knee_curve
+
+    umis = np.arange(1, 100_001)
+    curve = knee_curve(umis, n_points=100)
+    assert len(curve) <= 100
+    assert curve["rank"].iloc[0] == 1 and curve["umis"].iloc[0] == 100_000
+    assert curve["rank"].iloc[-1] == 100_000 and curve["umis"].iloc[-1] == 1
+
+
+def _curves():
+    rows = []
+    for channel, day, scale, n in (
+        ("c1", "0", 1.0, 1000),
+        ("c2", "0", 4.0, 800),
+        ("c3", "2", 2.0, 1000),
+    ):
+        rank = np.arange(1, n + 1)
+        rows.append(
+            pd.DataFrame(
+                {
+                    "channel": channel,
+                    "day": day,
+                    "rank": rank,
+                    "umis": scale * 1e4 / rank,
+                }
+            )
+        )
+    return pd.concat(rows, ignore_index=True)
+
+
+def test_the_overlay_mean_is_geometric_and_stops_where_a_channel_runs_out():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    figure, numbers, caption = knee_overlay(_curves(), group="day", floor=100)
+    mean = numbers[numbers["panel"] == "mean"]
+    day0 = mean[mean["group"] == "0"]
+    # c1 and c2 are 1x and 4x the same curve: the geometric mean is 2x.
+    first = day0.iloc[0]
+    assert first["rank"] == 1
+    assert 10 ** first["mean_log10_umis"] == pytest.approx(2e4)
+    assert day0["rank"].max() <= 800
+    assert set(mean["n_channels"]) == {1, 2}
+    assert "3 channels (2 in 0, 1 in 2)" in caption
+    assert "floor of 100 UMIs" in caption
+    assert len(figure.axes) == 2
+
+
+def test_the_overlay_refuses_more_groups_than_colours_stay_apart():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    curves = pd.concat(
+        [_curves().assign(channel=f"c{i}", day=str(i)) for i in range(5)]
+    )
+    with pytest.raises(FigureError, match="at most 4"):
+        knee_overlay(curves, group="day")
+
+
+def test_the_overlay_needs_its_columns():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    with pytest.raises(FigureError, match="lack day"):
+        knee_overlay(_curves().drop(columns="day"), group="day")
+
+
+def test_the_overlay_without_groups_draws_one_mean_over_every_channel():
+    from crispr_analysis_utils.qc import knee_overlay
+
+    _, numbers, caption = knee_overlay(_curves(), floor=100)
+    mean = numbers[numbers["panel"] == "mean"]
+    assert set(mean["group"]) == {"all"}
+    assert set(mean["n_channels"]) == {3}
+    assert caption.startswith("(a) Barcode-rank curves of 3 channels, both axes")
+
+
+def test_the_density_counts_every_cell_once_and_reports_zeros_and_quadrants():
+    from crispr_analysis_utils.qc import metric_density
+
+    rng = np.random.default_rng(0)
+    frame = pd.DataFrame(
+        {
+            "gene": np.r_[
+                10 ** rng.normal(3.5, 0.2, 500),
+                10 ** rng.normal(2.3, 0.2, 300),
+                [500.0],
+            ],
+            "guide": np.r_[
+                10 ** rng.normal(3.0, 0.3, 500), 10 ** rng.normal(1.3, 0.2, 300), [0.0]
+            ],
+        }
+    )
+    _, numbers, caption = metric_density(
+        frame, "gene", "guide", x_threshold=1000, y_threshold=150
+    )
+    assert numbers["cells"].sum() == 800
+    assert "1 cell holds a zero" in caption
+    assert "for 801 cells" in caption
+    assert "both below" in caption
+
+
+def test_the_density_gives_every_low_integer_count_its_own_bin():
+    from crispr_analysis_utils.qc import metric_density
+
+    rng = np.random.default_rng(1)
+    frame = pd.DataFrame(
+        {
+            "gene": np.round(10 ** rng.uniform(2, 4, 2000)),
+            "guide": rng.integers(1, 8, 2000).astype(float),
+        }
+    )
+    _, numbers, caption = metric_density(frame, "gene", "guide", bins=120)
+    per_value = numbers.groupby("guide_low")["cells"].sum()
+    assert len(per_value) == 7
+    assert np.allclose(per_value.index.to_numpy(), np.arange(1, 8) - 0.5)
+    assert per_value.sum() == 2000
+    assert "divided by its size" in caption
+
+    _, _, caption = metric_density(frame, "gene", "guide", x_threshold=1000)
+    above = int((frame["gene"] >= 1000).sum())
+    assert f"{above:,} cells at or above it, {2000 - above:,} below" in caption
+    assert "quadrant" not in caption
+
+
+def test_the_density_needs_a_cell_above_zero():
+    from crispr_analysis_utils.qc import metric_density
+
+    with pytest.raises(FigureError, match="above zero"):
+        metric_density(pd.DataFrame({"a": [0.0], "b": [1.0]}), "a", "b")

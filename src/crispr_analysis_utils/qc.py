@@ -240,6 +240,235 @@ def knee(data, modalities: tuple[str, ...] = ("gene", "guide")):
     return figure, numbers, caption
 
 
+KNEE_POINTS = 400
+"""Ranks a stored knee curve keeps, log-spaced: enough to redraw it exactly."""
+
+GROUP_COLOURS = (OKABE_ITO[4], OKABE_ITO[0], OKABE_ITO[2], OKABE_ITO[6])
+"""Fixed slots for up to four groups. No yellow: a thin line on white loses it."""
+
+
+def knee_curve(umis, n_points: int = KNEE_POINTS) -> pd.DataFrame:
+    """A channel's barcode-rank curve at log-spaced ranks.
+
+    A million barcodes are too many to keep per channel and too many to draw
+    110 times; a few hundred ranks spaced evenly on the log axis draw the same
+    curve. Each kept point is the exact UMI count at that rank: the curve is
+    sampled, not smoothed.
+
+    Parameters
+    ----------
+    umis : array-like
+        Total UMIs per barcode, as `umis_per_cell` returns.
+    n_points : int
+        How many ranks to keep, at most.
+
+    Returns
+    -------
+    pandas.DataFrame
+        ``rank`` (1 is the deepest barcode) and ``umis``, over the barcodes
+        with at least one UMI. Empty when there are none.
+    """
+    values = np.asarray(umis, dtype=float)
+    ranked = np.sort(values[values > 0])[::-1]
+    if not len(ranked):
+        return pd.DataFrame(
+            {"rank": pd.Series(dtype=int), "umis": pd.Series(dtype=int)}
+        )
+    ranks = np.unique(np.geomspace(1, len(ranked), n_points).round().astype(int))
+    return pd.DataFrame({"rank": ranks, "umis": ranked[ranks - 1].astype(int)})
+
+
+def knee_overlay(
+    curves: pd.DataFrame,
+    group: str | None = None,
+    floor: float | None = None,
+    ylabel: str = "gene UMIs per barcode",
+):
+    """Many channels' knees on one panel, and each group's mean beside it.
+
+    Small multiples of a hundred knees are a hundred figures to read; one
+    panel shows how they spread, and the second says where a group sits on
+    average and how much its channels vary.
+
+    Parameters
+    ----------
+    curves : pandas.DataFrame
+        One row per point: ``channel``, ``rank``, ``umis``, and the `group`
+        column, as `knee_curve` gives per channel.
+    group : str, optional
+        Column to colour by, such as ``day``. At most four groups.
+    floor : float, optional
+        A UMI floor, drawn as a dashed line on both panels.
+    ylabel : str
+        What the UMIs are, for the axis.
+
+    Returns
+    -------
+    tuple
+        The figure, the numbers (every channel's points, then each group's
+        mean and spread by rank), and the caption, ready for `publish`.
+
+    Raises
+    ------
+    FigureError
+        No curve, a column missing, or more than four groups.
+
+    Notes
+    -----
+    The mean is of log10 UMIs, so it is a geometric mean, and the band is one
+    standard deviation of log10 UMIs either side. A group's mean is drawn
+    only at ranks every one of its channels reaches, so the line never
+    averages over a channel that has run out of barcodes.
+    """
+    plt = style()
+    needed = {"channel", "rank", "umis"} | ({group} if group else set())
+    missing = needed - set(curves.columns)
+    if missing:
+        raise FigureError(f"The curves lack {', '.join(sorted(missing))}.")
+    curves = curves[curves["umis"] > 0]
+    if curves.empty:
+        raise FigureError("No curve has a barcode with a UMI.")
+
+    labels = (
+        curves[group].astype(str) if group else pd.Series("all", index=curves.index)
+    )
+    if group and isinstance(curves[group].dtype, pd.CategoricalDtype):
+        names = [str(c) for c in curves[group].cat.categories if str(c) in set(labels)]
+    else:
+        names = sorted(pd.unique(labels), key=_natural)
+    if len(names) > len(GROUP_COLOURS):
+        raise FigureError(
+            f"{len(names)} groups; at most {len(GROUP_COLOURS)} colours stay"
+            " distinguishable. Facet, or fold the rest into one group."
+        )
+    colour = dict(zip(names, GROUP_COLOURS, strict=False))
+    # One group needs no colour: grey curves and a dark mean say it all.
+    line = (
+        {name: ("0.55", 0.35) for name in names}
+        if not group
+        else {name: (colour[name], 0.45) for name in names}
+    )
+    if not group:
+        colour = {name: "0.15" for name in names}
+
+    figure, (left, right) = plt.subplots(
+        1, 2, figsize=(7.2, 3.4), sharey=True, gridspec_kw={"wspace": 0.08}
+    )
+    figure.subplots_adjust(left=0.1, right=0.98, bottom=0.15, top=0.9)
+    channels = curves.assign(_group=labels).groupby("channel", sort=False)
+    n_channels = {name: 0 for name in names}
+    for _, part in channels:
+        name = part["_group"].iloc[0]
+        n_channels[name] += 1
+        left.plot(
+            part["rank"],
+            part["umis"],
+            color=line[name][0],
+            linewidth=0.5,
+            alpha=line[name][1],
+        )
+
+    top = curves["rank"].max()
+    grid = np.unique(np.geomspace(1, top, 200).round().astype(int))
+    summaries = []
+    for name in names:
+        logs = []
+        for _, part in channels:
+            if part["_group"].iloc[0] != name:
+                continue
+            reach = grid <= part["rank"].max()
+            values = np.full(len(grid), np.nan)
+            values[reach] = np.interp(
+                np.log10(grid[reach]),
+                np.log10(part["rank"].to_numpy(dtype=float)),
+                np.log10(part["umis"].to_numpy(dtype=float)),
+            )
+            logs.append(values)
+        stack = np.vstack(logs)
+        every = ~np.isnan(stack).any(axis=0)
+        mean = stack[:, every].mean(axis=0)
+        sd = stack[:, every].std(axis=0, ddof=1) if len(stack) > 1 else 0 * mean
+        ranks = grid[every]
+        right.fill_between(
+            ranks,
+            10 ** (mean - sd),
+            10 ** (mean + sd),
+            color=colour[name] if group else "0.6",
+            alpha=0.25 if group else 0.4,
+            linewidth=0,
+        )
+        right.plot(ranks, 10**mean, color=colour[name], linewidth=1.5, label=name)
+        summaries.append(
+            pd.DataFrame(
+                {
+                    "panel": "mean",
+                    "group": name,
+                    "rank": ranks,
+                    "mean_log10_umis": mean,
+                    "sd_log10_umis": sd,
+                    "n_channels": len(stack),
+                }
+            )
+        )
+
+    for axis in (left, right):
+        axis.set(xscale="log", yscale="log", xlabel="barcode rank")
+        axis.grid(axis="x", visible=False)
+        if floor is not None:
+            axis.axhline(floor, color="0.3", linewidth=0.8, linestyle="--")
+    left.set_ylabel(ylabel)
+    if floor is not None:
+        left.annotate(
+            f"floor {floor:,g}",
+            xy=(1, floor),
+            xytext=(3, 3),
+            textcoords="offset points",
+            fontsize=8,
+            color="0.3",
+        )
+    if group:
+        right.legend(frameon=False, fontsize=8)
+    for letter, axis in (("a", left), ("b", right)):
+        axis.text(
+            -0.02 if axis is right else -0.16,
+            1.04,
+            letter,
+            transform=axis.transAxes,
+            fontweight="bold",
+            fontsize=11,
+            va="bottom",
+        )
+
+    points = curves.assign(panel="channels", group=labels)[
+        ["panel", "group", "channel", "rank", "umis"]
+    ]
+    numbers = pd.concat([points, *summaries], ignore_index=True)
+    counted = ", ".join(f"{n_channels[name]} in {name}" for name in names)
+    by = f" by {group}" if group else ""
+    total = sum(n_channels.values())
+    caption = (
+        f"(a) Barcode-rank curves of {total} channel{'s' * (total != 1)}"
+        f"{f' ({counted}), coloured{by}' if group else ''}, both axes logarithmic; each curve is the"
+        " channel's barcodes with at least one UMI. (b) The mean of log10 UMIs"
+        f" at each rank{by}, with one standard deviation either side shaded,"
+        " drawn only at ranks every channel of the group reaches."
+        + (
+            f" The dashed line is the floor of {floor:,g} UMIs."
+            if floor is not None
+            else ""
+        )
+    )
+    return figure, numbers, caption
+
+
+def _natural(value: str):
+    """Sort "2" before "10": a number as a number, anything else as text."""
+    try:
+        return (0, float(value), "")
+    except ValueError:
+        return (1, 0.0, value)
+
+
 def mad_outlier(
     values,
     nmads: float = 5.0,
@@ -803,6 +1032,195 @@ def metric_scatter(
             "by the drawn column, and are counted in the quadrants above."
         )
     return figure, numbers, caption
+
+
+def metric_density(
+    frame: pd.DataFrame,
+    x: str,
+    y: str,
+    x_threshold: float | None = None,
+    y_threshold: float | None = None,
+    bins: int = 120,
+    xlabel: str | None = None,
+    ylabel: str | None = None,
+):
+    """Two count metrics against each other as a density, both axes log.
+
+    `metric_scatter` draws a point per cell, which at a hundred thousand
+    cells is a solid block that hides where the cells are. This counts the
+    cells in each bin and colours the bin, so the populations and the
+    valleys between them show.
+
+    Parameters
+    ----------
+    frame : pandas.DataFrame
+        One row per cell, with columns `x` and `y`. Rows with ``NaN`` in
+        either are dropped.
+    x, y : str
+        The two metrics, both counts.
+    x_threshold, y_threshold : float, optional
+        Cuts, drawn as dashed lines; the caption counts the cells in each
+        quadrant they make.
+    bins : int
+        Bins per axis, evenly spaced on the log scale. On an axis whose
+        values are all whole numbers the edges move to the nearest half
+        integer, so a low count never falls in a bin no integer can reach.
+    xlabel, ylabel : str, optional
+        Axis labels; the column names by default.
+
+    Returns
+    -------
+    tuple
+        The figure, the numbers (one row per non-empty bin: its edges and
+        the cells in it), and the caption, ready for `publish`.
+
+    Raises
+    ------
+    FigureError
+        A column is missing, or no cell has both metrics above zero.
+
+    Notes
+    -----
+    A zero cannot sit on a log axis. Such cells are left out of the bins and
+    the margins, counted in the caption, and still counted against the cuts.
+
+    Moving the edges to half integers widens the bins at low counts, so each
+    bin's count, and each margin bar, is divided by its size relative to an
+    even bin. That keeps the colour a density rather than a bin width.
+    """
+    import matplotlib.colors as mcolors
+
+    plt = style()
+    for name in (x, y):
+        if name not in frame:
+            raise FigureError(f"{name!r} is not a column of the frame.")
+    measured = frame[[x, y]].dropna()
+    xs = measured[x].to_numpy(dtype=float)
+    ys = measured[y].to_numpy(dtype=float)
+    drawn = (xs > 0) & (ys > 0)
+    if not drawn.any():
+        raise FigureError("No cell has both metrics above zero.")
+
+    lx, ly = np.log10(xs[drawn]), np.log10(ys[drawn])
+    x_edges, x_size = _density_edges(xs[drawn], lx, bins)
+    y_edges, y_size = _density_edges(ys[drawn], ly, bins)
+    counts, _, _ = np.histogram2d(lx, ly, bins=(x_edges, y_edges))
+    scaled = counts / np.outer(x_size, y_size)
+
+    figure = plt.figure(figsize=(6.0, 6.0))
+    grid = figure.add_gridspec(
+        2, 3, width_ratios=(5, 1, 0.18), height_ratios=(1, 5), wspace=0.05, hspace=0.05
+    )
+    axis = figure.add_subplot(grid[1, 0])
+    top = figure.add_subplot(grid[0, 0], sharex=axis)
+    right = figure.add_subplot(grid[1, 1], sharey=axis)
+    bar_axis = figure.add_subplot(grid[1, 2])
+
+    shown = np.ma.masked_where(counts.T == 0, scaled.T)
+    mesh = axis.pcolormesh(
+        10**x_edges,
+        10**y_edges,
+        shown,
+        cmap="cividis",
+        norm=mcolors.LogNorm(vmin=min(1, shown.min()), vmax=max(2, shown.max())),
+        rasterized=True,
+    )
+    colourbar = figure.colorbar(mesh, cax=bar_axis)
+    colourbar.set_label("cells per bin")
+    axis.set(xscale="log", yscale="log", xlabel=xlabel or x, ylabel=ylabel or y)
+    axis.grid(False)
+    top.stairs(counts.sum(axis=1) / x_size, 10**x_edges, fill=True, color="0.55")
+    right.stairs(
+        counts.sum(axis=0) / y_size,
+        10**y_edges,
+        fill=True,
+        color="0.55",
+        orientation="horizontal",
+    )
+    for margin in (top, right):
+        margin.grid(False)
+        margin.tick_params(labelbottom=False, labelleft=False)
+    top.spines["left"].set_visible(False)
+    top.set_yticks([])
+    right.spines["bottom"].set_visible(False)
+    right.set_xticks([])
+
+    above_x = xs >= x_threshold if x_threshold is not None else np.ones(len(xs), bool)
+    above_y = ys >= y_threshold if y_threshold is not None else np.ones(len(ys), bool)
+    for threshold, line in ((x_threshold, axis.axvline), (y_threshold, axis.axhline)):
+        if threshold is not None:
+            line(threshold, color="white", linewidth=1.0, linestyle="--")
+    if x_threshold is not None:
+        top.axvline(x_threshold, color="0.3", linewidth=0.8, linestyle="--")
+    if y_threshold is not None:
+        right.axhline(y_threshold, color="0.3", linewidth=0.8, linestyle="--")
+
+    i, j = np.nonzero(counts)
+    numbers = pd.DataFrame(
+        {
+            f"{x}_low": 10 ** x_edges[i],
+            f"{x}_high": 10 ** x_edges[i + 1],
+            f"{y}_low": 10 ** y_edges[j],
+            f"{y}_high": 10 ** y_edges[j + 1],
+            "cells": counts[i, j].astype(int),
+            "cells_per_even_bin": scaled[i, j],
+        }
+    )
+    quadrants = {
+        "both above": int((above_x & above_y).sum()),
+        f"{x} below only": int((~above_x & above_y).sum()),
+        f"{y} below only": int((above_x & ~above_y).sum()),
+        "both below": int((~above_x & ~above_y).sum()),
+    }
+    cut = []
+    if x_threshold is not None:
+        cut.append(f"{x} {x_threshold:,g}")
+    if y_threshold is not None:
+        cut.append(f"{y} {y_threshold:,g}")
+    caption = (
+        f"{y} against {x} for {len(measured):,} cells, both axes logarithmic;"
+        f" colour is the number of cells per bin ({bins} bins per axis), and the"
+        " margins are each metric's own distribution."
+    )
+    if (x_size > 1).any() or (y_size > 1).any():
+        caption += (
+            " At low counts a bin spans whole numbers, so it is wider than the rest and"
+            " its count is divided by its size relative to an even bin."
+        )
+    if len(cut) == 2:
+        caption += (
+            f" Dashed lines are the cuts ({', '.join(cut)}). Cells per quadrant: "
+            + ", ".join(f"{name} {n:,}" for name, n in quadrants.items())
+            + "."
+        )
+    elif cut:
+        above = above_x if x_threshold is not None else above_y
+        caption += (
+            f" The dashed line is the cut ({cut[0]}): {int(above.sum()):,} cells at or"
+            f" above it, {int((~above).sum()):,} below."
+        )
+    zeros = int((~drawn).sum())
+    if zeros:
+        caption += (
+            f" {zeros:,} {'cell holds' if zeros == 1 else 'cells hold'} a zero, which a log axis cannot"
+            " show; they are left out of the bins but counted against the cuts."
+        )
+    return figure, numbers, caption
+
+
+def _density_edges(values: np.ndarray, logs: np.ndarray, bins: int):
+    """Log-spaced bin edges for `metric_density`, and each bin's size.
+
+    For whole-number values the edges move to the nearest half integer, and
+    duplicates merge. The size is each bin's log width over an even bin's.
+    """
+    even = np.linspace(logs.min(), logs.max(), bins + 1)
+    if not np.array_equal(values, np.round(values)):
+        return even, np.ones(bins)
+    linear = np.unique(np.append(np.round(10**even) - 0.5, values.max() + 0.5))
+    edges = np.log10(linear)
+    width = (even[-1] - even[0]) / bins if even[-1] > even[0] else 1.0
+    return edges, np.diff(edges) / width
 
 
 def mean_upm(counts) -> np.ndarray:

@@ -8,6 +8,10 @@ screens, imported as `import crispr_analysis_utils as cau`.
 - [Gene annotation](guide-annotation.md): place those sites in genes.
 - [Element mapping](element-mapping.md): map guides to the elements a screen targets.
 - [IGVF export](igvf-export.md): write the design in the IGVF per-guide format.
+- [Pairs to test](pairs.md): the discovery and positive-control pairs.
+- [MuData builder](mudata-builder.md): a channel's gene and guide counts as one MuData.
+- [Inference input](inference-input.md): QC'd channels with guide calls as
+  one inference object.
 - [Agents and skills](agents-and-skills.md): use the package from Claude Code.
 - [API reference](reference/index.md): every public function, from its
   docstring.

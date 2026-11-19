@@ -38,6 +38,14 @@ COMMANDS: dict[str, tuple[str, str]] = {
         "igvf_export",
         "Write the guide design in the IGVF per-guide metadata format.",
     ),
+    "pairs": (
+        "pairs",
+        "Build the discovery and positive-control pairs a screen tests.",
+    ),
+    "inference-input": (
+        "inference_input",
+        "Join QC'd channels with guide calls into one inference object.",
+    ),
     "mudata-builder": (
         "mudata_builder",
         "Assemble a gene and a guide count matrix into one MuData.",

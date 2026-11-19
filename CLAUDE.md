@@ -54,6 +54,10 @@ per platform serves every supported Python rather than one per version.
     - `igvf_export.py`    -- the guide design in the IGVF per-guide metadata
                              format, for submission or for the CRISPR
                              Perturb-seq pipeline.
+    - `pairs.py`          -- the discovery and positive-control pairs an
+                             inference tests, from that table.
+    - `inference_input.py` -- QC'd channels with guide calls, joined into the
+                             object an inference reads, pairs attached.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
     - `_files.py`         -- checksums, gzip sniffing, atomic JSON. Shared by
                              both pipelines.
@@ -258,6 +262,35 @@ and narrowing it would buy nothing.
       bidirectional promoter loses neither;
     - `pam` is the genome's own bases. A file with `NGG` in every row has not
       reported a PAM, and a released IGVF file does exactly that.
+- **`pairs` decides a pair per element, and only `type` makes a positive
+  control.** A peak within 2 kb of a TSS is `promoter` in the IGVF table but
+  pairs with its gene as `discovery`: proximity is not a known effect. An
+  element and gene that are a positive control's are `positive_control` for
+  every guide of that element. The gene id column is `gene_id`, the name
+  the inference object uses, and stays so: the CRISPR pipeline's
+  `INFERENCE_predefined_pairs_to_test` wants it called `gene_name` and
+  crashes on a `gene_id` column, and that route is not supported. The symbol
+  column is `gene_symbol`.
+- **`inference_input` copies the pipeline's rules, so check it against them:**
+    - `target_keys` reimplements the pipeline's
+      `intended_target_key_utils.annotate_intended_target_groups` rather than
+      importing it (the pipeline is not a package). On R1-D4-A-b1 the keys and
+      `non-targeting|N` buckets matched it guide for guide, and the
+      pipeline's `prepare_inference.main` kept the same 500,203 pairs and
+      covariates. Change either and rerun that comparison;
+    - the pipeline's `~targeting` crashes on a categorical `TRUE`/`FALSE`
+      column, which is how the guide var reads back from an h5mu. Our copy
+      coerces;
+    - it never calls guides. A missing or non-binary `guide_assignment`
+      layer is refused, because how a guide is called is the analysis's
+      decision;
+    - a pair whose element disagrees with its guide's is refused, not
+      dropped: it means the pairs came from another guide table. Start and
+      end are compared as numbers, since a CSV column with a gap reads as
+      float;
+    - the pipeline's `--INFERENCE_input_mudata` entry needs the `default`
+      pairing strategy, which builds its own pairs, so the attached pairs
+      are for pysceptre.
 - **`element_mapping` is where a design's own labels get tested**, so
   disagreement is the output, not a bug:
     - the classes are decided per site, not per guide, because a guide whose

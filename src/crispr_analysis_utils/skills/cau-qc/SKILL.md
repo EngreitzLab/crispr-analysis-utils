@@ -65,6 +65,28 @@ curve per modality.
   is what a count threshold has to justify itself against; this step draws
   it and sets no threshold.
 
+## Many channels' knees at once
+
+`qc.knee_curve(qc.umis_per_cell(data, "gene"))` keeps a channel's
+barcode-rank curve at a few hundred log-spaced ranks (`KNEE_POINTS`, 400).
+Each kept point is the exact count at its rank, so a curve stored this way
+redraws the knee of a million barcodes in a few kilobytes. Store it per
+channel before the barcode space is cut, since a cut object no longer has
+the curve.
+
+`qc.knee_overlay(curves, group="day", floor=100)` draws them together:
+panel (a) every channel's curve, thin and coloured by group; panel (b) each
+group's mean of log10 UMIs at each rank, with one standard deviation shaded.
+
+- `curves` needs `channel`, `rank`, `umis` and the `group` column.
+- **At most four groups**, in fixed Okabe-Ito slots without yellow. More
+  groups are not told apart; facet instead.
+- **The mean is geometric** and drawn only at ranks every channel of the
+  group reaches, so a channel that has run out of barcodes is never
+  averaged as zero.
+- A hundred small multiples were the alternative and are a hundred figures
+  to read; the overlay shows the spread, the mean says where a group sits.
+
 ## The count floor
 
 `qc.filter_cells(data, min_umis=..., modality="gene")` keeps the barcodes
@@ -158,6 +180,16 @@ on its margin, and the quadrant counts in the caption.
   and thinly outlined, since the alpha that keeps a cloud of ten thousand
   readable makes a handful of points invisible, and Okabe-Ito's yellow is
   a pale fill on a white page.
+
+## Two counts as a density
+
+`qc.metric_density(frame, "gene_umis", "guide_umis", x_threshold=...)` is
+`metric_scatter` for a hundred thousand cells: the cells in each bin are
+counted and coloured on a log `cividis` scale, so populations and the valleys
+between them show where a scatter is a solid block. Both axes are log; the
+margins are each metric's own histogram. The data file is one row per
+non-empty bin, and the caption counts each quadrant the thresholds make. A
+cell with a zero is left out of the bins and counted in the caption.
 
 ## Does the panel dominate?
 

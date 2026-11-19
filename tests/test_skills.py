@@ -32,8 +32,10 @@ COVERAGE = {
     "cau-guide-annotation": ("guide_annotation",),
     "cau-element-mapping": ("element_mapping",),
     "cau-igvf-export": ("igvf_export",),
+    "cau-pairs": ("pairs",),
     "cau-mudata-builder": ("mudata_builder",),
     "cau-qc": ("qc",),
+    "cau-inference-input": ("inference_input",),
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.
