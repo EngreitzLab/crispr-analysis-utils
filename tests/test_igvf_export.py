@@ -370,6 +370,21 @@ def test_the_pam_is_never_the_pattern(table):
     assert "NGG" not in set(table["pam"].dropna())
 
 
+def test_the_pam_is_the_chosen_sites_own(alignment, mapping, info):
+    # A first row for another site, whose genome holds no PAM: the table
+    # describes the site the mapping chose, so it must not take this one's.
+    elsewhere = alignment[alignment["alias"] == "promoter"].assign(
+        chr="chr3",
+        start=100,
+        end=100 + LENGTH,
+        pam_matches=False,
+        mapped_sequence=spacer("promoter") + "TGA",
+    )
+    again = build_table(pd.concat([elsewhere, alignment]), mapping, info)
+    assert guide(again, "promoter")["pam"] == "TGG"
+    assert guide(again, "promoter")["guide_chr"] == "chr1"
+
+
 def test_a_non_targeting_entry_has_no_site_and_no_element(table):
     row = guide(table, "non_targeting")
     assert row["type"] == NON

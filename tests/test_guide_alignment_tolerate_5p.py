@@ -127,6 +127,31 @@ def test_a_site_that_pairs_outranks_one_found_only_by_tolerating(tmp_path):
     assert summary.n_sites == (1, 1)
 
 
+def test_the_table_marks_only_the_site_the_class_counts(tmp_path):
+    chr1 = Contig()
+    chr1.add("TTTT")
+    designed = chr1.add(SPACER_A)
+    chr1.add("TGG" + "TTTT")
+    chance = chr1.add("C" + SPACER_A[1:])
+    chr1.add("TGG" + "TTTT")
+    reference = write_fasta(tmp_path / "ref.fa", {"chr1": chr1.sequence})
+
+    run(pd.DataFrame([("g", SPACER_A)]), reference, tmp_path / "out", tolerate_5p=1)
+
+    with open(
+        tmp_path / "out" / "alignments" / "guide_genome_annotation.tsv",
+        encoding="utf-8",
+    ) as handle:
+        rows = {
+            int(row["start"]): row for row in csv.DictReader(handle, delimiter="\t")
+        }
+    assert sorted(rows) == [designed, chance]
+    # Both bear a PAM, and only the site the guide pairs with throughout is best.
+    assert {row["pam_matches"] for row in rows.values()} == {"TRUE"}
+    assert rows[designed]["best_site"] == "TRUE"
+    assert rows[chance]["best_site"] == "FALSE"
+
+
 def test_a_match_with_no_room_for_the_tolerated_base_is_not_a_site(tmp_path):
     # The core matches at base 0, so the protospacer would start at -1.
     reference = write_fasta(
@@ -159,5 +184,7 @@ def test_the_run_writes_the_tolerated_base_and_records_the_setting(reference, tm
         (row,) = list(csv.DictReader(handle, delimiter="\t"))
     assert row["site_class"] == "unique"
     assert row["genomic_spacer_5p"] == SPACER_A[0]
+    # The tolerated site is the guide's best, so it is the one that counts.
+    assert row["best_site"] == "TRUE"
     assert (row["start"], row["end"]) == (str(reference.plus), str(reference.plus + 20))
     assert result.metadata["parameters"]["tolerate_5p"] == 1

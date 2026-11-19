@@ -220,6 +220,17 @@ def test_every_spelling_of_false_does_not(bed, tmp_path, value):
     ]
 
 
+def test_a_site_the_class_does_not_count_is_not_mapped(bed, tmp_path):
+    # Both bear a PAM; best_site says only the first is what the class counts.
+    frame = sites_frame(site("g", "chr1", 1000), site("g", "chr1", 900_000))
+    frame["best_site"] = ["TRUE", "FALSE"]
+
+    mapping = run(frame, bed, tmp_path / "out").mapping
+
+    assert mapping["start"].tolist() == [1000]
+    assert mapping["target_class"].tolist() == [TARGETING]
+
+
 def test_an_empty_pam_cell_does_not_count_as_mapped(bed, tmp_path):
     path = tmp_path / "aln.tsv"
     path.write_text(

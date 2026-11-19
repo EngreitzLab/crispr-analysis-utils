@@ -169,10 +169,12 @@ differ. Cas9 cuts there regardless, the position being the PAM-distal one.
   the design paired. It is empty unless the run tolerated a position.
 - **A site that pairs outranks one that does not.** The shorter core reaches
   places the guide pairs with at 19 positions but not 20, and those are
-  written with `pam_matches` `TRUE` but count toward `site_class` only for a
-  guide that has nothing better. So the flag rescues the substituted guides
-  without turning well-behaved ones into `multi`; `n_target_sites` counts the
-  weaker sites, and `site_class` does not.
+  written with `pam_matches` `TRUE` and `best_site` `FALSE` unless the guide
+  has nothing better. So the flag rescues the substituted guides without
+  turning well-behaved ones into `multi`; `n_target_sites` counts the weaker
+  sites, and `site_class` does not. Element mapping and gene annotation read
+  only the `best_site` rows, so a chance site never names an element or a
+  gene.
 - **It is off by default and applies to the whole run.** A 19-base core
   matches more places by chance, so turn it on for a library whose design
   needs it rather than as a habit, and read `n_matches` knowing it counts

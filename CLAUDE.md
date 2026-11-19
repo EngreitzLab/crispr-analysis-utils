@@ -360,7 +360,13 @@ and narrowing it would buy nothing.
       hiPSC-EC v2 library `--tolerate-5p 1` rescued 45 guides, all starting
       with G and all unpaired at position 1, and moved nothing else: the 128
       guides that gained a chance site kept `unique`, because a site that
-      pairs throughout outranks one that does not; `--pam-only`
+      pairs throughout outranks one that does not. `best_site` marks the
+      rows the class counts, and `element_mapping` and `guide_annotation`
+      read only those: when they read every `pam_matches` row, the chance
+      sites became extra safe-targeting and targeting rows downstream, and
+      `igvf_export`, reading `pam` from a guide's first row rather than its
+      chosen site's, wrote a wrong PAM for guides whose first row was a
+      non-PAM site; `--pam-only`
       drops those rows instead, for a library short enough that they are
       the bulk of the table: it changes what is written, never what is
       searched or counted, so `n_matches` and `qc.tsv` are unmoved;

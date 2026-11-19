@@ -5,7 +5,7 @@ with exactly one, ``multi`` with more, ``no_site`` with none. Best means the
 fewest mismatches, which only a tolerated 5' position can carry, so without
 `scan_guides`'s `tolerate_5p` it is simply every match with a PAM. A match
 whose PAM does not match is still written, with ``pam_matches`` FALSE, and
-counted nowhere. An entry that duplicates an earlier one's sequence gets that
+counted nowhere; ``best_site`` marks the rows the class counts. An entry that duplicates an earlier one's sequence gets that
 entry's sites.
 
 Coordinates are 0-based and half-open on the reference's forward strand, and
@@ -312,7 +312,7 @@ def fan_out_sites(
 GROUPS = (
     ("from the guide table, before anything is aligned", 6),
     ("about the whole guide, repeated on each of its rows", 5),
-    ("about this row's match; empty when the guide matches nowhere", 10),
+    ("about this row's match; empty when the guide matches nowhere", 11),
 )
 """The column groups, in order, and how many columns each has."""
 
@@ -373,6 +373,13 @@ COLUMNS = {
     ),
     "pam_matches": (
         "TRUE when the genomic PAM fits the pattern, so Cas9 can act here."
+    ),
+    "best_site": (
+        "TRUE for the guide's best PAM-bearing sites, the ones site_class"
+        " counts: those with the fewest mismatches. A site found only by"
+        " tolerating a 5' mismatch is FALSE when the guide also pairs"
+        " throughout somewhere. Element mapping and gene annotation read only"
+        " these rows."
     ),
     "paired_5p": (
         "TRUE when the guide's base 5' of the protospacer is the base the"
@@ -488,8 +495,11 @@ def write_guides_tsv(
                 summary.orientation_evidence,
             ]
             found = sites.get(source, ())
+            # A guide has best sites only when it has a class, and `summarize`
+            # ranks them so that they then carry min_mismatches.
+            fewest = summary.min_mismatches if summary.site_class != NO_SITE else None
             if not found:
-                _write_row(handle, [*head, *[None] * 10])
+                _write_row(handle, [*head, *[None] * 11])
             for site in found:
                 _write_row(
                     handle,
@@ -501,6 +511,7 @@ def write_guides_tsv(
                         site.strand,
                         _target_site(site),
                         site.pam_class != NO_PAM_CLASS,
+                        site.pam_class != NO_PAM_CLASS and site.n_mismatches == fewest,
                         site.paired_5p,
                         site.genomic_5p_base,
                         site.genomic_spacer_5p,

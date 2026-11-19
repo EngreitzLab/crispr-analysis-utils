@@ -657,7 +657,11 @@ def run(
 def _read_alignment(
     alignment: str | os.PathLike[str] | pd.DataFrame,
 ) -> tuple[pd.Series, pd.DataFrame]:
-    """Every guide in the library, and the sites that have a PAM."""
+    """Every guide in the library, and the sites its class counts.
+
+    Those are the rows `best_site` marks, or, in a table written before that
+    column, every row whose PAM matches.
+    """
     if isinstance(alignment, pd.DataFrame):
         frame = alignment.copy()
     else:
@@ -670,8 +674,9 @@ def _read_alignment(
 
     library = frame["guide_id"].drop_duplicates()
     sites = frame
-    if "pam_matches" in sites:
-        sites = sites[sites["pam_matches"].map(_truthy)]
+    flag = "best_site" if "best_site" in sites else "pam_matches"
+    if flag in sites:
+        sites = sites[sites[flag].map(_truthy)]
     sites = sites[sites["chr"].notna() & (sites["chr"].astype(str) != "")]
     sites = sites.copy()
     for column in ("start", "end"):
