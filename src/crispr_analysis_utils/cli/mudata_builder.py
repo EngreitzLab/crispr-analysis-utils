@@ -94,8 +94,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     run_parser.add_argument(
         "--covariates",
         help=(
-            "Per-cell covariates, barcode in the first column. Carried into "
-            "the root obs unchanged."
+            "Per-cell covariates, one row per barcode, barcode in the first "
+            "column. Carried into the root obs unchanged."
         ),
     )
 

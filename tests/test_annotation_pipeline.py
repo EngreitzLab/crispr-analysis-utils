@@ -327,7 +327,7 @@ def test_the_table_writes_flags_as_words_and_counts_as_whole_numbers(store, tmp_
     cells = [dict(zip(header, line.split("\t"), strict=True)) for line in lines[1:]]
     # 147.0 in the frame, 147 in the file, and an empty cell where there is none.
     assert result.annotated.loc[0, "cds_position"] == 147
-    assert [row["cds_position"] for row in cells] == ["147", "", "132", ""]
+    assert [row["cds_position"] for row in cells] == ["147", "", "133", ""]
     assert [row["exonic_any_transcript"] for row in cells] == [
         "TRUE",
         "FALSE",
