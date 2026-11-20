@@ -42,7 +42,10 @@ release 43**, so build the store from v43 unless the user says otherwise.
   from another release produces ids that will not validate.
 - **Is there a file of measured element-to-gene pairs?** `--genes` takes one.
   Without it, a promoter's gene is inferred from the nearest TSS, which is
-  reasonable but is not the same as a measured pair.
+  reasonable but is not the same as a measured pair. It reads the
+  `element_id` and `gene_id` columns; if the file names them otherwise, ask
+  which and pass `--element-column` and `--gene-column`. Its element ids
+  must be spelled as the BED names them, or the run stops.
 - **Is the screen CRISPRi, CRISPRa or cutting?** It does not change the file,
   but it changes whether "a guide overlapping an element" is the right
   definition of targeting, which the element mapping decided earlier.

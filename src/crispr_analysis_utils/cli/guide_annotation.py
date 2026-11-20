@@ -66,8 +66,8 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--promoters",
         default=None,
         help=(
-            "A TSS BED, one site per gene. Without one, each gene's reference "
-            "transcript start is used."
+            "A TSS BED, one row per start site. Without one, the start of "
+            "every transcript in the store is used."
         ),
     )
     annotate.add_argument(
@@ -76,7 +76,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         default=1000,
         help="How far either side of a TSS counts as its promoter (default: 1000).",
     )
-    parser.add_argument(
+    annotate.add_argument(
         "--distance-from",
         choices=DISTANCE_FROM,
         default=MIDPOINT,

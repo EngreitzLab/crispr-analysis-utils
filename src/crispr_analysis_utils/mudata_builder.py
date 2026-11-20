@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, write_json
+from ._files import file_md5, read_columns, write_json
 from ._version import __version__
 from .guide_annotation.db import _unversioned
 
@@ -91,13 +91,21 @@ def read_counts(path: str | os.PathLike[str]):
         raise BuildError(f"{path} is not a readable h5ad: {error}") from error
 
 
-def read_readout_genes(path: str | os.PathLike[str]) -> pd.Series:
+def read_readout_genes(
+    path: str | os.PathLike[str], gene_column: str = "gene_id"
+) -> pd.Series:
     """The genes a targeted assay reads out, as unversioned ENSEMBL ids.
 
     A TAP-seq panel measures a few hundred genes on purpose; every other
     feature in the matrix is off-panel and near-empty. Which is which is not
-    in the counts, so it comes from the panel's own table: the first column
-    holding ENSEMBL ids is taken as the gene.
+    in the counts, so it comes from the panel's own table.
+
+    Parameters
+    ----------
+    path
+        A CSV or TSV, as `read_columns` reads it.
+    gene_column
+        The column of ENSEMBL gene ids. A row with it empty is skipped.
 
     Returns
     -------
@@ -105,23 +113,21 @@ def read_readout_genes(path: str | os.PathLike[str]) -> pd.Series:
         How many rows of the panel name each gene, indexed by unversioned
         ENSEMBL id. Usually one; a gene measured through two amplicons has
         two, and its counts are a sum of both.
+
+    Raises
+    ------
+    BuildError
+        The file does not exist, or names no gene.
+    ValueError
+        The suffix names no separator, or `gene_column` is missing.
     """
     path = Path(path)
     if not path.is_file():
         raise BuildError(f"The readout gene table {path} does not exist.")
-    frame = pd.read_csv(path, sep="\t" if path.suffix == ".tsv" else ",")
-    ensembl = [
-        column
-        for column in frame.columns
-        if frame[column].astype(str).str.startswith("ENSG").any()
-    ]
-    if not ensembl:
-        raise BuildError(
-            f"{path} has no column of ENSEMBL gene ids, so it cannot say "
-            "which genes are read out."
-        )
-    genes = _unversioned(frame[ensembl[0]].astype("string"))
-    return genes.value_counts()
+    genes = read_columns(path, [gene_column], "readout gene table")[gene_column]
+    if genes.empty:
+        raise BuildError(f"The readout gene table {path} names no gene.")
+    return _unversioned(genes.astype("string")).value_counts()
 
 
 def gene_var(store, ids: pd.Index, readout: pd.Series | None = None) -> pd.DataFrame:
@@ -167,6 +173,12 @@ def gene_var(store, ids: pd.Index, readout: pd.Series | None = None) -> pd.DataF
     out.index = pd.Index(ids, name="gene_id")
     if readout is not None:
         counts = readout.reindex(bare).fillna(0).astype(int)
+        if not counts.any():
+            raise BuildError(
+                f"None of the {len(readout)} readout genes is in the count matrix"
+                f" (e.g. {', '.join(readout.index[:3])}): the panel and the"
+                " counts were built against different annotations."
+            )
         out["readout"] = (counts > 0).to_numpy()
         # Above one, the panel measures the gene through two amplicons and
         # the counts are their sum, as n_oligos means on the guide side.
@@ -198,7 +210,9 @@ def guide_var(path: str | os.PathLike[str], ids: pd.Index) -> pd.DataFrame:
     path = Path(path)
     if not path.is_file():
         raise BuildError(f"The guide metadata {path} does not exist.")
-    frame = pd.read_csv(path, sep="\t", dtype=str)
+    frame = pd.read_csv(
+        path, sep="\t", dtype=str, keep_default_na=False, na_values=[""]
+    )
     if "guide_id" not in frame.columns:
         raise BuildError(
             f"{path} has no guide_id column, so it is not a guide metadata"
@@ -379,6 +393,7 @@ def build(
     guide = guide.copy()
     rna.var = gene_table
     guide.var = guide_table
+    barcode_of = {}
     for matrix in (rna, guide):
         # {barcode}_{measurement_set}, as the pipeline indexes cells, so a
         # concatenation across channels cannot collide.
@@ -386,6 +401,7 @@ def build(
         matrix.obs["barcode"] = barcodes
         matrix.obs["measurement_set"] = measurement_set
         matrix.obs_names = pd.Index(barcodes + "_" + measurement_set)
+        barcode_of.update(zip(matrix.obs_names, barcodes, strict=True))
         # kb names the index "barcode", and anndata refuses an index whose
         # name is also a column holding different values.
         matrix.obs.index.name = None
@@ -404,9 +420,8 @@ def build(
         data.obs[name] = value
 
     if covariates is not None and not covariates.empty:
-        joined = covariates.reindex(
-            pd.Index(data.obs_names, dtype="string").str.rsplit("_", n=1).str[0]
-        )
+        # The stored barcode, not the id split apart: either may hold a "_".
+        joined = covariates.reindex(data.obs_names.map(barcode_of))
         joined.index = data.obs_names
         for column in joined.columns:
             data.obs[column] = joined[column]
@@ -448,6 +463,7 @@ def run(
     element_mapping: str | os.PathLike[str] | None = None,
     metadata: dict[str, str] | None = None,
     readout_genes: str | os.PathLike[str] | None = None,
+    readout_gene_column: str = "gene_id",
 ) -> RunResult:
     """Assemble one channel's matrices into a MuData, and write it.
 
@@ -475,6 +491,13 @@ def run(
         ``guide_gene_annotation.tsv`` and ``guide_element_mapping.tsv``.
         Carried whole in ``mod['guide'].uns``, since neither is one row per
         guide. ``var`` keeps the IGVF columns alone.
+    metadata
+        What this channel is, as name to value; see `build`.
+    readout_genes
+        The panel a targeted assay reads out, a CSV or TSV. Adds
+        ``readout`` and ``readout_primers`` to ``mod['gene'].var``.
+    readout_gene_column
+        The panel's column of ENSEMBL gene ids.
 
     Returns
     -------
@@ -553,7 +576,8 @@ def run(
 
         readout = None
         if readout_genes is not None:
-            readout = read_readout_genes(readout_genes)
+            readout = read_readout_genes(readout_genes, readout_gene_column)
+            state["parameters"]["readout_gene_column"] = readout_gene_column
             state["inputs"]["readout_genes"] = str(readout_genes)
             state["inputs"]["readout_genes_md5"] = file_md5(readout_genes)
             logger.info("%d genes are read out by the assay", len(readout))

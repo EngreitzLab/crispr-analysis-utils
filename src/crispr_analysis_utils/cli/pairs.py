@@ -30,7 +30,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     run_parser.add_argument(
         "--genes",
         required=True,
-        help="The readout panel: a CSV or TSV with a column of ENSEMBL gene ids.",
+        help=(
+            "The readout panel: a .csv, .tsv or .txt (optionally .gz) with a"
+            " column of ENSEMBL gene ids."
+        ),
+    )
+    run_parser.add_argument(
+        "--gene-column",
+        default="gene_id",
+        help="The panel's column of ENSEMBL gene ids (default: gene_id).",
     )
     run_parser.add_argument(
         "--store",
@@ -66,6 +74,7 @@ def run(args: argparse.Namespace) -> int:
             args.store,
             args.outdir,
             max_distance=args.max_distance,
+            gene_column=args.gene_column,
         )
     except (FileNotFoundError, PairsError, StoreError, ValueError, OSError) as error:
         raise CommandError(str(error)) from error

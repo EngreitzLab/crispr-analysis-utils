@@ -319,7 +319,7 @@ and narrowing it would buy nothing.
     - a genes-only GTF has no `exon` rows and so cannot say exon, intron or
       transcript. `build_store` refuses one rather than call everything
       intergenic, and a chr-naming mismatch raises instead of returning a
-      table of `intergenic`;
+      table of `intergenic`, in the sites or in a `--promoters` BED;
     - one transcript per gene is chosen for `enst`, `exon_number` and the CDS
       position: MANE Select, else Ensembl canonical, else the longest CDS,
       ordered down to the id so a rebuild picks the same one;

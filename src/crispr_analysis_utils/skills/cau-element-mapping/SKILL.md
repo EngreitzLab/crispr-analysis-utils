@@ -71,8 +71,8 @@ in full.
   would be the better test, and roughly 4% of rows are partial overlaps, so
   say which kind of screen it is before reading the counts.
 - **`--genes` fills `putative_target_genes`**, from the same pairs table
-  `cau igvf-export run` takes and through the same lookup, so the two tables
-  name the same genes. Without it the column is empty; with it, only elements
+  `cau igvf-export run` takes and through the same lookup (`--element-column`
+  and `--gene-column` included), so the two tables name the same genes. Without it the column is empty; with it, only elements
   the pairs table covers get one.
 - **`element_id` comes from the BED's fourth column** when it has one, so an
   id used elsewhere keeps its spelling. Otherwise it is `chr:start-end`,

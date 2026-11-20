@@ -17,6 +17,7 @@ from crispr_analysis_utils.mudata_builder import (
     gene_var,
     guide_var,
     read_counts,
+    read_readout_genes,
     reference_block,
     run,
 )
@@ -55,6 +56,38 @@ def guide_table(path, guide_ids):
         }
     ).to_csv(path, sep="\t", index=False)
     return path
+
+
+def test_the_readout_panel_is_read_by_its_named_column(store, tmp_path):
+    path = tmp_path / "panel.csv"
+    pd.DataFrame(
+        {
+            "symbol": ["A", "B", "A"],
+            "ensembl": ["ENSG00000000001.5", "", "ENSG00000000001"],
+        }
+    ).to_csv(path, index=False)
+    readout = read_readout_genes(path, "ensembl")
+    assert readout.to_dict() == {"ENSG00000000001": 2}
+    ids = pd.Index(["ENSG00000000001.5", "ENSG00000000002.1"])
+    var = gene_var(store, ids, readout=readout)
+    assert var["readout"].tolist() == [True, False]
+    assert var["readout_primers"].tolist() == [2, 0]
+
+
+def test_a_readout_panel_without_the_named_column_is_refused(tmp_path):
+    path = tmp_path / "panel.tsv"
+    pd.DataFrame({"ensembl": ["ENSG00000000001"]}).to_csv(path, sep="\t", index=False)
+    with pytest.raises(ValueError, match="no gene_id column; its columns are ensembl"):
+        read_readout_genes(path)
+
+
+def test_a_readout_panel_naming_no_gene_of_the_matrix_is_refused(store):
+    with pytest.raises(BuildError, match="None of the 1 readout genes"):
+        gene_var(
+            store,
+            pd.Index(["ENSG00000000001.5"]),
+            readout=pd.Series({"ENSG00000009999": 1}),
+        )
 
 
 def test_every_gene_type_is_annotated_not_only_the_coding_ones(store):
@@ -135,6 +168,26 @@ def test_the_cell_index_carries_the_measurement_set(store, tmp_path):
     )
     assert data["gene"].obs["barcode"].tolist() == ["c1"]
     assert data["gene"].obs["measurement_set"].tolist() == [MEASUREMENT_SET]
+
+
+def test_covariates_join_on_the_barcode_when_the_set_holds_an_underscore(
+    store, tmp_path
+):
+    rna = read_counts(
+        counts(tmp_path / "r.h5ad", ["c1", "c2"], ["ENSG00000000001.5"], "gene_id")
+    )
+    guide = read_counts(counts(tmp_path / "g.h5ad", ["c2"], ["g1"], "guide_id"))
+    data = build(
+        rna,
+        guide,
+        gene_table=gene_var(store, rna.var_names),
+        guide_table=guide_var(
+            guide_table(tmp_path / "gt.tsv", ["g1"]), guide.var_names
+        ),
+        measurement_set="lane_1",
+        covariates=pd.DataFrame({"lane": ["L1", "L2"]}, index=["c1", "c2"]),
+    )
+    assert data.obs["lane"].tolist() == ["L1", "L2"]
 
 
 def test_an_annotation_of_the_wrong_length_is_refused(store, tmp_path):

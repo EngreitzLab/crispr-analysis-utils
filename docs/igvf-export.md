@@ -22,9 +22,12 @@ cau igvf-export run \
     --outdir results/
 ```
 
-`--genes` is optional and takes a table of measured element-to-gene pairs:
-the first column names the element, and the first column of ENSEMBL ids names
-the gene. Without it, a promoter's gene is inferred from the nearest TSS.
+`--genes` is optional and takes a table of measured element-to-gene pairs,
+a `.csv`, `.tsv` or `.txt`, optionally gzipped. Its `element_id` column names
+the element as the BED does and its `gene_id` column the ENSEMBL id;
+`--element-column` and `--gene-column` name others. A row with either cell
+empty is skipped, and a table naming no element of the BED stops the run.
+Without it, a promoter's gene is inferred from the nearest TSS.
 
 ## The format
 

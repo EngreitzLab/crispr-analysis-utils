@@ -135,10 +135,10 @@ def umis_per_cell(data, modality: str) -> np.ndarray:
     same as being absent from the object: the union keeps both, and a knee
     plot that dropped them would overstate how deep the channel is.
     """
-    held = np.asarray(data.obsm[modality]).ravel()
-    umis = np.zeros(data.n_obs)
-    umis[held] = np.asarray(data[modality].X.sum(axis=1)).ravel()
-    return umis
+    held = data[modality]
+    sums = pd.Series(np.asarray(held.X.sum(axis=1)).ravel(), index=held.obs_names)
+    # By name: a modality need not hold its cells in the object's order.
+    return sums.reindex(data.obs_names, fill_value=0).to_numpy(dtype=float)
 
 
 def filter_cells(data, min_umis: int, modality: str = "gene"):
@@ -1759,8 +1759,11 @@ def guide_abundance(
             continue
         colour = KEPT if groups is None else OKABE_ITO[index % len(OKABE_ITO)]
         scale = float(mine.size) if groups is not None else 1.0
-        binned = np.histogram(mine[mine > 0], bins=edges)[0] / scale
-        never = float((mine == 0).sum()) / scale
+        # Counted as integers, then scaled: a count scaled and back is 14.999.
+        n_guides = np.concatenate(
+            [[(mine == 0).sum()], np.histogram(mine[mine > 0], bins=edges)[0]]
+        )
+        never, binned = n_guides[0] / scale, n_guides[1:] / scale
         if groups is None:
             axis.stairs(binned, edges, fill=True, color=colour)
         else:
@@ -1773,7 +1776,6 @@ def guide_abundance(
             edgecolor=EDGE,
             linewidth=EDGE_WIDTH,
         )
-        drawn = np.concatenate([[never], binned]) * scale
         records.append(
             pd.DataFrame(
                 {
@@ -1781,8 +1783,8 @@ def guide_abundance(
                     "panel": ["never seen"] + ["binned"] * (len(edges) - 1),
                     "bin_left": np.concatenate([[np.nan], edges[:-1]]),
                     "bin_right": np.concatenate([[np.nan], edges[1:]]),
-                    "n_guides": drawn.astype(int),
-                    "share": drawn / mine.size,
+                    "n_guides": n_guides,
+                    "share": n_guides / mine.size,
                 }
             )
         )

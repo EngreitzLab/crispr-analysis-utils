@@ -21,6 +21,7 @@ from guide_annotation_fixtures import (
 from crispr_analysis_utils import cli
 from crispr_analysis_utils.guide_annotation import (
     AnnotationError,
+    PromoterError,
     build_store,
     run,
 )
@@ -270,6 +271,18 @@ def test_a_promoter_file_is_read_and_recorded(store, tmp_path):
     assert set(result.annotated["nearest_tss_gene"]) == {"XXX"}
 
 
+def test_a_promoter_file_naming_contigs_otherwise_is_refused(store, tmp_path):
+    bed = tmp_path / "tss.bed"
+    bed.write_text("1\t2500\t2501\tXXX\t0\t+\n", encoding="utf-8")
+    with pytest.raises(PromoterError, match="No contig of the promoter file"):
+        run(
+            write_alignment(tmp_path / "aln.tsv"),
+            store,
+            tmp_path / "out",
+            promoters=bed,
+        )
+
+
 # --- the table and its data dictionary ------------------------------------
 
 
@@ -448,6 +461,19 @@ def test_build_db_then_run_from_the_command_line(tmp_path, capsys):
         "Outputs in out",
     ]
     assert matches(written(tmp_path / "out"), EXPECTED_FILES)
+
+
+def test_distance_from_is_an_option_of_run(store, tmp_path):
+    argv = [
+        "guide-annotation",
+        "run",
+        "--alignment",
+        str(write_alignment(tmp_path / "aln.tsv")),
+    ]
+    argv += ["--store", "store.parquet", "--outdir", "out"]
+    argv += ["--distance-from", "target_site"]
+    assert cli.main(argv) == 0
+    assert record_of(tmp_path / "out")["parameters"]["distance_from"] == "target_site"
 
 
 def test_gene_types_is_split_on_commas(tmp_path, capsys):

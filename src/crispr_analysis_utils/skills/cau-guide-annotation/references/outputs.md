@@ -31,7 +31,7 @@ table's `best_site` rows, or its `pam_matches` rows in a table written before
 | `location` | `genic` or `intergenic`, from whether a gene of an annotated type overlaps. |
 | `feature` | `exon` or `intron` inside the reference transcript; empty when intergenic. |
 | `exonic_any_transcript` | TRUE when any transcript of the gene has an exon here. |
-| `region` | `CDS` or `UTR` for an exonic row. |
+| `region` | `CDS` or `UTR` for an exonic row: `CDS` when the protospacer overlaps the reference transcript's coding sequence. Where the cut falls is `cds_position`. |
 | `exon_number` | Which exon of the reference transcript, from its 5' end. |
 | `cds_position`, `cds_fraction` | How far along the CDS the cut falls, in bases and as a fraction. |
 | `distance_to_gene_start` | Signed bases from the anchor to this gene's annotated 5' end, in the gene's orientation. Near zero is the canonical promoter. |

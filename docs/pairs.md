@@ -17,7 +17,9 @@ cau pairs run \
     --outdir results/
 ```
 
-`--genes` is the readout panel, a CSV or TSV with a column of ENSEMBL ids.
+`--genes` is the readout panel, a `.csv`, `.tsv` or `.txt`, optionally
+gzipped, whose `gene_id` column holds ENSEMBL ids; `--gene-column` names
+another. Versions are dropped and empty cells skipped.
 `--max-distance` sets the cis window, 1,000,000 bases by default. Nothing is
 written outside `--outdir`.
 

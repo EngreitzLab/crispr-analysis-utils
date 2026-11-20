@@ -52,12 +52,26 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
             "takes, so the two tables name the same genes."
         ),
     )
+    run_parser.add_argument(
+        "--gene-column",
+        default="gene_id",
+        help="The --genes column of ENSEMBL gene ids (default: gene_id).",
+    )
+    run_parser.add_argument(
+        "--element-column",
+        default="element_id",
+        help=(
+            "The --genes column of element ids, spelled as the BED names them"
+            " (default: element_id)."
+        ),
+    )
 
 
 def run(args: argparse.Namespace) -> int:
     """Run the ``run`` action."""
     from ..element_mapping import CLASSES, ElementError
     from ..element_mapping import run as map_elements
+    from ..igvf_export import ExportError
 
     try:
         result = map_elements(
@@ -66,8 +80,17 @@ def run(args: argparse.Namespace) -> int:
             args.outdir,
             annotation=args.annotation,
             genes=args.genes,
+            gene_column=args.gene_column,
+            element_column=args.element_column,
         )
-    except (FileNotFoundError, ElementError, ValueError, OSError, KeyError) as error:
+    except (
+        FileNotFoundError,
+        ElementError,
+        ExportError,
+        ValueError,
+        OSError,
+        KeyError,
+    ) as error:
         raise CommandError(str(error)) from error
 
     found = result.metadata["counts"]

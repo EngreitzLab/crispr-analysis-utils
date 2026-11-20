@@ -238,10 +238,21 @@ def test_the_lower_block_of_a_minus_strand_gene_carries_the_offset(annotated):
     assert row["cds_fraction"] == pytest.approx(0.88)
 
 
-def test_an_exon_whose_cut_misses_the_cds_is_utr(annotated):
-    # The cut at 1047 is in AAA's exon 1 but 5' of the start codon at 1100.
+def test_an_exon_whose_protospacer_misses_the_cds_is_utr(annotated):
+    # 1030-1050 is in AAA's exon 1 but 5' of the start codon at 1100.
     row = one(annotated, "utr_and_promoter")
     assert (row["feature"], row["region"], row["exon_number"]) == ("exon", "UTR", "1")
+    assert pd.isna(row["cds_position"])
+
+
+def test_a_protospacer_over_a_coding_exons_edge_is_cds(store, tss):
+    # 2185-2205 overlaps exon 2 (2000-2200, wholly CDS); the cut at 2202 is
+    # in the intron, so it has no CDS position, but the exon is still coding.
+    frame = annotate_sites(
+        sites_frame(site("edge", "chr1", 2185, "+")), store, tss, promoter_window=WINDOW
+    )
+    row = one(frame, "edge")
+    assert (row["feature"], row["region"]) == ("exon", "CDS")
     assert pd.isna(row["cds_position"])
 
 

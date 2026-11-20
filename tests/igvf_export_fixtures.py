@@ -146,7 +146,7 @@ def write_alignment(path, guides=GUIDES):
     return path
 
 
-def write_genes(path, pairs=GENE_PAIRS, columns=("element_id", "ensembl_id")):
+def write_genes(path, pairs=GENE_PAIRS, columns=("element_id", "gene_id")):
     """Write the measured pairs as a ``--genes`` table and return the path."""
     pd.DataFrame(list(pairs), columns=list(columns)).to_csv(path, sep="\t", index=False)
     return path

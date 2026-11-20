@@ -192,18 +192,32 @@ def test_a_positive_control_gene_missing_from_the_annotation_is_refused():
         pairs_of(rows)
 
 
-def test_read_panel_takes_the_first_column_of_ensembl_ids(tmp_path):
-    path = tmp_path / "panel.csv"
+def test_read_panel_reads_the_named_column_and_skips_blank_cells(tmp_path):
+    path = tmp_path / "panel.tsv.gz"
     pd.DataFrame(
-        {"symbol": ["A", "B", "A"], "id": [f"{PLUS}.3", MINUS, f"{PLUS}.3"]}
-    ).to_csv(path, index=False)
-    assert list(read_panel(path)) == [PLUS, MINUS]
+        {"symbol": ["A", "B", "C", "A"], "id": [f"{PLUS}.3", MINUS, "", f"{PLUS}.3"]}
+    ).to_csv(path, sep="\t", index=False)
+    assert list(read_panel(path, "id")) == [PLUS, MINUS]
 
 
-def test_read_panel_refuses_a_table_without_ensembl_ids(tmp_path):
+def test_read_panel_refuses_a_table_without_the_named_column(tmp_path):
     path = tmp_path / "panel.csv"
     pd.DataFrame({"symbol": ["A", "B"]}).to_csv(path, index=False)
-    with pytest.raises(PairsError, match="no column of ENSEMBL gene ids"):
+    with pytest.raises(ValueError, match="no gene_id column; its columns are symbol"):
+        read_panel(path)
+
+
+def test_read_panel_refuses_a_suffix_that_names_no_separator(tmp_path):
+    path = tmp_path / "panel.xlsx"
+    path.write_text("gene_id\n")
+    with pytest.raises(ValueError, match="must end in .csv, .tsv or .txt"):
+        read_panel(path)
+
+
+def test_read_panel_refuses_a_panel_of_blank_cells(tmp_path):
+    path = tmp_path / "panel.csv"
+    path.write_text("gene_id,symbol\n,A\n")
+    with pytest.raises(PairsError, match="names no gene"):
         read_panel(path)
 
 
@@ -341,7 +355,10 @@ def test_run_writes_the_table_and_its_record(tmp_path, inputs):
     (record,) = [w for w in written if w.startswith("run_metadata/")]
     assert re.fullmatch(r"run_metadata/pairs_\d{8}T\d{6}Z\.json", record)
     state = json.loads((tmp_path / "out" / record).read_text())
-    assert state["complete"] and state["parameters"] == {"max_distance": 5_000}
+    assert state["complete"] and state["parameters"] == {
+        "max_distance": 5_000,
+        "gene_column": "gene_id",
+    }
 
 
 def test_the_command_runs(tmp_path, inputs, capsys):

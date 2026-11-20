@@ -51,8 +51,22 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
         "--genes",
         default=None,
         help=(
-            "A table of measured element-to-gene pairs: an element id column "
-            "and a column of ENSEMBL gene ids."
+            "A table of measured element-to-gene pairs: a .csv, .tsv or .txt "
+            "(optionally .gz) with an element id column and a column of "
+            "ENSEMBL gene ids."
+        ),
+    )
+    run_parser.add_argument(
+        "--gene-column",
+        default="gene_id",
+        help="The --genes column of ENSEMBL gene ids (default: gene_id).",
+    )
+    run_parser.add_argument(
+        "--element-column",
+        default="element_id",
+        help=(
+            "The --genes column of element ids, spelled as the BED names them"
+            " (default: element_id)."
         ),
     )
     run_parser.add_argument(
@@ -83,6 +97,8 @@ def run(args: argparse.Namespace) -> int:
             promoters=args.promoters,
             genes=args.genes,
             promoter_window=args.promoter_window,
+            gene_column=args.gene_column,
+            element_column=args.element_column,
         )
     except (
         FileNotFoundError,

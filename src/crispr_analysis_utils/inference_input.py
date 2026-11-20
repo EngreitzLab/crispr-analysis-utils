@@ -4,7 +4,8 @@ Takes the QC'd per-channel objects of `mudata_builder` and `qc`, each already
 carrying guide calls in ``mod['guide'].layers['guide_assignment']``, and the
 pairs of `pairs`, and writes the object the pipeline hands to SCEPTRE:
 
-- one cell index across both modalities, ``{barcode}_{measurement_set}``;
+- one cell index across both modalities, the ``{barcode}_{measurement_set}``
+  ids `mudata_builder` gave, refused if two channels share one;
 - unversioned gene ids, so they match the pairs;
 - ``intended_target_key`` on every guide, and the controls bucketed as
   ``non-targeting|N`` by the pipeline's own rule;
@@ -242,6 +243,13 @@ def pairs_frame(
         "genes_absent": sorted(out.loc[no_gene, "gene_id"].unique().tolist()),
     }
     out = out[~no_guide & ~no_gene].copy()
+    if dropped["pairs_in"] and out.empty:
+        raise InputError(
+            f"None of the {dropped['pairs_in']} pairs names a guide and a gene the"
+            f" counts carry (guides such as {dropped['guides_absent'][:3]}, genes"
+            f" such as {dropped['genes_absent'][:3]}): the pairs were built for"
+            " another library or annotation."
+        )
     # Controls are renamed by bucketing; a targeting guide's element must agree,
     # or the pairs were built from another guide table than the counts carry.
     stated = guide_var.loc[out["guide_id"]]
@@ -536,7 +544,22 @@ def run(
         for path in inputs:
             logger.info("Reading %s", path)
             channels.append(md.read_h5mu(path))
-        table = pd.read_csv(pairs, dtype={"intended_target_chr": str})
+        # Ids and names are text: a guide called 0001 must still match its counts.
+        table = pd.read_csv(
+            pairs,
+            dtype={
+                column: str
+                for column in (
+                    "guide_id",
+                    "gene_id",
+                    "gene_symbol",
+                    "intended_target_name",
+                    "intended_target_chr",
+                )
+            },
+            keep_default_na=False,
+            na_values=[""],
+        )
         data, report = build(
             channels,
             table,
