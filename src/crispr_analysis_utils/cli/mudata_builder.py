@@ -81,10 +81,15 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     run_parser.add_argument(
         "--readout-genes",
         help=(
-            "The panel a targeted assay reads out, as a table with a column "
-            "of ENSEMBL ids. Adds a boolean readout column to gene.var; "
-            "without it the column is absent."
+            "The panel a targeted assay reads out: a .csv, .tsv or .txt "
+            "(optionally .gz) with a column of ENSEMBL ids. Adds a boolean "
+            "readout column to gene.var; without it the column is absent."
         ),
+    )
+    run_parser.add_argument(
+        "--readout-gene-column",
+        default="gene_id",
+        help="The panel's column of ENSEMBL ids (default: gene_id).",
     )
     run_parser.add_argument(
         "--covariates",
@@ -124,10 +129,11 @@ def run(args: argparse.Namespace) -> int:
             covariates=args.covariates,
             metadata=_channel(args.channel),
             readout_genes=args.readout_genes,
+            readout_gene_column=args.readout_gene_column,
             guide_annotation=args.guide_annotation,
             element_mapping=args.element_mapping,
         )
-    except (BuildError, FileNotFoundError, OSError) as error:
+    except (BuildError, FileNotFoundError, OSError, ValueError) as error:
         raise CommandError(str(error)) from error
 
     found = result.metadata["counts"]

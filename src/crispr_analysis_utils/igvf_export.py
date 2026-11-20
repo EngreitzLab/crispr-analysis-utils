@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, write_json
+from ._files import file_md5, read_columns, write_json
 from ._version import __version__
 
 logger = logging.getLogger(__name__)
@@ -184,8 +184,11 @@ def classify_elements(
     """
     import pyranges1 as pr
 
+    from .guide_annotation.promoters import check_contigs
+
     if elements.empty:
         raise ExportError("There are no elements to classify.")
+    check_contigs(promoters, store)
 
     frame = elements.drop_duplicates("element_id").reset_index(drop=True)
     ranges = pr.PyRanges(frame[["Chromosome", "Start", "End", "element_id"]])
@@ -590,6 +593,8 @@ def run(
     promoters: str | os.PathLike[str] | None = None,
     genes: str | os.PathLike[str] | None = None,
     promoter_window: int = PROMOTER_WINDOW,
+    gene_column: str = "gene_id",
+    element_column: str = "element_id",
 ) -> RunResult:
     """Write the guide design in the IGVF per-guide metadata format.
 
@@ -608,11 +613,13 @@ def run(
     promoters
         A TSS BED. Without one, the store's reference transcript starts.
     genes
-        A TSV of measured element-to-gene pairs, with an element id column
-        and an ENSEMBL id column. Used for the elements whose gene was
-        measured rather than inferred.
+        A CSV or TSV of measured element-to-gene pairs. Used for the
+        elements whose gene was measured rather than inferred.
     promoter_window
         Within this many bases of a TSS, an element is a promoter.
+    gene_column, element_column
+        The columns of `genes` that hold the ENSEMBL gene id and the element
+        id, which must match the BED's.
 
     Returns
     -------
@@ -655,8 +662,19 @@ def run(
         loaded = load_store(store)
         tss = read_promoters(promoters) if promoters else promoters_from_store(loaded)
         regions = read_elements(elements)
-        align = pd.read_csv(alignment, sep="\t", dtype={"chr": str}, low_memory=False)
+        # An alias is a name: 0001 stays 0001, and only a blank cell is missing.
+        align = pd.read_csv(
+            alignment,
+            sep="\t",
+            dtype={"alias": str, "chr": str},
+            keep_default_na=False,
+            na_values=[""],
+            low_memory=False,
+        )
         maps = pd.read_csv(mapping, sep="\t", dtype={"chr": str}, low_memory=False)
+        if genes is not None:
+            state["parameters"]["gene_column"] = gene_column
+            state["parameters"]["element_column"] = element_column
         state["inputs"]["alignment_md5"] = file_md5(alignment)
         state["inputs"]["elements_md5"] = file_md5(elements)
 
@@ -665,7 +683,12 @@ def run(
             loaded,
             tss,
             promoter_window=promoter_window,
-            genes=_read_genes(genes),
+            genes=_read_genes(
+                genes,
+                regions["element_id"],
+                gene_column=gene_column,
+                element_column=element_column,
+            ),
         )
         table = build_table(align, maps, info)
 
@@ -689,29 +712,45 @@ def run(
         handler.close()
 
 
-def _read_genes(path: str | os.PathLike[str] | None) -> dict[str, list[str]] | None:
+def _read_genes(
+    path: str | os.PathLike[str] | None,
+    elements: pd.Series,
+    *,
+    gene_column: str = "gene_id",
+    element_column: str = "element_id",
+) -> dict[str, list[str]] | None:
     """Measured element-to-gene pairs, as element id to ENSEMBL ids.
 
-    The first column is taken as the element and the first column holding
-    ENSEMBL gene ids as the gene, so a pairs table written for another tool
-    can be used as it is.
+    Parameters
+    ----------
+    path
+        A CSV or TSV, as `read_columns` reads it. None means no pairs.
+    elements
+        The element ids of the BED, which the file must name at least one of.
+    gene_column, element_column
+        The file's columns of ENSEMBL gene ids and of element ids. A row with
+        either empty is skipped.
+
+    Raises
+    ------
+    ExportError
+        No element of the file is in `elements`.
+    ValueError
+        The suffix names no separator, or a column is missing.
     """
     if path is None:
         return None
-    frame = pd.read_csv(path, sep="\t" if str(path).endswith((".tsv", ".txt")) else ",")
-    if frame.empty:
-        return {}
-    ensembl = [
-        column
-        for column in frame.columns
-        if frame[column].astype(str).str.startswith("ENSG").any()
-    ]
-    if not ensembl:
-        raise ExportError(f"{path} has no column of ENSEMBL gene ids.")
-    element, gene = frame.columns[0], ensembl[0]
-    pairs: dict[str, list[str]] = {}
-    for key, rows in frame.groupby(element)[gene]:
-        pairs[str(key)] = list(dict.fromkeys(rows.astype(str)))
+    frame = read_columns(path, [element_column, gene_column], "element-to-gene table")
+    pairs = {
+        str(key): list(dict.fromkeys(rows))
+        for key, rows in frame.groupby(element_column, sort=False)[gene_column]
+    }
+    if not any(_measured_genes(pairs, element) for element in elements):
+        raise ExportError(
+            f"No element of {path} ({', '.join(list(pairs)[:3]) or 'none'}) is in"
+            f" the elements BED ({', '.join(map(str, elements.iloc[:3]))}): the two"
+            " name their elements differently."
+        )
     return pairs
 
 

@@ -62,7 +62,11 @@ COLUMNS = {
         "TRUE when any transcript of this gene has an exon here, so a row"
         " called intron is another transcript's exon."
     ),
-    "region": "CDS or UTR for an exonic row, which is what decides a frameshift.",
+    "region": (
+        "CDS or UTR for an exonic row: CDS when the protospacer overlaps the"
+        " reference transcript's coding sequence. Where the cut falls is"
+        " cds_position."
+    ),
     "exon_number": "Which exon of the reference transcript, counting from its 5' end.",
     "cds_position": (
         "How many coding bases precede the target site in the reference"

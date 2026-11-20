@@ -25,6 +25,7 @@ from crispr_analysis_utils import cli
 from crispr_analysis_utils.element_mapping import (
     COLUMNS,
     NON_TARGETING,
+    RESULTS_DIR,
     SAFE_TARGETING,
     TABLE,
     TARGETING,
@@ -438,6 +439,28 @@ def test_a_run_from_the_command_line(alignment, bed, tmp_path, capsys):
         "Outputs in out",
     ]
     assert matches(written(tmp_path / "out"), EXPECTED_FILES)
+
+
+def test_the_genes_columns_are_named_on_the_command_line(alignment, bed, tmp_path):
+    pd.DataFrame({"ensembl": ["ENSG00000000001"], "peak": ["E1"]}).to_csv(
+        tmp_path / "pairs.csv", index=False
+    )
+    argv = ["element-mapping", "run", "--alignment", str(alignment)]
+    argv += ["--elements", str(bed), "--outdir", "out", "--genes", "pairs.csv"]
+    assert (
+        cli.main([*argv, "--gene-column", "ensembl", "--element-column", "peak"]) == 0
+    )
+    table = pd.read_csv(tmp_path / "out" / RESULTS_DIR / TABLE, sep="\t")
+    found = table.set_index("element_id")["putative_target_genes"]
+    assert found.dropna().to_dict() == {"E1": "ENSG00000000001"}
+
+    # Named the default way, but none of its elements is in the BED.
+    pd.DataFrame({"gene_id": ["ENSG00000000001"], "element_id": ["E9"]}).to_csv(
+        tmp_path / "pairs.csv", index=False
+    )
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main(argv)
+    assert exit_info.value.code == 1
 
 
 @pytest.mark.parametrize(

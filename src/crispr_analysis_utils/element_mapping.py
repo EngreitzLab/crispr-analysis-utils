@@ -533,6 +533,8 @@ def run(
     *,
     annotation: str | os.PathLike[str] | pd.DataFrame | None = None,
     genes: str | os.PathLike[str] | None = None,
+    gene_column: str = "gene_id",
+    element_column: str = "element_id",
 ) -> RunResult:
     """Map a library to the elements a screen targets, and write the table.
 
@@ -550,6 +552,12 @@ def run(
     annotation
         ``guide_gene_annotation.tsv`` from `guide_annotation.run`, which
         fills the ``distance_to_tss`` column.
+    genes
+        A CSV or TSV of measured element-to-gene pairs, the one
+        `igvf_export.run` takes, which fills ``putative_target_genes``.
+    gene_column, element_column
+        The columns of `genes` that hold the ENSEMBL gene id and the element
+        id, which must match the BED's.
 
     Returns
     -------
@@ -621,7 +629,14 @@ def run(
         if genes is not None:
             from .igvf_export import _read_genes
 
-            measured = _read_genes(genes)
+            measured = _read_genes(
+                genes,
+                regions["element_id"],
+                gene_column=gene_column,
+                element_column=element_column,
+            )
+            state["parameters"]["gene_column"] = gene_column
+            state["parameters"]["element_column"] = element_column
             state["inputs"]["genes"] = str(genes)
             state["inputs"]["genes_md5"] = file_md5(genes)
 

@@ -71,6 +71,16 @@ def test_a_barcode_the_modality_does_not_hold_counts_as_zero_umis():
     assert umis_per_cell(data, "guide").tolist() == [0.0, 3.0, 7.0]
 
 
+def test_umis_follow_the_barcode_not_the_row_order():
+    import mudata as md
+
+    data = mudata()
+    guide = data["guide"][::-1].copy()
+    data = md.MuData({"gene": data["gene"], "guide": guide})
+    assert list(guide.obs_names) == ["GGG", "CCC"]
+    assert umis_per_cell(data, "guide").tolist() == [0.0, 3.0, 7.0]
+
+
 def test_mito_is_the_contig_not_the_symbol():
     classes = gene_classes(mudata()["gene"].var)
     # MT-CO1 only: MT1A shares the prefix and is nuclear.
@@ -899,6 +909,18 @@ def test_a_class_is_drawn_as_its_share_so_a_small_one_still_reads():
     assert unseen.loc["non-targeting", "n_guides"] == 1
     assert unseen.loc["targeting", "share"] == pytest.approx(0.25)
     assert unseen.loc["non-targeting", "share"] == pytest.approx(0.5)
+
+
+def test_a_class_count_survives_its_share():
+    from crispr_analysis_utils.qc import guide_abundance
+
+    # 15 / 22 * 22 is 14.999...: scaling to a share and back loses a guide.
+    counts = pd.DataFrame({"umis": [5.0] * 15 + [0.0] * 7})
+    _, numbers, _ = guide_abundance(counts, groups=pd.Series(["c"] * 22))
+    assert numbers.groupby("panel")["n_guides"].sum().to_dict() == {
+        "binned": 15,
+        "never seen": 7,
+    }
 
 
 def test_the_same_figure_bins_the_cells_a_guide_reached():

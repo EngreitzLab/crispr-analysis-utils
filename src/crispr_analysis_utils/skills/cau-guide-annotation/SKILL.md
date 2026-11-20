@@ -40,9 +40,9 @@ the store in about a second, and a 43,000-site library annotates in another.
   `transcript` and `exon` rows. A genes-only GTF gives gene and intergenic
   calls and nothing else, and `build-db` refuses it.
 - **Which promoter file?** Ask for the lab's TSS BED. A file with one site
-  per gene loses alternative promoters. Without `--promoters`,
-  each gene's reference transcript start is used instead, which is a
-  defensible default but not the same file the rest of the lab uses.
+  per gene loses alternative promoters. Without `--promoters`, the start of
+  every transcript in the store is used instead, which is a defensible
+  default but not the same file the rest of the lab uses.
 - **Which gene types?** `--gene-types` defaults to `protein_coding`, so a
   guide in a lncRNA comes back `intergenic`. Say so rather than let it
   surprise someone.

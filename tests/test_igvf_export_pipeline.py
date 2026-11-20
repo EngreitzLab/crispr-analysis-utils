@@ -27,7 +27,7 @@ from pandas.testing import assert_frame_equal
 
 from crispr_analysis_utils import cli
 from crispr_analysis_utils.element_mapping import read_elements, write_mapping_tsv
-from crispr_analysis_utils.guide_annotation import build_store
+from crispr_analysis_utils.guide_annotation import PromoterError, build_store
 from crispr_analysis_utils.igvf_export import (
     COLUMNS,
     NON,
@@ -129,6 +129,16 @@ def row_for(table, alias):
 def test_a_run_writes_four_files_and_nothing_else(inputs, tmp_path):
     run(*inputs, tmp_path / "out", promoter_window=WINDOW)
     assert matches(written(tmp_path / "out"), EXPECTED_FILES)
+
+
+def test_an_alias_that_looks_like_a_number_or_a_gap_is_kept(inputs, tmp_path):
+    alignment, *rest = inputs
+    frame = pd.read_csv(alignment, sep="\t", dtype=str, keep_default_na=False)
+    names = [f"{n:04d}" for n in range(1, len(frame))] + ["NA"]
+    frame["alias"] = names
+    frame.to_csv(alignment, sep="\t", index=False)
+    run(alignment, *rest, tmp_path / "out", promoter_window=WINDOW)
+    assert list(table_of(tmp_path / "out")["guide_id"]) == names
 
 
 def test_nothing_is_written_beside_the_inputs(inputs, genes, tmp_path):
@@ -255,22 +265,29 @@ def test_a_genes_table_keeps_every_measured_gene(inputs, genes, tmp_path):
     assert row["intended_target_name"] == AAA
 
 
-def test_the_first_column_of_ensembl_ids_is_the_gene(inputs, tmp_path):
-    # A pairs table written for another tool is used as it is: the first
-    # column names the element, and the first ENSEMBL column the gene.
+def test_the_gene_and_element_columns_are_chosen_by_name(inputs, tmp_path):
+    # A pairs table written for another tool is used as it is, whatever its
+    # column order, once its two columns are named.
     path = write_genes(
         tmp_path / "pairs.tsv",
-        [(element, "measured", ensg) for element, ensg in GENE_PAIRS],
-        columns=("element_id", "how", "ensembl_id"),
+        [(ensg, "measured", element) for element, ensg in GENE_PAIRS],
+        columns=("ensembl", "how", "peak"),
     )
-    run(*inputs, tmp_path / "out", genes=path, promoter_window=WINDOW)
+    run(
+        *inputs,
+        tmp_path / "out",
+        genes=path,
+        promoter_window=WINDOW,
+        gene_column="ensembl",
+        element_column="peak",
+    )
     row = row_for(table_of(tmp_path / "out"), "promoter")
     assert row["putative_target_genes"] == f"{AAA},{BBB}"
 
 
 def test_a_comma_separated_pairs_file_is_read_as_one(inputs, tmp_path):
     path = tmp_path / "pairs.csv"
-    pd.DataFrame(list(GENE_PAIRS), columns=["element_id", "ensembl_id"]).to_csv(
+    pd.DataFrame(list(GENE_PAIRS), columns=["element_id", "gene_id"]).to_csv(
         path, index=False
     )
     run(*inputs, tmp_path / "out", genes=path, promoter_window=WINDOW)
@@ -278,13 +295,22 @@ def test_a_comma_separated_pairs_file_is_read_as_one(inputs, tmp_path):
     assert row["putative_target_genes"] == f"{AAA},{BBB}"
 
 
-def test_a_genes_table_without_ensembl_ids_is_refused(inputs, tmp_path):
+def test_a_genes_table_without_the_named_column_is_refused(inputs, tmp_path):
     path = write_genes(
         tmp_path / "pairs.tsv",
         [(element, "a gene") for element, _ in GENE_PAIRS],
         columns=("element_id", "symbol"),
     )
-    with pytest.raises(ExportError, match="no column of ENSEMBL gene ids"):
+    with pytest.raises(ValueError, match="no gene_id column; its columns are"):
+        run(*inputs, tmp_path / "out", genes=path, promoter_window=WINDOW)
+
+
+def test_a_genes_table_naming_no_element_of_the_bed_is_refused(inputs, tmp_path):
+    path = write_genes(
+        tmp_path / "pairs.tsv",
+        [(f"other_{element}", ensg) for element, ensg in GENE_PAIRS],
+    )
+    with pytest.raises(ExportError, match="No element of"):
         run(*inputs, tmp_path / "out", genes=path, promoter_window=WINDOW)
 
 
@@ -301,6 +327,13 @@ def test_without_a_bed_the_stores_reference_starts_are_the_tss(inputs, tmp_path)
         )
     )
     assert kinds["P1"] == "promoter"
+
+
+def test_a_tss_bed_naming_contigs_otherwise_is_refused(inputs, tmp_path):
+    path = tmp_path / "tss.bed"
+    path.write_text("1\t40000\t40001\tFAR\t0\t+\n", encoding="utf-8")
+    with pytest.raises(PromoterError, match="No contig of the promoter file"):
+        run(*inputs, tmp_path / "out", promoters=path, promoter_window=WINDOW)
 
 
 def test_a_tss_bed_stands_in_for_the_stores_starts(inputs, tmp_path):
@@ -342,7 +375,11 @@ def test_the_record_says_the_run_finished_and_what_it_found(inputs, genes, tmp_p
     assert state["step"] == "igvf_export"
     assert state["complete"] is True
     assert state["error"] is None
-    assert state["parameters"] == {"promoter_window": WINDOW}
+    assert state["parameters"] == {
+        "promoter_window": WINDOW,
+        "gene_column": "gene_id",
+        "element_column": "element_id",
+    }
     assert state["counts"]["guides"] == len(GUIDES) == len(result.table)
     assert state["counts"]["type"] == {
         TARGETING: 7,

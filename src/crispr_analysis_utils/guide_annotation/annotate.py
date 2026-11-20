@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from .db import Store
-from .promoters import PromoterError
+from .promoters import PromoterError, check_contigs
 
 GENIC = "genic"
 INTERGENIC = "intergenic"
@@ -91,6 +91,8 @@ def annotate_sites(
     ------
     AnnotationError
         No site contig appears in the store, so nothing could ever overlap.
+    PromoterError
+        No TSS contig appears in the store.
     """
     import pyranges1 as pr
 
@@ -109,6 +111,7 @@ def annotate_sites(
 
     sites = sites.reset_index(drop=True)
     _check_contigs(sites, store)
+    check_contigs(promoters, store)
 
     spacers = pr.PyRanges(
         {
@@ -155,6 +158,9 @@ def annotate_sites(
     pairs = pairs.merge(
         _cds_position(targets, store, pr), on=["_row", "ensg"], how="left"
     )
+    pairs = pairs.merge(
+        _cds_overlaps(spacers, store, pr), on=["_row", "ensg"], how="left"
+    )
 
     # Two axes, not one. Whether a gene is there at all, and where inside it:
     # a guide can be genic and in a promoter and in an exon at once, which a
@@ -165,9 +171,11 @@ def annotate_sites(
         "",
         np.where(pairs["enst"].notna(), EXON, INTRON),
     )
+    # On the protospacer, as `feature` is: a cut site past the exon's edge
+    # would otherwise call a coding exon UTR.
     pairs["region"] = np.where(
         pairs["feature"] == EXON,
-        np.where(pairs["cds_position"].notna(), CDS, UTR),
+        np.where(pairs.pop("_in_cds").eq(True), CDS, UTR),
         "",
     )
     pairs["exonic_any_transcript"] = pairs["exonic_any_transcript"].fillna(False)
@@ -337,6 +345,25 @@ def _exon_calls(spacers, store: Store, pr) -> pd.DataFrame:
         .assign(exonic_any_transcript=True)
     )
     return best.merge(anywhere, on=["_row", "ensg"], how="outer")
+
+
+def _cds_overlaps(spacers, store: Store, pr) -> pd.DataFrame:
+    """Per site and gene: whether the protospacer overlaps the reference CDS."""
+    blocks = store.rows("CDS", reference_only=True)
+    columns = ["Chromosome", "Start", "End", "Strand", "ensg"]
+    if blocks.empty:
+        return pd.DataFrame(columns=["_row", "ensg", "_in_cds"])
+    hits = pd.DataFrame(
+        spacers.join_overlaps(
+            pr.PyRanges(blocks[columns].reset_index(drop=True)),
+            join_type="inner",
+            strand_behavior=_IGNORE,
+            suffix="_cds",
+        )
+    )
+    if hits.empty:
+        return pd.DataFrame(columns=["_row", "ensg", "_in_cds"])
+    return hits[["_row", "ensg"]].drop_duplicates().assign(_in_cds=True)
 
 
 def _cds_position(targets, store: Store, pr) -> pd.DataFrame:

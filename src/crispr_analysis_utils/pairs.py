@@ -26,7 +26,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, write_json
+from ._files import file_md5, read_columns, write_json
 from ._version import __version__
 
 logger = logging.getLogger(__name__)
@@ -88,13 +88,15 @@ class RunResult:
     metadata: dict = field(default_factory=dict)
 
 
-def read_panel(path: str | os.PathLike[str]) -> pd.Index:
+def read_panel(path: str | os.PathLike[str], gene_column: str = "gene_id") -> pd.Index:
     """The readout genes, as unversioned ENSEMBL ids.
 
     Parameters
     ----------
     path
-        A CSV or TSV. The first column holding ENSEMBL gene ids is used.
+        A CSV or TSV, as `read_columns` reads it.
+    gene_column
+        The column of ENSEMBL gene ids. A row with it empty is skipped.
 
     Returns
     -------
@@ -104,15 +106,14 @@ def read_panel(path: str | os.PathLike[str]) -> pd.Index:
     Raises
     ------
     PairsError
-        No column holds ENSEMBL gene ids.
+        The panel names no gene.
+    ValueError
+        The suffix names no separator, or `gene_column` is missing.
     """
-    sep = "\t" if str(path).endswith((".tsv", ".txt")) else ","
-    frame = pd.read_csv(path, sep=sep, dtype=str)
-    for column in frame.columns:
-        values = frame[column].dropna()
-        if len(values) and values.str.startswith("ENSG").all():
-            return pd.Index(_unversioned(values).unique())
-    raise PairsError(f"{path} has no column of ENSEMBL gene ids.")
+    genes = read_columns(path, [gene_column], "readout panel")[gene_column]
+    if genes.empty:
+        raise PairsError(f"The readout panel {path} names no gene.")
+    return pd.Index(_unversioned(genes).unique())
 
 
 def gene_tss(store) -> pd.DataFrame:
@@ -321,6 +322,7 @@ def run(
     outdir: str | os.PathLike[str],
     *,
     max_distance: int = DEFAULT_MAX_DISTANCE,
+    gene_column: str = "gene_id",
 ) -> RunResult:
     """Build the pairs and write them.
 
@@ -337,6 +339,8 @@ def run(
     max_distance
         The largest distance from an element's midpoint to a readout gene's
         TSS for a discovery pair.
+    gene_column
+        The panel's column of ENSEMBL gene ids.
 
     Returns
     -------
@@ -357,7 +361,7 @@ def run(
         "finished": None,
         "cau_version": __version__,
         "inputs": {},
-        "parameters": {"max_distance": max_distance},
+        "parameters": {"max_distance": max_distance, "gene_column": gene_column},
         "counts": {},
     }
     handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
@@ -382,7 +386,7 @@ def run(
             state["inputs"][f"{name}_md5"] = file_md5(path)
 
         guides = pd.read_csv(guide_metadata, sep="\t", dtype=str, keep_default_na=False)
-        genes = read_panel(panel)
+        genes = read_panel(panel, gene_column)
         tss = gene_tss(load_store(store))
         logger.info(
             "%d guides, %d panel genes, %d annotated genes",

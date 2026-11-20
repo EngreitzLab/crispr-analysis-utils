@@ -45,6 +45,10 @@ cau mudata-builder run \
   accessions; the CRISPR pipeline's inputs carry them. Without one the object
   records the file's name instead, so the field is never empty and never a
   guess.
+- **A targeted assay?** For a panel such as TAP-seq, `--readout-genes` takes
+  the panel, a `.csv`, `.tsv` or `.txt`, optionally gzipped, and reads its
+  `gene_id` column; ask which column holds the ENSEMBL ids if not that one,
+  and pass `--readout-gene-column`. A whole-transcriptome run needs none.
 
 ## What it writes
 
@@ -53,7 +57,7 @@ cau mudata-builder run \
 | Where | What |
 | --- | --- |
 | `mod['gene'].X` | the gene counts, untouched, with the kb layers beside them |
-| `mod['gene'].var` | `symbol`, `gene_type`, `gene_chr`, `gene_start`, `gene_end` |
+| `mod['gene'].var` | `symbol`, `gene_type`, `gene_chr`, `gene_start`, `gene_end`; `readout` and `readout_primers` with `--readout-genes` |
 | `mod['guide'].X` | the guide counts, untouched |
 | `mod['guide'].var` | every column of `guide_metadata.tsv` |
 | `obs` | `barcode`, `measurement_set`, every `--channel` value, and any `--covariates` given |

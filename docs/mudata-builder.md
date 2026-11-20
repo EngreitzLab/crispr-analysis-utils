@@ -26,6 +26,12 @@ day, chip, batch. It joins every cell's `obs` and is kept in `uns['channel']`.
 `--guide-annotation` and `--element-mapping` carry those tables whole into
 `mod['guide'].uns`, since neither is one row per guide.
 
+`--readout-genes` is a targeted assay's panel, a `.csv`, `.tsv` or `.txt`,
+optionally gzipped, whose `gene_id` column holds ENSEMBL ids;
+`--readout-gene-column` names another. It adds `readout` and
+`readout_primers` to `mod['gene'].var`, and a panel naming no gene of the
+matrix stops the run.
+
 Nothing is written outside `--outdir`.
 
 ## What it assembles
@@ -33,7 +39,7 @@ Nothing is written outside `--outdir`.
 | Where | What |
 | --- | --- |
 | `mod['gene'].X` | the gene counts, untouched, with the kb layers beside them |
-| `mod['gene'].var` | `symbol`, `gene_type`, `gene_chr`, `gene_start`, `gene_end` |
+| `mod['gene'].var` | `symbol`, `gene_type`, `gene_chr`, `gene_start`, `gene_end`; `readout` and `readout_primers` with `--readout-genes` |
 | `mod['guide'].X` | the guide counts, untouched |
 | `mod['guide'].var` | every column of `guide_metadata.tsv` |
 | `obs` | `barcode`, `measurement_set`, and any `--covariates` given |

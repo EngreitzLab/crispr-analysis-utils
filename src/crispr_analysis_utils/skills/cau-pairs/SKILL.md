@@ -23,10 +23,11 @@ cau pairs run \
 
 ## Ask before running
 
-- **Which genes are read out?** `--genes` is the panel: a CSV or TSV whose
-  first column of ENSEMBL ids is used, versions dropped. For a
-  whole-transcriptome screen, ask which genes the user means to test rather
-  than passing all of them.
+- **Which genes are read out?** `--genes` is the panel: a `.csv`, `.tsv` or
+  `.txt`, optionally gzipped, whose `gene_id` column is read, versions
+  dropped. If the ENSEMBL ids sit under another header, ask which and pass
+  `--gene-column`. For a whole-transcriptome screen, ask which genes the user
+  means to test rather than passing all of them.
 - **Which annotation?** The store must be the GENCODE release the guide
   table was built with. A panel gene the store lacks stops the run.
 - **How far is cis?** `--max-distance` defaults to 1,000,000 bases from the

@@ -326,6 +326,34 @@ def test_run_writes_the_object_and_its_record(tmp_path, files):
     assert state["counts"]["pairs"]["pairs_out"] == 3
 
 
+def test_guide_ids_that_look_like_numbers_still_match_their_pairs(tmp_path):
+    numbers = {old: f"{n:04d}" for n, old in enumerate(guide_var().index, start=1)}
+    data = channel("MS1")
+    data.mod["guide"].var_names = data.mod["guide"].var_names.map(numbers)
+    data.update()
+    data.write_h5mu(tmp_path / "MS1.h5mu")
+    table = pairs().assign(guide_id=lambda f: f.guide_id.map(numbers).fillna("9999"))
+    table.to_csv(tmp_path / "pairs.csv", index=False)
+    result = run(
+        [tmp_path / "MS1.h5mu"],
+        tmp_path / "pairs.csv",
+        tmp_path / "out",
+        name="day4",
+        capture_method="CROP-seq",
+    )
+    assert result.report["pairs"]["pairs_out"] == 3
+
+
+def test_pairs_that_match_nothing_are_refused():
+    with pytest.raises(InputError, match="None of the 5 pairs"):
+        build(
+            [channel("MS1")],
+            pairs().assign(guide_id="elsewhere"),
+            moi="high",
+            capture_method="CROP-seq",
+        )
+
+
 def test_the_command_runs(tmp_path, files, capsys):
     paths, table = files
     status = cli.main(

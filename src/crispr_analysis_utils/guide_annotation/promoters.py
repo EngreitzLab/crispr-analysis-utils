@@ -12,7 +12,7 @@ _BED6 = ("Chromosome", "Start", "End", "gene_symbol", "score", "Strand")
 
 
 class PromoterError(RuntimeError):
-    """The promoter file is unusable, or shares no gene with the store."""
+    """The promoter file is unusable, or shares no contig with the store."""
 
 
 def read_promoters(path: str | os.PathLike[str]) -> pd.DataFrame:
@@ -76,6 +76,24 @@ def read_promoters(path: str | os.PathLike[str]) -> pd.DataFrame:
     return frame.assign(
         ensg=_unversioned(frame["ensg"]), enst=_unversioned(frame["enst"])
     )[["Chromosome", "Start", "End", "Strand", "gene_symbol", "ensg", "enst"]]
+
+
+def check_contigs(promoters: pd.DataFrame, store) -> None:
+    """Fail when no TSS contig is in the store, rather than measure from none.
+
+    Raises
+    ------
+    PromoterError
+        The TSS and the store name contigs differently, ``1`` against
+        ``chr1``, so every distance would be to no promoter at all.
+    """
+    found = set(promoters["Chromosome"].astype(str))
+    if found and not found & store.contigs:
+        raise PromoterError(
+            "No contig of the promoter file appears in the annotation store:"
+            f" it uses {', '.join(sorted(found)[:3])} and the store uses"
+            f" {', '.join(sorted(store.contigs)[:3])}."
+        )
 
 
 def promoters_from_store(store, *, reference_only: bool = False) -> pd.DataFrame:
