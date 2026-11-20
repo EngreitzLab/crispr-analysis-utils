@@ -148,7 +148,9 @@ scanpy's plotting.
   only and linear (`LOG_METRICS`, overridable with `sides`).
 - **The grey bars do not sum to the cells a filter drops.** Each panel
   counts its own rejects, so a cell that two metrics reject is grey twice.
-  `mad_outlier` per metric, combined with `any`, is what gives the cells.
+  The cells dropped are `n_cells_in` minus `n_cells_out` in the
+  `uns["qc"]` that `apply_filters` writes, since it keeps a cell only if
+  it passes every rule.
 - A metric no rule covers loses its lines, not the figure: the panel is
   drawn without them and the caption says so.
 - A cell the modality does not hold is dropped, never binned as zero.
@@ -215,18 +217,16 @@ carried over.
 - **The MAD is rescaled to a sigma** (`scale="normal"`, a factor of 1.4826),
   so `nmads` reads as standard deviations. A raw MAD would make the same
   number cut a third more tightly.
-- **`log=True` for a count**, which is roughly log-normal; off for a
-  percentage. The base does not matter: a median and a MAD rescale together,
+- **`log=True` for a count, always**, since a count is roughly log-normal;
+  off for a percentage. On the raw scale the band is symmetric around the
+  median and its lower bound goes negative, so only the upper tail ever cuts
+  anything. The base does not matter: a median and a MAD rescale together,
   so the band in the original units is the same either way.
-
 - **It cannot pick the first cut.** The MAD describes whatever population
   it is given, and on an unfiltered barcode space that population is ambient
   droplets. On one real channel the median barcode held 2 UMIs and the
   5-MAD band on `log10` reached 131, so every actual cell was an outlier.
   The order is: knee for the floor, then MAD on the cells that survive it.
-- **`log=True` for a count, always.** On the raw scale the band is symmetric
-  around the median and its lower bound goes negative, so only the upper
-  tail ever cuts anything.
 - **`side="upper"` for a contamination fraction.** A cell with unusually
   little mitochondrial signal is not a problem; one with a lot is.
 - 5 MADs is the usual starting point. 3 is aggressive, and on a healthy

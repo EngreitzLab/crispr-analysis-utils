@@ -224,18 +224,42 @@ def test_the_cut_of_a_minus_strand_guide_is_counted_from_its_own_position(annota
 
 def test_on_a_minus_strand_gene_the_highest_block_comes_first(annotated):
     # BBB's CDS blocks are 2600-2650 and 3500-3600: 150 bases, and 3500-3600
-    # is the 5' one. The cut at 3543 is 3600 - 1 - 3543 = 56 bases in.
+    # is the 5' one. Reading down from 3599, the cut at 3543 has 3543-3599
+    # before it: 3600 - 3543 = 57 bases.
     row = one(annotated, "minus_cds_first_block")
-    assert row["cds_position"] == 56
-    assert row["cds_fraction"] == pytest.approx(0.3733)
+    assert row["cds_position"] == 57
+    assert row["cds_fraction"] == pytest.approx(0.38)
 
 
 def test_the_lower_block_of_a_minus_strand_gene_carries_the_offset(annotated):
-    # The cut at 2617 is 2650 - 1 - 2617 = 32 into the second block, which the
+    # The cut at 2617 is 2650 - 2617 = 33 into the second block, which the
     # first block's 100 bases precede.
     row = rows_for(annotated, "two_genes").iloc[1]
-    assert row["cds_position"] == 132
-    assert row["cds_fraction"] == pytest.approx(0.88)
+    assert row["cds_position"] == 133
+    assert row["cds_fraction"] == pytest.approx(0.8867)
+
+
+def test_a_cut_on_an_exon_junction_counts_the_same_on_either_strand(store, tss):
+    # A cut has a position when the base 3' of it, read along the transcript,
+    # is coding. On AAA (+) that base is right of the cut, on BBB (-) left.
+    edges = annotate_sites(
+        sites_frame(
+            # AAA's block 2000-2200: cut at its 5' edge, then at its 3' edge.
+            site("plus_5p", "chr1", 1983, "+"),
+            site("plus_3p", "chr1", 2183, "+"),
+            # BBB's block 3500-3600, read down from 3599: the same two edges.
+            site("minus_5p", "chr1", 3597, "-"),
+            site("minus_3p", "chr1", 3497, "-"),
+        ),
+        store,
+        tss,
+        promoter_window=WINDOW,
+    )
+    position = edges.set_index("guide_id")["cds_position"]
+    assert position["plus_5p"] == 100
+    assert position["minus_5p"] == 0
+    assert pd.isna(position["plus_3p"])
+    assert pd.isna(position["minus_3p"])
 
 
 def test_an_exon_whose_protospacer_misses_the_cds_is_utr(annotated):

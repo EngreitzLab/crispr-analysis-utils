@@ -123,14 +123,17 @@ def annotate_sites(
         }
     )
     # The CDS position asks where along the coding sequence Cas9 acts, so it
-    # stays on the target site whatever distances are measured from.
+    # stays on the target site whatever distances are measured from. Both
+    # bases beside the cut are kept: which one is 3' of it depends on the
+    # gene's strand.
     targets = pr.PyRanges(
         {
             "Chromosome": sites["chr"].to_numpy(),
-            "Start": sites["target_site"].to_numpy(),
+            "Start": sites["target_site"].to_numpy() - 1,
             "End": sites["target_site"].to_numpy() + 1,
             "Strand": sites["strand"].to_numpy(),
             "_row": np.arange(len(sites)),
+            "_cut": sites["target_site"].to_numpy(),
         }
     )
 
@@ -367,7 +370,12 @@ def _cds_overlaps(spacers, store: Store, pr) -> pd.DataFrame:
 
 
 def _cds_position(targets, store: Store, pr) -> pd.DataFrame:
-    """How far along the reference CDS the target site falls, and its length."""
+    """How many coding bases of the reference transcript precede the cut.
+
+    A cut has a position when the base just 3' of it, in the transcript's
+    direction, is coding, so a cut on an exon junction counts the same way on
+    either strand.
+    """
     blocks = _cds_blocks(store)
     if blocks.empty:
         return pd.DataFrame(columns=["_row", "ensg", "cds_position", "cds_fraction"])
@@ -384,10 +392,13 @@ def _cds_position(targets, store: Store, pr) -> pd.DataFrame:
         return pd.DataFrame(columns=["_row", "ensg", "cds_position", "cds_fraction"])
 
     forward = hits["Strand_cds"] == "+"
+    after = np.where(forward, hits["_cut"], hits["_cut"] - 1)
+    hits = hits[(hits["Start_cds"] <= after) & (after < hits["End_cds"])]
+    forward = hits["Strand_cds"] == "+"
     within = np.where(
         forward,
-        hits["Start"] - hits["Start_cds"],
-        hits["End_cds"] - 1 - hits["Start"],
+        hits["_cut"] - hits["Start_cds"],
+        hits["End_cds"] - hits["_cut"],
     )
     hits["cds_position"] = hits["_offset"] + within
     hits["cds_fraction"] = (hits["cds_position"] / hits["_total"]).round(4)
