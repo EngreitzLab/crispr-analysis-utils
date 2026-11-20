@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from guide_annotation_fixtures import write_gtf
 
+from crispr_analysis_utils._files import file_md5
 from crispr_analysis_utils.guide_annotation import build_store
 from crispr_analysis_utils.mudata_builder import (
     BuildError,
@@ -224,18 +225,47 @@ def test_a_genome_that_does_not_exist_is_refused(store, tmp_path):
         reference_block(store, genome=tmp_path / "absent.fa")
 
 
-def test_a_different_store_than_the_guides_were_built_on_is_refused(tmp_path):
+def guides_built_on(tmp_path, store):
+    """A guide table whose run record names `store` by a relative path."""
     results = tmp_path / "results"
     (results / "igvf").mkdir(parents=True)
     (results / "run_metadata").mkdir()
-    guides = results / "igvf" / "guide_metadata.tsv"
-    guide_table(guides, ["g1"])
+    guides = guide_table(results / "igvf" / "guide_metadata.tsv", ["g1"])
+    inputs = {"store": "../" + store.name, "store_md5": file_md5(store)}
     (results / "run_metadata" / "igvf_export_20260101T000000Z.json").write_text(
-        json.dumps({"inputs": {"store": str(tmp_path / "other.parquet")}}),
-        encoding="utf-8",
+        json.dumps({"complete": True, "inputs": inputs}), encoding="utf-8"
     )
+    return guides
+
+
+def test_a_different_store_than_the_guides_were_built_on_is_refused(tmp_path):
+    (tmp_path / "theirs.parquet").write_text("v43", encoding="utf-8")
+    (tmp_path / "mine.parquet").write_text("v44", encoding="utf-8")
+    guides = guides_built_on(tmp_path, tmp_path / "theirs.parquet")
     with pytest.raises(BuildError, match="different GENCODE"):
         check_same_store(guides, tmp_path / "mine.parquet")
+
+
+def test_a_later_failed_export_does_not_hide_the_one_that_wrote_the_table(tmp_path):
+    (tmp_path / "theirs.parquet").write_text("v43", encoding="utf-8")
+    (tmp_path / "mine.parquet").write_text("v44", encoding="utf-8")
+    guides = guides_built_on(tmp_path, tmp_path / "theirs.parquet")
+    # Failed before it read the store, so its record holds no checksum.
+    (
+        tmp_path / "results" / "run_metadata" / "igvf_export_20260102T000000Z.json"
+    ).write_text(json.dumps({"complete": False, "inputs": {}}), encoding="utf-8")
+    with pytest.raises(BuildError, match="different GENCODE"):
+        check_same_store(guides, tmp_path / "mine.parquet")
+
+
+def test_the_same_store_by_another_path_is_accepted(tmp_path):
+    store = tmp_path / "gencode.parquet"
+    store.write_text("v43", encoding="utf-8")
+    guides = guides_built_on(tmp_path, store)
+    (tmp_path / "elsewhere").mkdir()
+    copy = tmp_path / "elsewhere" / "gencode.parquet"
+    copy.write_bytes(store.read_bytes())
+    assert check_same_store(guides, copy) == file_md5(store)
 
 
 def test_no_run_record_is_not_an_error(tmp_path):

@@ -31,9 +31,9 @@ cau mudata-builder run \
 
 - **Which GENCODE?** It must be the same release the guides were annotated
   against, or genes and guides describe different genomes. Ask rather than
-  reach for whatever store is nearest. The run refuses a store other than the
-  one the guide metadata's run record names, and warns when there is no
-  record to check against.
+  reach for whatever store is nearest. The run refuses a store whose checksum
+  differs from the one the guide metadata's run record holds, and warns when
+  there is no record to check against.
 - **Which channel?** `--measurement-set` goes into the cell index as
   `{barcode}_{measurement_set}`, so two channels concatenate without their
   barcodes colliding. There is no sensible default.

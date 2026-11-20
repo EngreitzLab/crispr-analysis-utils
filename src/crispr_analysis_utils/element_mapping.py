@@ -20,14 +20,12 @@ import os
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, write_json
-from ._version import __version__
+from ._files import file_md5, run_record, truthy, yaml_text
 
 logger = logging.getLogger(__name__)
 
@@ -416,7 +414,7 @@ def _round(value: float) -> float | int:
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
     """Write guide_element_mapping_columns.yaml, generated from `COLUMNS` so it cannot drift."""
     lines = ["# What each column of this folder's output holds.", "", f"{TABLE}:"]
-    lines += [f'  {name}: "{_one_line(text)}"' for name, text in COLUMNS.items()]
+    lines += [f"  {name}: {yaml_text(text)}" for name, text in COLUMNS.items()]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -491,20 +489,12 @@ def _sample(values: pd.Series, n: int = 3) -> str:
     return ", ".join(names) + ("..." if len(names) == n else "")
 
 
-def _one_line(text: str) -> str:
-    """One line, with any quote escaped, so the YAML stays valid."""
-    return " ".join(text.split()).replace('"', '\\"')
-
-
 # --- the pipeline -------------------------------------------------------
 
 
 RESULTS_DIR = "elements"
 """Where the step's results go, so nothing of its own sits beside the inputs."""
-METADATA_DIR = "run_metadata"
 STEP = "element_mapping"
-LOG_FILE = "element_mapping.log"
-_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 @dataclass
@@ -565,34 +555,10 @@ def run(
         The mapping and the record.
     """
     outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-    (outdir / "logs").mkdir(exist_ok=True)
-    (outdir / METADATA_DIR).mkdir(exist_ok=True)
-    (outdir / RESULTS_DIR).mkdir(exist_ok=True)
-    record = outdir / METADATA_DIR / f"{STEP}_{_stamp()}.json"
-
-    state: dict = {
-        "step": STEP,
-        "complete": False,
-        "error": None,
-        "started": _now(),
-        "finished": None,
-        "cau_version": __version__,
-        "inputs": {},
-        "parameters": {},
-        "counts": {},
-    }
-    handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-    package = logging.getLogger(__name__.rsplit(".", 1)[0])
-    package.addHandler(handler)
-    if package.level == logging.NOTSET:
-        package.setLevel(logging.INFO)
-    # The run's log belongs in the file, not on the terminal. pyranges calls
-    # logging.basicConfig on import, which puts a handler on the root logger.
-    propagate = package.propagate
-    package.propagate = False
-    try:
+    parameters = {}
+    with run_record(
+        outdir, STEP, RESULTS_DIR, parameters, logger, "Element mapping"
+    ) as (state, _):
         library, sites = _read_alignment(alignment)
         state["inputs"]["alignment"] = (
             "DataFrame" if isinstance(alignment, pd.DataFrame) else str(alignment)
@@ -652,21 +618,8 @@ def run(
         write_qc_tsv(outdir / RESULTS_DIR / "qc.tsv", mapping, regions, sites)
 
         state["counts"] = counts(mapping)
-        state["complete"] = True
-        state["finished"] = _now()
-        write_json(record, state)
         logger.info("Element mapping complete: %s", state["counts"]["classes"])
         return RunResult(outdir=outdir, mapping=mapping, metadata=state)
-    except Exception as error:
-        state["error"] = f"{type(error).__name__}: {error}"
-        state["finished"] = _now()
-        write_json(record, state)
-        logger.error("Element mapping failed: %s", state["error"])
-        raise
-    finally:
-        package.removeHandler(handler)
-        package.propagate = propagate
-        handler.close()
 
 
 def _read_alignment(
@@ -691,28 +644,9 @@ def _read_alignment(
     sites = frame
     flag = "best_site" if "best_site" in sites else "pam_matches"
     if flag in sites:
-        sites = sites[sites[flag].map(_truthy)]
+        sites = sites[sites[flag].map(truthy)]
     sites = sites[sites["chr"].notna() & (sites["chr"].astype(str) != "")]
     sites = sites.copy()
     for column in ("start", "end"):
         sites[column] = sites[column].astype("int64")
     return library, sites[list(SITE_COLUMNS)].reset_index(drop=True)
-
-
-def _truthy(value: object) -> bool:
-    """TRUE, true and True all mean the same; an empty cell does not."""
-    if isinstance(value, str):
-        return value.strip().upper() == "TRUE"
-    if value is None or pd.isna(value):
-        return False
-    return bool(value)
-
-
-def _stamp() -> str:
-    """A UTC timestamp for a file name."""
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _now() -> str:
-    """The time now, in UTC, as ISO 8601."""
-    return datetime.now(UTC).isoformat(timespec="seconds")

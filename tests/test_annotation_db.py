@@ -300,6 +300,14 @@ def test_a_six_column_bed_is_read_with_no_gene_id(tmp_path):
     assert frame["enst"].tolist() == ["", ""]
 
 
+def test_id_columns_blank_throughout_are_read_as_missing(tmp_path):
+    # A column with no value reads as float unless it is read as text.
+    rows = [(*line, "", "") for line in BED6]
+    frame = read_promoters(write_bed(tmp_path / "blank.bed", rows))
+    assert frame["ensg"].isna().all()
+    assert frame["enst"].isna().all()
+
+
 def test_a_leading_hash_line_is_a_header_and_not_a_site(tmp_path):
     header = ("#chr", "start", "end", "gene", "score", "strand")
     with_header = read_promoters(write_bed(tmp_path / "head.bed", [header, *BED6]))

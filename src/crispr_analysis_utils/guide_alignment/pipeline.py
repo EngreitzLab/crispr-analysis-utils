@@ -19,16 +19,19 @@ import logging
 import os
 import time
 from collections import Counter
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pandas as pd
 
-from .._files import check_plain_fasta, file_md5, write_json
-from .._version import __version__
+from .._files import (
+    check_plain_fasta,
+    file_md5,
+    run_record,
+    timed,
+    write_json,
+)
 from .iupac import reverse_complement, validate_pams
 from .library import Guide, read_guides
 from .orientation import FORWARD, REVERSE_COMPLEMENT, VERDICTS
@@ -47,12 +50,8 @@ logger = logging.getLogger(__name__)
 
 RESULTS_DIR = "alignments"
 """Where the step's results go, so nothing of its own sits beside the inputs."""
-METADATA_DIR = "run_metadata"
-"""Where each invocation leaves its metadata, one file per invocation."""
 STEP = "guide_alignment"
-"""The step those metadata files are named for."""
-LOG_FILE = "guide_alignment.log"
-_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+"""The step its run records and log are named for."""
 
 ORIENTATION_CHECKS = ("warn", "error", "off")
 """The values of `run`'s ``orientation_check``."""
@@ -174,12 +173,6 @@ def run(
     reference = check_plain_fasta(reference, "reference")
 
     outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-    (outdir / "logs").mkdir(exist_ok=True)
-    (outdir / METADATA_DIR).mkdir(exist_ok=True)
-    (outdir / RESULTS_DIR).mkdir(exist_ok=True)
-    record = outdir / METADATA_DIR / f"{STEP}_{_stamp()}.json"
-
     parameters = {
         "pam": patterns[0],
         "spacer_length": spacer_length,
@@ -195,35 +188,13 @@ def run(
         "sep": sep,
         "header": header,
     }
-    state: dict = {
-        "step": STEP,
-        "complete": False,
-        "error": None,
-        "started": _now(),
-        "finished": None,
-        "cau_version": __version__,
-        "inputs": {},
-        "parameters": parameters,
-        "counts": {},
-        "classes": {},
-        "orientation": {},
-        "orientation_fixed": 0,
-        "seconds": {},
-    }
     started = time.perf_counter()
-
-    with _log_to(outdir / "logs" / LOG_FILE):
+    with run_record(
+        outdir, STEP, RESULTS_DIR, parameters, logger, "Guide alignment"
+    ) as (state, record):
+        state.update(classes={}, orientation={}, orientation_fixed=0)
         logger.info("Guide alignment into %s, with %s", outdir, parameters)
-        try:
-            result = _run(guides, reference, outdir, parameters, state, record, started)
-        except Exception as error:
-            state["error"] = f"{type(error).__name__}: {error}"
-            state["finished"] = _now()
-            state["seconds"]["total"] = round(time.perf_counter() - started, 3)
-            write_json(record, state)
-            logger.error("Guide alignment failed: %s", state["error"])
-            raise
-    return result
+        return _run(guides, reference, outdir, parameters, state, record, started)
 
 
 def _run(
@@ -236,7 +207,7 @@ def _run(
     started: float,
 ) -> RunResult:
     """The run itself, inside the log handler and the metadata record."""
-    with _timed(state, "guides"):
+    with timed(state, "guides"):
         source = guides if isinstance(guides, pd.DataFrame) else os.fspath(guides)
         library = read_guides(
             guides,
@@ -259,11 +230,11 @@ def _run(
         sum(guide.extra_5p for guide in library),
     )
 
-    with _timed(state, "checksums"):
+    with timed(state, "checksums"):
         state["inputs"]["reference_md5"] = file_md5(reference)
     write_json(record, state)
 
-    with _timed(state, "scan"):
+    with timed(state, "scan"):
         scan = scan_guides(
             library,
             reference,
@@ -277,7 +248,7 @@ def _run(
 
     library, scan = _check_orientation(library, scan, reference, parameters, state)
 
-    with _timed(state, "outputs"):
+    with timed(state, "outputs"):
         summaries = summarize(
             library,
             scan.sites,
@@ -305,13 +276,9 @@ def _run(
     state["orientation"] = _ordered(
         (summary.orientation for summary in summaries), VERDICTS
     )
-    state["complete"] = True
-    state["finished"] = _now()
-    state["seconds"]["total"] = round(time.perf_counter() - started, 3)
-    write_json(record, state)
     logger.info(
         "Done in %.1f s: classes %s; outputs in %s",
-        state["seconds"]["total"],
+        time.perf_counter() - started,
         state["classes"],
         outdir,
     )
@@ -370,7 +337,7 @@ def _check_orientation(
         return library, scan
 
     logger.warning("%s Reverse-complementing those entries.", message)
-    with _timed(state, "rescan"):
+    with timed(state, "rescan"):
         library = _reverse_complemented(library, backwards, parameters)
         scan = scan_guides(
             library,
@@ -414,47 +381,3 @@ def _reverse_complemented(
 def _ordered(values: Iterable[str], order: Sequence[str]) -> dict[str, int]:
     counts = Counter(values)
     return {name: counts[name] for name in order}
-
-
-def _stamp() -> str:
-    """The UTC timestamp that names this invocation's metadata file."""
-    return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
-
-
-@contextmanager
-def _timed(state: dict, name: str) -> Iterator[None]:
-    """Record how long a step took, in seconds."""
-    start = time.perf_counter()
-    try:
-        yield
-    finally:
-        state["seconds"][name] = round(time.perf_counter() - start, 3)
-
-
-@contextmanager
-def _log_to(path: Path) -> Iterator[None]:
-    """Append this package's log records, from INFO up, to `path`."""
-    package = logging.getLogger(__package__)
-    handler = logging.FileHandler(path, mode="a", encoding="utf-8")
-    handler.setLevel(logging.INFO)
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-    level = package.level
-    if package.getEffectiveLevel() > logging.INFO:
-        package.setLevel(logging.INFO)
-    package.addHandler(handler)
-    # The run's log belongs in the file, not on the terminal. A library that
-    # calls logging.basicConfig puts a handler on the root logger, and
-    # anything that propagates there would be printed as well.
-    propagate = package.propagate
-    package.propagate = False
-    try:
-        yield
-    finally:
-        package.removeHandler(handler)
-        handler.close()
-        package.setLevel(level)
-        package.propagate = propagate

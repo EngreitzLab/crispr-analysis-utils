@@ -146,6 +146,16 @@ def test_pam_patterns(tmp_path, pam):
     run(tmp_path, contigs, spacers, pam=pam, upstream=2)
 
 
+@pytest.mark.parametrize("code", sorted(IUPAC))
+def test_every_iupac_code_admits_its_bases_and_only_n_admits_an_n(tmp_path, code):
+    spacer = "ACGTTGCAAGCTTCGATCGA"
+    contigs = {base: "TT" + spacer + base for base in "ACGTN"}
+    hits = run(tmp_path, contigs, [spacer], pam=code)
+    assert {hit[1]: hit[6] for hit in hits} == {
+        base: code == "N" or base in IUPAC[code] for base in "ACGTN"
+    }
+
+
 def test_sites_at_the_contig_ends(tmp_path):
     spacer = "ACGTAC"
     # One at the very start, one at the very end: their flanks run off.

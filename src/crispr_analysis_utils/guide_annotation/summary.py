@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .._files import yaml_text
 from .annotate import (
     ANTISENSE,
     CDS,
@@ -75,8 +76,10 @@ COLUMNS = {
     ),
     "cds_fraction": "cds_position as a fraction of the whole CDS, 0 to 1.",
     "distance_to_gene_start": (
-        "Bases from the target site to this gene's annotated 5' end, signed in"
+        "Bases from the anchor to this gene's annotated 5' end, signed in"
         " the gene's orientation: negative upstream of it, positive inside."
+        " The anchor is the protospacer midpoint, rounded down, unless"
+        " --distance-from target_site."
         " Near zero is the canonical promoter; a large positive distance in a"
         " promoter window is an alternative one."
     ),
@@ -97,7 +100,7 @@ COLUMNS = {
         " protein-coding TSS, whichever gene it belongs to."
     ),
     "distance_to_tss": (
-        "Bases from the target site (end - 3 on +, start + 3 on -) to the"
+        "Bases from the anchor (as for distance_to_gene_start) to the"
         " nearest protein-coding TSS, signed in that gene's orientation:"
         " negative upstream, positive downstream."
     ),
@@ -171,7 +174,7 @@ def write_columns_yaml(path: str | os.PathLike[str]) -> None:
         lines.append(f"  # {heading}")
         for _ in range(count):
             column, description = next(columns)
-            lines.append(f'  {column}: "{_one_line(description)}"')
+            lines.append(f"  {column}: {yaml_text(description)}")
     lines.append("")
     Path(path).write_text("\n".join(lines), encoding="utf-8")
 
@@ -217,8 +220,3 @@ def counts(annotated: pd.DataFrame) -> dict:
 def _whole_numbers(values: pd.Series) -> pd.Series:
     """Write a column of whole numbers without a trailing .0."""
     return values.astype("Float64").astype("Int64")
-
-
-def _one_line(text: str) -> str:
-    """One line, with any quote escaped, so the YAML stays valid."""
-    return " ".join(text.split()).replace('"', '\\"')

@@ -21,43 +21,13 @@ TABLE = {
 }
 
 
-@pytest.mark.parametrize(("code", "bases"), sorted(TABLE.items()))
-def test_base_matches_follows_the_iupac_table(code, bases):
-    for base in "ACGT":
-        assert iupac.base_matches(base, code) is (base in bases)
-        assert iupac.base_matches(base.lower(), code.lower()) is (base in bases)
-
-
-def test_a_genomic_n_matches_only_n():
-    assert iupac.base_matches("N", "N")
-    for code in "ACGTRYSWKMBDHV":
-        assert not iupac.base_matches("N", code)
-        assert not iupac.base_matches("n", code)
-
-
-def test_base_matches_rejects_what_is_not_one_iupac_code():
-    with pytest.raises(ValueError, match="not an IUPAC"):
-        iupac.base_matches("A", "X")
-    with pytest.raises(ValueError, match="not an IUPAC"):
-        iupac.base_matches("A", "NG")
-
-
-def test_pattern_matches():
-    assert iupac.pattern_matches("TGG", "NGG")
-    assert iupac.pattern_matches("tgg", "ngg")
-    assert iupac.pattern_matches("NGG", "NGG")  # a genomic N at the N position
-    assert not iupac.pattern_matches("TNG", "NGG")  # and at a G position
-    assert not iupac.pattern_matches("TAG", "NGG")
-    assert iupac.pattern_matches("TAG", "NRG")
-    assert not iupac.pattern_matches("GG", "NGG")  # a flank cut by a contig end
-    assert not iupac.pattern_matches("", "NGG")
-
-
-def test_pattern_matches_rejects_a_non_iupac_pattern():
-    with pytest.raises(ValueError, match="IUPAC"):
-        iupac.pattern_matches("TTT", "NGX")
-    with pytest.raises(ValueError, match="IUPAC"):
-        iupac.pattern_matches("TT", "NGX")
+def test_the_table_is_the_iupac_one():
+    # Which genomic base satisfies a code is the Rust core's to decide, and
+    # tests/test_core_scan.py checks it; this table only validates and
+    # complements patterns.
+    assert iupac.IUPAC_BASES == {
+        code: frozenset(bases) for code, bases in TABLE.items()
+    }
 
 
 def test_complement_and_reverse_complement():

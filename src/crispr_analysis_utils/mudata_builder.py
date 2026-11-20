@@ -20,14 +20,12 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, read_columns, write_json
-from ._version import __version__
+from ._files import METADATA_DIR, file_md5, read_columns, run_record
 from .guide_annotation.db import _unversioned
 
 GENE_COLUMNS = ("symbol", "gene_type", "gene_chr", "gene_start", "gene_end")
@@ -40,22 +38,9 @@ TABLE = "mudata.h5mu"
 """The one output."""
 
 RESULTS_DIR = "mudata"
-METADATA_DIR = "run_metadata"
 STEP = "mudata_builder"
-LOG_FILE = "mudata_builder.log"
-_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 logger = logging.getLogger(__name__)
-
-
-def _now() -> str:
-    """The moment, as the run record writes it."""
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _stamp() -> str:
-    """The run record's file stamp."""
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 class BuildError(RuntimeError):
@@ -299,32 +284,39 @@ def check_same_store(
     Returns
     -------
     str
-        What was compared, for the log. Empty when no record was found, which
-        is not an error: the table may have been copied away from its run.
+        The store's checksum, for the log. Empty when no complete record
+        holds one, which is not an error: the table may have been copied away
+        from its run, or written before records carried it.
 
     Raises
     ------
     BuildError
-        The record names a different store.
+        The record's store is a different file: its checksum differs.
     """
-    records = Path(guide_metadata).resolve().parent.parent / "run_metadata"
-    if not records.is_dir():
+    records = Path(guide_metadata).resolve().parent.parent / METADATA_DIR
+    # The latest run that finished: one that failed since did not write the table.
+    finished = [
+        state
+        for path in sorted(records.glob("igvf_export_*.json"), reverse=True)
+        if (state := json.loads(path.read_text(encoding="utf-8"))).get("complete")
+    ]
+    if not finished:
         return ""
-    written = sorted(records.glob("igvf_export_*.json"))
-    if not written:
+    # The file, not its path: a path is relative to where each run started,
+    # and a store rebuilt in place keeps its path.
+    inputs = finished[0].get("inputs", {})
+    recorded = inputs.get("store_md5", "")
+    if not recorded:
         return ""
-    state = json.loads(written[-1].read_text(encoding="utf-8"))
-    used = state.get("inputs", {}).get("store", "")
-    if not used:
-        return ""
-    if Path(used).resolve() != Path(store_path).resolve():
+    if recorded != file_md5(store_path):
         raise BuildError(
-            f"The guide metadata was written against {used}, but this build "
-            f"was given {store_path}. Genes and guides would be annotated "
-            "against different GENCODE releases. Pass the same store, or "
-            "re-run `cau igvf-export run` against this one."
+            f"The guide metadata was written against {inputs.get('store', 'a store')}"
+            f" (md5 {recorded}), but this build was given {store_path}, a different"
+            " file. Genes and guides would be annotated against different GENCODE"
+            " releases. Pass the same store, or re-run `cau igvf-export run`"
+            " against this one."
         )
-    return used
+    return recorded
 
 
 def build(
@@ -507,42 +499,21 @@ def run(
     from .guide_annotation import load_store
 
     outdir = Path(outdir)
-    outdir.mkdir(parents=True, exist_ok=True)
-    (outdir / "logs").mkdir(exist_ok=True)
-    (outdir / METADATA_DIR).mkdir(exist_ok=True)
-    (outdir / RESULTS_DIR).mkdir(exist_ok=True)
-    record = outdir / METADATA_DIR / f"{STEP}_{_stamp()}.json"
-
-    state: dict = {
-        "step": STEP,
-        "complete": False,
-        "error": None,
-        "started": _now(),
-        "finished": None,
-        "cau_version": __version__,
-        "inputs": {},
-        "parameters": {
-            "measurement_set": measurement_set,
-            "channel": dict(metadata or {}),
-        },
-        "counts": {},
+    parameters = {
+        "measurement_set": measurement_set,
+        "channel": dict(metadata or {}),
     }
-    handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-    package = logging.getLogger(__name__.rsplit(".", 1)[0])
-    package.addHandler(handler)
-    if package.level == logging.NOTSET:
-        package.setLevel(logging.INFO)
-    propagate = package.propagate
-    package.propagate = False
-    try:
+    with run_record(outdir, STEP, RESULTS_DIR, parameters, logger, "MuData build") as (
+        state,
+        _,
+    ):
         compared = check_same_store(guide_metadata, store)
         if compared:
-            logger.info("Guide metadata and genes share the store %s", compared)
+            logger.info("Guide metadata and genes share the store, md5 %s", compared)
         else:
             logger.warning(
-                "No run record beside the guide metadata, so the store it was "
-                "built against could not be checked."
+                "No run record with a store checksum beside the guide metadata,"
+                " so the store it was built against could not be checked."
             )
 
         loaded = load_store(store)
@@ -628,18 +599,5 @@ def run(
             "guides_unannotated": int(data["guide"].var["spacer"].isna().sum()),
             "uns_tables": {k: int(len(v)) for k, v in tables.items()},
         }
-        state["complete"] = True
-        state["finished"] = _now()
-        write_json(record, state)
         logger.info("MuData complete: %s", state["counts"])
         return RunResult(outdir=outdir, data=data, metadata=state)
-    except Exception as error:
-        state["error"] = f"{type(error).__name__}: {error}"
-        state["finished"] = _now()
-        write_json(record, state)
-        logger.error("MuData build failed: %s", state["error"])
-        raise
-    finally:
-        package.removeHandler(handler)
-        package.propagate = propagate
-        handler.close()

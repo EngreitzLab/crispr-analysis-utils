@@ -22,14 +22,12 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, write_json
-from ._version import __version__
+from ._files import file_md5, run_record, truthy
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +64,7 @@ COVARIATES = (
 """Root ``obs``: the pipeline's design frame under its own names."""
 
 RESULTS_DIR = "inference_input"
-METADATA_DIR = "run_metadata"
 STEP = "inference_input"
-LOG_FILE = "inference_input.log"
-_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 class InputError(RuntimeError):
@@ -111,7 +106,7 @@ def target_keys(var: pd.DataFrame) -> pd.DataFrame:
         new key column.
     """
     out = var.copy()
-    out["targeting"] = out["targeting"].map(_truthy).astype(bool)
+    out["targeting"] = out["targeting"].map(truthy).astype(bool)
     for column in ("intended_target_name", "intended_target_chr"):
         out[column] = out[column].astype("string").replace("", pd.NA)
     for column in ("intended_target_start", "intended_target_end"):
@@ -504,35 +499,16 @@ def run(
     import mudata as md
 
     outdir = Path(outdir)
-    for sub in ("logs", METADATA_DIR, RESULTS_DIR):
-        (outdir / sub).mkdir(parents=True, exist_ok=True)
-    record = outdir / METADATA_DIR / f"{STEP}_{_stamp()}.json"
-    state: dict = {
-        "step": STEP,
-        "complete": False,
-        "error": None,
-        "started": _now(),
-        "finished": None,
-        "cau_version": __version__,
-        "inputs": {},
-        "parameters": {
-            "name": name,
-            "moi": moi,
-            "capture_method": capture_method,
-            "min_guides": min_guides,
-            "max_guides": max_guides,
-        },
-        "counts": {},
+    parameters = {
+        "name": name,
+        "moi": moi,
+        "capture_method": capture_method,
+        "min_guides": min_guides,
+        "max_guides": max_guides,
     }
-    handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-    package = logging.getLogger(__name__.rsplit(".", 1)[0])
-    package.addHandler(handler)
-    if package.level == logging.NOTSET:
-        package.setLevel(logging.INFO)
-    propagate = package.propagate
-    package.propagate = False
-    try:
+    with run_record(
+        outdir, STEP, RESULTS_DIR, parameters, logger, "Inference input"
+    ) as (state, _):
         for path in [*inputs, pairs]:
             if not Path(path).is_file():
                 raise FileNotFoundError(f"{path} does not exist.")
@@ -580,20 +556,7 @@ def run(
             "genes": int(data["gene"].n_vars),
             "guides": int(data["guide"].n_vars),
         }
-        state["complete"] = True
-        state["finished"] = _now()
-        write_json(record, state)
         return RunResult(outdir=outdir, path=path, report=report, metadata=state)
-    except Exception as error:
-        state["error"] = f"{type(error).__name__}: {error}"
-        state["finished"] = _now()
-        write_json(record, state)
-        logger.error("Inference input failed: %s", state["error"])
-        raise
-    finally:
-        package.removeHandler(handler)
-        package.propagate = propagate
-        handler.close()
 
 
 def _report_lines(report: dict) -> list[str]:
@@ -637,22 +600,3 @@ def _counts(x):
     top = x.data.max() if x.nnz else 0
     dtype = np.uint16 if top <= np.iinfo(np.uint16).max else np.uint32
     return x.astype(dtype)
-
-
-def _truthy(value: object) -> bool:
-    """TRUE, true and True all mean the same; an empty cell does not."""
-    if isinstance(value, str):
-        return value.strip().upper() == "TRUE"
-    if value is None or pd.isna(value):
-        return False
-    return bool(value)
-
-
-def _stamp() -> str:
-    """A UTC timestamp for a file name."""
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _now() -> str:
-    """The time now, in UTC, as ISO 8601."""
-    return datetime.now(UTC).isoformat(timespec="seconds")

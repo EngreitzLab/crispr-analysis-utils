@@ -37,9 +37,12 @@ Start with an UPPERCASE verb: `ADD`, `FIX`, `UPDATE`, `REWRITE`, `RELEASE` or
 ## Adding a module
 
 1. Write the module under `src/crispr_analysis_utils/`, with NumPy-style
-   docstrings.
-2. Re-export its public functions from `src/crispr_analysis_utils/__init__.py`
-   if they belong at the top level.
+   docstrings. If it has a `run` that writes to an output folder, enter
+   `_files.run_record` there: it makes the folders, keeps the log and writes
+   the run record.
+2. Import the module in `src/crispr_analysis_utils/__init__.py` and add it
+   to `__all__`. `tests/test_cli.py` checks that every module is an
+   attribute of the package.
 3. Add its skill, `src/crispr_analysis_utils/skills/cau-<module>/SKILL.md`,
    and, only if using the module is a long multi-step job, an agent in
    `src/crispr_analysis_utils/agents/` that preloads that skill. See

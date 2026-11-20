@@ -48,14 +48,15 @@ call everything intergenic.
 
 ## Promoters
 
-`--promoters` takes a BED of transcription start sites, one per gene, which is
-usually the file the rest of the lab already uses. The seventh column, if
-present, is read as the gene id.
+`--promoters` takes a BED of transcription start sites, one row per site,
+which is usually the file the rest of the lab already uses. The seventh
+column, if present, is read as the gene id, and the eighth as the transcript
+id.
 
-Without it, each gene's reference transcript start is used. That is a
+Without it, the start of every transcript in the store is used. That is a
 reasonable default and not the same thing: a TSS file built from a different
-release, or from a different transcript per gene, will disagree by a few bases
-or a few kilobases.
+release, or from one transcript per gene, will disagree by a few bases or a
+few kilobases.
 
 `--promoter-window` (default 1000) is how far either side of a TSS counts as
 its promoter.

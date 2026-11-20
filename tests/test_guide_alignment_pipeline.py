@@ -20,6 +20,7 @@ from guide_alignment_fixtures import (
     write_fasta,
 )
 
+from crispr_analysis_utils._files import METADATA_DIR
 from crispr_analysis_utils.guide_alignment import (
     OrientationError,
     read_guides,
@@ -27,7 +28,7 @@ from crispr_analysis_utils.guide_alignment import (
     scan_guides,
 )
 from crispr_analysis_utils.guide_alignment.iupac import reverse_complement
-from crispr_analysis_utils.guide_alignment.pipeline import METADATA_DIR, STEP
+from crispr_analysis_utils.guide_alignment.pipeline import STEP
 
 SPACER_NT = "TTAGCGCATAGCGTACGTAA"
 GUIDES = [
@@ -396,6 +397,24 @@ def test_a_reversed_entry_is_flagged_only_with_a_pam_bearing_reversed_site(tmp_p
         0: "reverse_complement",
         1: "no_pam",
         2: "no_match",
+    }
+
+
+def test_a_reversed_entry_is_flagged_beside_its_own_forward_entry(tmp_path):
+    reference = write_fasta(
+        tmp_path / "ref.fa", {"chr1": "TTT" + SPACER_A + "TGG" + "TTT"}
+    )
+    backwards = read_guides(pd.DataFrame([("backwards", reverse_complement(SPACER_A))]))
+    both = read_guides(
+        pd.DataFrame(
+            [("backwards", reverse_complement(SPACER_A)), ("forward", SPACER_A)]
+        )
+    )
+    # The verdict is the guide's own: the library beside it does not move it.
+    assert scan_guides(backwards, reference).verdicts == {0: "reverse_complement"}
+    assert scan_guides(both, reference).verdicts == {
+        0: "reverse_complement",
+        1: "forward",
     }
 
 

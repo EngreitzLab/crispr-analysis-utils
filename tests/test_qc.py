@@ -132,6 +132,18 @@ def test_a_figure_writes_its_numbers_and_its_caption_beside_it(tmp_path):
     assert written[".txt"].read_text().strip() == caption.strip()
 
 
+def test_a_dot_in_the_name_keeps_two_figures_apart(tmp_path):
+    figure, numbers, caption = knee(mudata())
+    one = publish(tmp_path / "knee_v1.2", figure, numbers, caption)
+    two = publish(tmp_path / "knee_v1.3", figure, numbers, caption)
+    assert [path.name for path in one.values()] == [
+        "knee_v1.2.pdf",
+        "knee_v1.2.tsv.gz",
+        "knee_v1.2.txt",
+    ]
+    assert set(one.values()).isdisjoint(two.values())
+
+
 def test_a_figure_without_numbers_or_a_caption_is_refused(tmp_path):
     figure, numbers, caption = knee(mudata())
     with pytest.raises(FigureError):

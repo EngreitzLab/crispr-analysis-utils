@@ -315,8 +315,8 @@ pub fn pam_length(pattern: &str) -> Result<usize, String> {
 ///
 /// N stands for every base, so an unsequenced one satisfies it: NGG needs
 /// nothing of its first position. Any other code names bases, and an N in
-/// the reference is not known to be one of them. This is the rule
-/// `base_matches` states in Python; the two have to agree.
+/// the reference is not known to be one of them. The oracle of
+/// `tests/test_core_scan.py` states the same rule; the two have to agree.
 fn code_ok(c: u8, symbol: u8) -> bool {
     match iupac_mask(symbol) {
         None => false,

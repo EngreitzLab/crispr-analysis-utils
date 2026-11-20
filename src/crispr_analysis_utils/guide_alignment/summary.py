@@ -26,6 +26,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
+from .._files import yaml_text
 from ..accession import guide_accession
 from .iupac import validate_pams
 from .library import Guide
@@ -629,11 +630,11 @@ def write_columns_yaml(path: str | os.PathLike[str]) -> None:
         lines.append(f"  # {heading}")
         for _ in range(count):
             column, description = next(columns)
-            lines.append(f'  {column}: "{_one_line(description)}"')
+            lines.append(f"  {column}: {yaml_text(description)}")
     lines.append("")
     lines.append("guide_mapping.bed:")
     for column, description in BED_COLUMNS.items():
-        lines.append(f'  {column}: "{_one_line(description)}"')
+        lines.append(f"  {column}: {yaml_text(description)}")
     lines.append("")
     _write_text(path, "\n".join(lines))
 
@@ -755,8 +756,3 @@ def _write_text(path: str | os.PathLike[str], text: str) -> None:
     """Write text with the newline the other writers use."""
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
-
-
-def _one_line(text: str) -> str:
-    """A description as one line, safe inside a double-quoted YAML scalar."""
-    return " ".join(text.split()).replace('"', "'")

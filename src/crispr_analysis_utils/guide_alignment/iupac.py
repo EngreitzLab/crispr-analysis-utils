@@ -34,66 +34,6 @@ _COMPLEMENT = str.maketrans(
 )
 
 
-def base_matches(base: str, code: str) -> bool:
-    """Whether a genomic base matches an IUPAC code.
-
-    Parameters
-    ----------
-    base
-        One genomic base. Case is ignored.
-    code
-        One IUPAC nucleotide code. Case is ignored.
-
-    Returns
-    -------
-    bool
-        True when `code` is ``N``, or when `base` is one of the bases `code`
-        stands for. A genomic ``N``, or any character other than A, C, G and
-        T, matches only ``N``.
-
-    Raises
-    ------
-    ValueError
-        If `code` is not a single IUPAC nucleotide code.
-    """
-    code = code.upper()
-    if len(code) != 1 or code not in IUPAC_BASES:
-        raise ValueError(f"{code!r} is not an IUPAC nucleotide code.")
-    return code == "N" or base.upper() in IUPAC_BASES[code]
-
-
-def pattern_matches(sequence: str, pattern: str) -> bool:
-    """Whether a genomic sequence matches an IUPAC pattern, base by base.
-
-    Parameters
-    ----------
-    sequence
-        Genomic bases. Case is ignored.
-    pattern
-        IUPAC codes, such as ``NGG``. Case is ignored.
-
-    Returns
-    -------
-    bool
-        True when the two have the same length and every base matches the
-        code at its position (see `base_matches`). A sequence shorter than the
-        pattern, such as a flank cut short by the end of a contig, never
-        matches.
-
-    Raises
-    ------
-    ValueError
-        If `pattern` holds a character that is not an IUPAC nucleotide code.
-    """
-    pattern = validate_pattern(pattern)
-    if len(sequence) != len(pattern):
-        return False
-    return all(
-        code == "N" or base in IUPAC_BASES[code]
-        for base, code in zip(sequence.upper(), pattern, strict=True)
-    )
-
-
 def complement(sequence: str) -> str:
     """Complement an IUPAC sequence, keeping its case.
 

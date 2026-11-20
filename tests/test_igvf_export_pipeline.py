@@ -373,6 +373,7 @@ def test_the_record_says_the_run_finished_and_what_it_found(inputs, genes, tmp_p
     state = record_of(tmp_path / "out")
     assert state == result.metadata
     assert state["step"] == "igvf_export"
+    assert len(state["inputs"]["store_md5"]) == 32
     assert state["complete"] is True
     assert state["error"] is None
     assert state["parameters"] == {

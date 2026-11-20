@@ -1,15 +1,28 @@
-"""File helpers for the pipeline."""
+"""File helpers for the pipeline, and the run record every step keeps."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
-from collections.abc import Sequence
+import time
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from itertools import count
 from pathlib import Path
+
+from ._version import __version__
 
 _GZIP_MAGIC = b"\x1f\x8b"
 _SEPARATORS = {".csv": ",", ".tsv": "\t", ".txt": "\t"}
+
+METADATA_DIR = "run_metadata"
+"""Where every step writes the record of each invocation."""
+
+_PACKAGE = __name__.rsplit(".", 1)[0]
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 def file_md5(path: str | os.PathLike[str]) -> str:
@@ -97,3 +110,141 @@ def read_columns(path: str | os.PathLike[str], columns: Sequence[str], what: str
         )
     frame = frame[list(columns)].apply(lambda column: column.str.strip())
     return frame[(frame != "").all(axis=1)].reset_index(drop=True)
+
+
+def truthy(value: object) -> bool:
+    """TRUE, true and True all mean the same in a written table; a missing cell does not."""
+    import pandas as pd
+
+    if isinstance(value, str):
+        return value.strip().upper() == "TRUE"
+    if value is None or pd.isna(value):
+        return False
+    return bool(value)
+
+
+def yaml_text(text: str) -> str:
+    """`text` on one line, as a double-quoted YAML scalar.
+
+    A JSON string is a valid double-quoted YAML scalar, quotes and backslashes
+    escaped.
+    """
+    return json.dumps(" ".join(text.split()), ensure_ascii=False)
+
+
+def now() -> str:
+    """The time now, in UTC, as ISO 8601 to the second."""
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+@contextmanager
+def timed(state: dict, name: str) -> Iterator[None]:
+    """Record in ``state["seconds"][name]`` how long the block took."""
+    started = time.perf_counter()
+    try:
+        yield
+    finally:
+        state["seconds"][name] = round(time.perf_counter() - started, 3)
+
+
+@contextmanager
+def run_record(
+    outdir: Path,
+    step: str,
+    results: str,
+    parameters: dict,
+    logger: logging.Logger,
+    title: str,
+) -> Iterator[tuple[dict, Path]]:
+    """One invocation of a step: its folders, its log and its record.
+
+    Makes ``outdir/results``, ``outdir/logs`` and ``outdir/run_metadata``,
+    appends the package's log from INFO up to ``logs/<step>.log``, and keeps
+    ``run_metadata/<step>_<UTC timestamp>.json`` from the start. The record is
+    rewritten complete when the block ends, or with the error when it raises,
+    which is logged and raised again.
+
+    Parameters
+    ----------
+    outdir
+        The step's output folder.
+    step
+        The step's name, which names its log and its records.
+    results
+        The folder inside `outdir` the results go in.
+    parameters
+        The parameters to record.
+    logger
+        The step's logger, which logs the failure.
+    title
+        The step as the failure line names it, such as ``Element mapping``.
+
+    Yields
+    ------
+    tuple[dict, Path]
+        The record, to fill in, and its path, for a step that saves it
+        before it ends.
+    """
+    for folder in (results, "logs", METADATA_DIR):
+        (outdir / folder).mkdir(parents=True, exist_ok=True)
+    state: dict = {
+        "step": step,
+        "complete": False,
+        "error": None,
+        "started": now(),
+        "finished": None,
+        "cau_version": __version__,
+        "inputs": {},
+        "parameters": parameters,
+        "counts": {},
+        "seconds": {},
+    }
+    record = _reserve(outdir / METADATA_DIR, step, state)
+    started = time.perf_counter()
+
+    handler = logging.FileHandler(outdir / "logs" / f"{step}.log", encoding="utf-8")
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    package = logging.getLogger(_PACKAGE)
+    level, propagate = package.level, package.propagate
+    if package.getEffectiveLevel() > logging.INFO:
+        package.setLevel(logging.INFO)
+    package.addHandler(handler)
+    # The run's log belongs in the file, not on the terminal. pyranges calls
+    # logging.basicConfig on import, which puts a handler on the root logger.
+    package.propagate = False
+    try:
+        yield state, record
+        state["complete"] = True
+    except BaseException as error:
+        state["error"] = f"{type(error).__name__}: {error}"
+        logger.error("%s failed: %s", title, state["error"])
+        raise
+    finally:
+        state["finished"] = now()
+        state["seconds"]["total"] = round(time.perf_counter() - started, 3)
+        write_json(record, state)
+        package.removeHandler(handler)
+        package.setLevel(level)
+        package.propagate = propagate
+        handler.close()
+
+
+def _reserve(folder: Path, step: str, state: dict) -> Path:
+    """A record path no other invocation holds, created with `state` in it.
+
+    Two runs in the same second get ``<step>_<stamp>.json`` and
+    ``<step>_<stamp>_2.json``, which sorts after it.
+    """
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    # shortcut: _10 sorts before _2; ten runs into one folder in one second is not a use.
+    for n in count(1):
+        path = folder / (
+            f"{step}_{stamp}.json" if n == 1 else f"{step}_{stamp}_{n}.json"
+        )
+        try:
+            with open(path, "x", encoding="utf-8") as handle:
+                handle.write(json.dumps(state, indent=2) + "\n")
+            return path
+        except FileExistsError:
+            pass

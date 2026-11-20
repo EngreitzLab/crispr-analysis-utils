@@ -7,6 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from .db import _unversioned
+
 _BED6 = ("Chromosome", "Start", "End", "gene_symbol", "score", "Strand")
 """The six BED fields. A seventh column, if present, is taken as the gene id."""
 
@@ -52,7 +54,8 @@ def read_promoters(path: str | os.PathLike[str]) -> pd.DataFrame:
             sep="\t",
             header=None,
             skiprows=1 if first.startswith("#") else 0,
-            dtype={0: str},
+            # The ids are text even when a column is blank throughout.
+            dtype={0: str, 6: str, 7: str},
         )
     except pd.errors.EmptyDataError as error:
         raise PromoterError(f"{path} holds no transcription start site.") from error
@@ -135,8 +138,3 @@ def promoters_from_store(store, *, reference_only: bool = False) -> pd.DataFrame
         }
     )
     return frame.drop_duplicates().reset_index(drop=True)
-
-
-def _unversioned(ids: pd.Series) -> pd.Series:
-    """ENSG00000186092.7 -> ENSG00000186092."""
-    return ids.astype(str).str.replace(r"\.\d+$", "", regex=True)
