@@ -17,14 +17,12 @@ import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, read_columns, write_json
-from ._version import __version__
+from ._files import file_md5, read_columns, run_record, yaml_text
 
 logger = logging.getLogger(__name__)
 
@@ -114,10 +112,7 @@ POSITIVE_CATEGORIES = ("promoter", VALIDATED)
 
 TABLE = "guide_metadata.tsv"
 RESULTS_DIR = "igvf"
-METADATA_DIR = "run_metadata"
 STEP = "igvf_export"
-LOG_FILE = "igvf_export.log"
-_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 
 class ExportError(RuntimeError):
@@ -562,7 +557,7 @@ def write_table(path: str | os.PathLike[str], table: pd.DataFrame) -> None:
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
     """Write guide_metadata_columns.yaml, generated from `COLUMNS` so it cannot drift."""
     lines = ["# What each column of this folder's output holds.", "", f"{TABLE}:"]
-    lines += [f'  {name}: "{" ".join(text.split())}"' for name, text in COLUMNS.items()]
+    lines += [f"  {name}: {yaml_text(text)}" for name, text in COLUMNS.items()]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -611,7 +606,7 @@ def run(
     outdir
         Where the table goes. Nothing is written outside it.
     promoters
-        A TSS BED. Without one, the store's reference transcript starts.
+        A TSS BED. Without one, the start of every transcript in the store.
     genes
         A CSV or TSV of measured element-to-gene pairs. Used for the
         elements whose gene was measured rather than inferred.
@@ -630,35 +625,18 @@ def run(
     from .guide_annotation import load_store, promoters_from_store, read_promoters
 
     outdir = Path(outdir)
-    for name in (RESULTS_DIR, METADATA_DIR, "logs"):
-        (outdir / name).mkdir(parents=True, exist_ok=True)
-    record = outdir / METADATA_DIR / f"{STEP}_{_stamp()}.json"
-
-    state: dict = {
-        "step": STEP,
-        "complete": False,
-        "error": None,
-        "started": _now(),
-        "cau_version": __version__,
-        "inputs": {
+    parameters = {"promoter_window": promoter_window}
+    with run_record(outdir, STEP, RESULTS_DIR, parameters, logger, "IGVF export") as (
+        state,
+        _,
+    ):
+        state["inputs"] = {
             "alignment": str(alignment),
             "mapping": str(mapping),
             "elements": str(elements),
             "store": str(store),
             "genes": None if genes is None else str(genes),
-        },
-        "parameters": {"promoter_window": promoter_window},
-        "counts": {},
-    }
-    handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-    package = logging.getLogger(__name__.rsplit(".", 1)[0])
-    package.addHandler(handler)
-    if package.level == logging.NOTSET:
-        package.setLevel(logging.INFO)
-    propagate = package.propagate
-    package.propagate = False
-    try:
+        }
         loaded = load_store(store)
         tss = read_promoters(promoters) if promoters else promoters_from_store(loaded)
         regions = read_elements(elements)
@@ -676,6 +654,7 @@ def run(
             state["parameters"]["gene_column"] = gene_column
             state["parameters"]["element_column"] = element_column
         state["inputs"]["alignment_md5"] = file_md5(alignment)
+        state["inputs"]["store_md5"] = file_md5(store)
         state["inputs"]["elements_md5"] = file_md5(elements)
 
         info = classify_elements(
@@ -695,21 +674,8 @@ def run(
         write_table(outdir / RESULTS_DIR / TABLE, table)
         write_columns_yaml(outdir / RESULTS_DIR / "guide_metadata_columns.yaml")
         state["counts"] = counts(table, info)
-        state["complete"] = True
-        state["finished"] = _now()
-        write_json(record, state)
         logger.info("IGVF export complete: %s", state["counts"]["type"])
         return RunResult(outdir=outdir, table=table, elements=info, metadata=state)
-    except Exception as error:
-        state["error"] = f"{type(error).__name__}: {error}"
-        state["finished"] = _now()
-        write_json(record, state)
-        logger.error("IGVF export failed: %s", state["error"])
-        raise
-    finally:
-        package.removeHandler(handler)
-        package.propagate = propagate
-        handler.close()
 
 
 def _read_genes(
@@ -752,13 +718,3 @@ def _read_genes(
             " name their elements differently."
         )
     return pairs
-
-
-def _stamp() -> str:
-    """A UTC timestamp for a file name."""
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _now() -> str:
-    """The time now, in UTC, as ISO 8601."""
-    return datetime.now(UTC).isoformat(timespec="seconds")

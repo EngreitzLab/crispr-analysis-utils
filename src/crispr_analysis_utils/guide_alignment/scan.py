@@ -22,7 +22,7 @@ import os
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 
-from .iupac import pattern_matches, reverse_complement, validate_pams
+from .iupac import reverse_complement, validate_pams
 from .library import Guide
 from .orientation import (
     AMBIGUOUS,
@@ -212,17 +212,25 @@ def scan_guides(
 
     reversed_has_pam: set[int] = set()
     for index, chrom, start, strand, genomic_pam, upstream, matched in matches:
+        # One guide's reversed reading can be another's own core, which is
+        # then searched once, in the first block: gather it from either.
+        if matched:
+            reversed_has_pam.update(flipped_rows.get(queries[index], ()))
         if index >= len(cores):
-            # Only evidence that the reversed reading could cut somewhere.
-            if matched:
-                reversed_has_pam.update(flipped_rows[queries[index]])
             continue
         if len(genomic_pam) != len(primary):
             continue
         for row in rows_of[cores[index]]:
             guide = guides[row]
             site = _site(
-                guide, chrom, start, strand, genomic_pam, upstream, primary, tolerate_5p
+                guide,
+                chrom,
+                start,
+                strand,
+                genomic_pam,
+                upstream,
+                primary if matched else NO_PAM_CLASS,
+                tolerate_5p,
             )
             if site is not None:
                 result.sites.setdefault(row, []).append(site)
@@ -248,10 +256,13 @@ def _site(
     strand: str,
     genomic_pam: str,
     upstream: str,
-    pam: str,
+    pam_class: str,
     tolerate_5p: int = 0,
 ) -> Site | None:
     """One match, as a `Site`, or None when no whole protospacer fits here.
+
+    `pam_class` is the core's verdict on `genomic_pam`, which is not decided
+    again here.
 
     The core matched exactly, so the genome can differ only at the
     `tolerate_5p` bases the search left out, which it supplies here. `start`
@@ -290,7 +301,7 @@ def _site(
         end=first + len(guide.spacer),
         strand=strand,
         pam=genomic_pam,
-        pam_class=pam if pattern_matches(genomic_pam, pam) else NO_PAM_CLASS,
+        pam_class=pam_class,
         n_mismatches=len(mismatches),
         mismatch_positions=mismatches,
         mapped_sequence=(

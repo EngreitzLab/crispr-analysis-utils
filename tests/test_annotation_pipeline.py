@@ -173,6 +173,13 @@ def test_only_the_sites_the_class_counts_are_annotated(store, tmp_path):
     assert run(frame, store, tmp_path / "out").metadata["counts"]["sites"] == 1
 
 
+def test_a_missing_value_in_a_nullable_column_is_not_a_site(store, tmp_path):
+    # A frame handed over in memory can hold pd.NA, which bool() refuses.
+    frame = sites_frame(*SITES)
+    frame["best_site"] = pd.array([True, pd.NA, False, False], dtype="boolean")
+    assert run(frame, store, tmp_path / "out").metadata["counts"]["sites"] == 1
+
+
 def test_nothing_mapped_is_an_annotation_error(store, tmp_path):
     rows = [site("no_pam", "chr1", 1700, "+", pam_matches=False)]
     with pytest.raises(AnnotationError, match="holds no mapped site"):

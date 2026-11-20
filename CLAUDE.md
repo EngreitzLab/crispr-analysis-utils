@@ -59,8 +59,10 @@ per platform serves every supported Python rather than one per version.
     - `inference_input.py` -- QC'd channels with guide calls, joined into the
                              object an inference reads, pairs attached.
     - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
-    - `_files.py`         -- checksums, gzip sniffing, atomic JSON. Shared by
-                             both pipelines.
+    - `_files.py`         -- checksums, gzip sniffing, atomic JSON, and
+                             `run_record`, which every step's `run` enters:
+                             its folders, its log, its record. A new step
+                             uses it rather than its own handler.
     - `_core.abi3.so`     -- the compiled Rust core, built in place by an
                              editable install and gitignored. Its sources are
                              in `rust/src/`.
@@ -370,12 +372,12 @@ and narrowing it would buy nothing.
     - **`N` in a PAM pattern is satisfied by a genomic `N`.** `NGG` asks
       nothing of its first position, so an unsequenced base there is still a
       PAM; every other code names bases, and an `N` is not known to be one of
-      them. The rule lives in `base_matches` and in the Rust `code_ok`,
-      which disagreed with it until they were reconciled, and in the oracle
-      of `tests/test_core_scan.py`, which had encoded the Rust reading.
-      Change one and the other two are wrong. `code_ok` is read twice per
-      match, once by `pam_ok_at` on the raw bytes before anything is
-      allocated, so keep it branch-light;
+      them. The rule lives in the Rust `code_ok` alone, whose `matched`
+      flag fills `pam_matches`, and is restated in the oracle of
+      `tests/test_core_scan.py`. A Python copy, `base_matches`, once
+      disagreed with it and was removed. Change one and the other is wrong.
+      `code_ok` is read twice per match, once by `pam_ok_at` on the raw
+      bytes before anything is allocated, so keep it branch-light;
     - classes count the best sites whose genomic PAM matches. A site whose
       PAM does not stays in the table with `pam_matches` `FALSE` and counts
       nowhere, so a spacer matching twice with one PAM is `unique`. Best

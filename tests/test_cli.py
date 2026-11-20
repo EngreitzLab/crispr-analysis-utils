@@ -1,4 +1,6 @@
 import argparse
+import subprocess
+import sys
 import types
 from importlib.metadata import entry_points
 
@@ -15,6 +17,21 @@ def test_console_script_points_at_main():
 
 def test_package_version_comes_from_installed_metadata():
     assert cau.__version__ != "0+unknown"
+
+
+def test_every_module_is_an_attribute_and_none_loads_a_heavy_dependency():
+    # In a fresh interpreter: this session has long since imported them all.
+    code = """
+import pkgutil, sys
+import crispr_analysis_utils as cau
+names = [m.name for m in pkgutil.iter_modules(cau.__path__)]
+print([n for n in names if not n.startswith("_") and n != "cli" and not hasattr(cau, n)])
+print([m for m in ("pysam", "matplotlib", "pyranges1", "mudata", "anndata") if m in sys.modules])
+"""
+    run = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=True
+    )
+    assert run.stdout.split("\n")[:2] == ["[]", "[]"]
 
 
 def test_version_flag_prints_the_package_version(capsys):

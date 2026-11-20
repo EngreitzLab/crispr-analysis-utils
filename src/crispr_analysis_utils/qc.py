@@ -116,10 +116,10 @@ def publish(
 
     stem = Path(stem)
     stem.parent.mkdir(parents=True, exist_ok=True)
+    # Appended, not with_suffix: that would cut "knee_v1.2" back to "knee_v1".
     written = {
-        ".pdf": stem.with_suffix(".pdf"),
-        ".tsv.gz": stem.with_name(stem.name + ".tsv.gz"),
-        ".txt": stem.with_suffix(".txt"),
+        suffix: stem.with_name(stem.name + suffix)
+        for suffix in (".pdf", ".tsv.gz", ".txt")
     }
     figure.savefig(written[".pdf"], dpi=DPI, bbox_inches="tight")
     with gzip.open(written[".tsv.gz"], "wt", encoding="utf-8") as handle:

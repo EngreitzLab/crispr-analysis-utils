@@ -45,7 +45,7 @@ def add_arguments(parser: argparse.ArgumentParser) -> None:
     run_parser.add_argument(
         "--promoters",
         default=None,
-        help="A TSS BED. Without one, the store's reference transcript starts.",
+        help="A TSS BED. Without one, the start of every transcript in the store.",
     )
     run_parser.add_argument(
         "--genes",

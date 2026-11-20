@@ -20,14 +20,13 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, read_columns, write_json
-from ._version import __version__
+from ._files import file_md5, read_columns, run_record, truthy, yaml_text
+from .guide_annotation.db import _unversioned
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +66,7 @@ TABLE = "pairs_to_test.csv"
 """Comma-separated, like the CRISPR pipeline's own pairs file."""
 
 RESULTS_DIR = "pairs"
-METADATA_DIR = "run_metadata"
 STEP = "pairs"
-LOG_FILE = "pairs.log"
-_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
 DEFAULT_MAX_DISTANCE = 1_000_000
 
@@ -200,7 +196,7 @@ def build_pairs(
         )
 
     frame = guides.copy()
-    frame["targeting"] = frame["targeting"].map(_truthy)
+    frame["targeting"] = frame["targeting"].map(truthy)
     for column in ("intended_target_start", "intended_target_end"):
         frame[column] = pd.to_numeric(frame[column], errors="coerce").astype("Int64")
     targeting = frame[frame["targeting"] & frame["intended_target_start"].notna()]
@@ -311,7 +307,7 @@ def write_qc_tsv(path: str | os.PathLike[str], found: dict) -> None:
 def write_columns_yaml(path: str | os.PathLike[str]) -> None:
     """Write pairs_to_test_columns.yaml, generated from `COLUMNS` so it cannot drift."""
     lines = ["# What each column of this folder's output holds.", "", f"{TABLE}:"]
-    lines += [f'  {name}: "{text}"' for name, text in COLUMNS.items()]
+    lines += [f"  {name}: {yaml_text(text)}" for name, text in COLUMNS.items()]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
@@ -350,29 +346,11 @@ def run(
     from .guide_annotation.db import load_store
 
     outdir = Path(outdir)
-    for sub in ("logs", METADATA_DIR, RESULTS_DIR):
-        (outdir / sub).mkdir(parents=True, exist_ok=True)
-    record = outdir / METADATA_DIR / f"{STEP}_{_stamp()}.json"
-    state: dict = {
-        "step": STEP,
-        "complete": False,
-        "error": None,
-        "started": _now(),
-        "finished": None,
-        "cau_version": __version__,
-        "inputs": {},
-        "parameters": {"max_distance": max_distance, "gene_column": gene_column},
-        "counts": {},
-    }
-    handler = logging.FileHandler(outdir / "logs" / LOG_FILE, encoding="utf-8")
-    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
-    package = logging.getLogger(__name__.rsplit(".", 1)[0])
-    package.addHandler(handler)
-    if package.level == logging.NOTSET:
-        package.setLevel(logging.INFO)
-    propagate = package.propagate
-    package.propagate = False
-    try:
+    parameters = {"max_distance": max_distance, "gene_column": gene_column}
+    with run_record(outdir, STEP, RESULTS_DIR, parameters, logger, "Pairs") as (
+        state,
+        _,
+    ):
         for name, path in (
             ("guide_metadata", guide_metadata),
             ("panel", panel),
@@ -408,25 +386,12 @@ def run(
         )
 
         state["counts"] = found
-        state["complete"] = True
-        state["finished"] = _now()
-        write_json(record, state)
         logger.info(
             "Pairs complete: %d positive control, %d discovery",
             found[POSITIVE_CONTROL]["pairs"],
             found[DISCOVERY]["pairs"],
         )
         return RunResult(outdir=outdir, pairs=pairs, metadata=state)
-    except Exception as error:
-        state["error"] = f"{type(error).__name__}: {error}"
-        state["finished"] = _now()
-        write_json(record, state)
-        logger.error("Pairs failed: %s", state["error"])
-        raise
-    finally:
-        package.removeHandler(handler)
-        package.propagate = propagate
-        handler.close()
 
 
 def write_table(path: str | os.PathLike[str], pairs: pd.DataFrame) -> None:
@@ -434,27 +399,3 @@ def write_table(path: str | os.PathLike[str], pairs: pd.DataFrame) -> None:
     out = pairs.copy()
     out["in_panel"] = out["in_panel"].map({True: "TRUE", False: "FALSE"})
     out.to_csv(path, index=False)
-
-
-def _unversioned(ids: pd.Series) -> pd.Series:
-    """ENSG00000186092.7 -> ENSG00000186092; a _PAR_Y suffix stays."""
-    return ids.astype(str).str.replace(r"\.\d+$", "", regex=True)
-
-
-def _truthy(value: object) -> bool:
-    """TRUE, true and True all mean the same; an empty cell does not."""
-    if isinstance(value, str):
-        return value.strip().upper() == "TRUE"
-    if value is None or pd.isna(value):
-        return False
-    return bool(value)
-
-
-def _stamp() -> str:
-    """A UTC timestamp for a file name."""
-    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-
-
-def _now() -> str:
-    """The time now, in UTC, as ISO 8601."""
-    return datetime.now(UTC).isoformat(timespec="seconds")
