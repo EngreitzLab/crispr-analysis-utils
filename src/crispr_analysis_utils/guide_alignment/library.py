@@ -15,14 +15,12 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .iupac import validate_pams
+from .iupac import validate_pattern
 
 logger = logging.getLogger(__name__)
 
 _ACGT = frozenset("ACGT")
-_COMPLEMENT = str.maketrans("ACGT", "TGCA")
 _TABLE_BREAKS = frozenset("\t\r\n")
-_QUALITY = "I"
 _MAX_LISTED = 5
 
 
@@ -129,7 +127,7 @@ def read_guides(
         other than A, C, G and T; or a sequence is shorter than
         `spacer_length`.
     """
-    pam = validate_pams([pam])[0]
+    pam = validate_pattern(pam)
     if (
         isinstance(spacer_length, bool)
         or not isinstance(spacer_length, int)

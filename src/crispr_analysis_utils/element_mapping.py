@@ -25,7 +25,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ._files import file_md5, run_record, truthy, yaml_text
+from ._files import bed_header_lines, file_md5, run_record, truthy, yaml_text
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +88,8 @@ def read_elements(path: str | os.PathLike[str]) -> pd.DataFrame:
     ----------
     path
         A BED of the regions the screen targets. Three columns at least; a
-        fourth is the element's id, a fifth its category.
+        fourth is the element's id, a fifth its category. Leading ``#``,
+        ``track`` and ``browser`` lines are skipped.
 
     Returns
     -------
@@ -105,11 +106,10 @@ def read_elements(path: str | os.PathLike[str]) -> pd.DataFrame:
     if not path.is_file():
         raise ElementError(f"The elements file {path} does not exist.")
 
-    with open(path, encoding="utf-8") as handle:
-        first = handle.readline()
-    skip = 1 if first.startswith(("#", "track", "browser")) else 0
     try:
-        frame = pd.read_csv(path, sep="\t", header=None, skiprows=skip, dtype={0: str})
+        frame = pd.read_csv(
+            path, sep="\t", header=None, skiprows=bed_header_lines(path), dtype={0: str}
+        )
     except pd.errors.EmptyDataError as error:
         raise ElementError(f"{path} holds no element.") from error
     if frame.shape[1] < 3:

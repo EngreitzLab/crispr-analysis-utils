@@ -39,7 +39,7 @@ COVERAGE = {
 }
 
 # Modules that are plumbing rather than analysis, so need no skill.
-INFRASTRUCTURE = ("cli", "utils")
+INFRASTRUCTURE = ("cli",)
 
 # The package directory is also the Claude Code plugin root, where these names
 # would be read as plugin components.

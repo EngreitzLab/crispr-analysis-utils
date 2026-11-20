@@ -32,7 +32,7 @@ from .._files import (
     timed,
     write_json,
 )
-from .iupac import reverse_complement, validate_pams
+from .iupac import reverse_complement, validate_pattern
 from .library import Guide, read_guides
 from .orientation import FORWARD, REVERSE_COMPLEMENT, VERDICTS
 from .scan import ScanResult, scan_guides
@@ -169,12 +169,12 @@ def run(
             f"orientation_check must be one of {', '.join(ORIENTATION_CHECKS)}, "
             f"not {orientation_check!r}."
         )
-    patterns = validate_pams([pam])
+    pam = validate_pattern(pam)
     reference = check_plain_fasta(reference, "reference")
 
     outdir = Path(outdir)
     parameters = {
-        "pam": patterns[0],
+        "pam": pam,
         "spacer_length": spacer_length,
         "tolerate_5p": tolerate_5p,
         "add_leading_g": add_leading_g,

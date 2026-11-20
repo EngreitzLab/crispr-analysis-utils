@@ -24,17 +24,14 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TextIO
 
 from .._files import yaml_text
 from ..accession import guide_accession
-from .iupac import validate_pams
+from .iupac import validate_pattern
 from .library import Guide
 from .orientation import NOT_CHECKED, VERDICTS
 from .sites import NO_PAM_CLASS, Site
-
-if TYPE_CHECKING:
-    pass
 
 UNIQUE = "unique"
 """Exactly one perfect site with a matching PAM."""
@@ -185,15 +182,14 @@ def summarize(
     Raises
     ------
     ValueError
-        If the PAM patterns fail `validate_pams`, `max_mismatches` is
-        negative, a site has more mismatches than `max_mismatches` or a PAM
-        class that is neither one of the patterns nor ``none``, a guide is a
+        If `pam` fails `validate_pattern`, `max_mismatches` is negative, a
+        site has more mismatches than `max_mismatches` or a PAM class that is
+        neither `pam` nor ``none``, a guide is a
         duplicate of an alias not in the library, or `orientation` lacks a
         guide's verdict.
     """
-    patterns = validate_pams([pam])
+    primary = validate_pattern(pam)
     _check_max_mismatches(max_mismatches)
-    primary = patterns[0]
     # Two entries of one spacer are one feature in any reference built on the
     # spacer, so their reads land together. Count them here so the table can
     # say which guides carry a sum.
@@ -217,8 +213,7 @@ def summarize(
             elif site.pam_class != NO_PAM_CLASS:
                 raise ValueError(
                     f"A site of guide {site.guide_id!r} has PAM class "
-                    f"{site.pam_class!r}, which is not one of the PAM patterns "
-                    f"{', '.join(patterns)}."
+                    f"{site.pam_class!r}, which is not the PAM pattern {primary}."
                 )
 
         n_matches = n_kept if matches is None else matches.get(source, 0)
@@ -340,9 +335,9 @@ COLUMNS = {
         "How many library entries share this spacer. Above one, a feature"
         " reference built on the spacer cannot tell them apart, so the"
         " counts are a sum: expect roughly that multiple of a guide ordered"
-        " once. Here the second entry is the same spacer with a 5' G, which"
-        " no read can be assigned to on its own, because the leader ends in"
-        " a poly-G run."
+        " once. Typically the two are a 20-mer and the same spacer with a 5'"
+        " G, which no read can tell apart when the leader ends in a poly-G"
+        " run."
     ),
     # about the whole guide
     "site_class": (

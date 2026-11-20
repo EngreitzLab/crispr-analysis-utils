@@ -1,4 +1,4 @@
-"""IUPAC nucleotide codes: matching, complements, and PAM patterns.
+"""IUPAC nucleotide codes: complements and PAM patterns.
 
 A PAM pattern such as ``NGG`` is a string of IUPAC codes. A genomic base
 matches a code when it is one of the bases the code stands for; ``N`` matches
@@ -6,8 +6,6 @@ anything, a genomic ``N`` included, and a genomic ``N`` matches nothing else.
 """
 
 from __future__ import annotations
-
-from collections.abc import Iterable
 
 IUPAC_BASES: dict[str, frozenset[str]] = {
     "A": frozenset("A"),
@@ -68,23 +66,6 @@ def reverse_complement(sequence: str) -> str:
     return complement(sequence)[::-1]
 
 
-def count_ambiguous(pattern: str) -> int:
-    """Count the characters of a pattern that are not A, C, G or T.
-
-    Parameters
-    ----------
-    pattern
-        IUPAC codes, such as ``NGG``. Case is ignored.
-
-    Returns
-    -------
-    int
-        The number of positions holding a code other than A, C, G and T,
-        such as the ``N`` of ``NGG``.
-    """
-    return sum(code not in "ACGT" for code in pattern.upper())
-
-
 def validate_pattern(pattern: str) -> str:
     """Uppercase an IUPAC pattern and check its alphabet.
 
@@ -114,41 +95,3 @@ def validate_pattern(pattern: str) -> str:
             f"nucleotide codes: {', '.join(map(repr, invalid))}."
         )
     return upper
-
-
-def validate_pams(pams: Iterable[str]) -> tuple[str, ...]:
-    """Check a list of PAM patterns: the primary PAM first, then the alternatives.
-
-    Parameters
-    ----------
-    pams
-        IUPAC patterns, such as ``["NGG", "NAG", "NGA"]``. The first is the
-        primary PAM.
-
-    Returns
-    -------
-    tuple of str
-        The patterns, uppercased, in the order given.
-
-    Raises
-    ------
-    TypeError
-        If `pams` is a single string rather than a list of patterns.
-    ValueError
-        If the list is empty, a pattern is empty or holds a character that is
-        not an IUPAC nucleotide code, a pattern appears twice, or the patterns
-        differ in length.
-    """
-    if isinstance(pams, str):
-        raise TypeError("pams must be a list of PAM patterns, not a single string.")
-    patterns = tuple(validate_pattern(pam) for pam in pams)
-    if not patterns:
-        raise ValueError("At least one PAM pattern is required.")
-    repeated = sorted({p for p in patterns if patterns.count(p) > 1})
-    if repeated:
-        raise ValueError(f"PAM patterns appear more than once: {', '.join(repeated)}.")
-    if len({len(p) for p in patterns}) > 1:
-        raise ValueError(
-            f"PAM patterns must all have the same length: {', '.join(patterns)}."
-        )
-    return patterns

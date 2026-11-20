@@ -58,7 +58,6 @@ per platform serves every supported Python rather than one per version.
                              inference tests, from that table.
     - `inference_input.py` -- QC'd channels with guide calls, joined into the
                              object an inference reads, pairs attached.
-    - `utils.py`          -- `run_shell_cmd`. Infrastructure: no skill.
     - `_files.py`         -- checksums, gzip sniffing, atomic JSON, and
                              `run_record`, which every step's `run` enters:
                              its folders, its log, its record. A new step
@@ -142,10 +141,10 @@ and narrowing it would buy nothing.
   exempt because they are generated. Data never goes in git (`.gitignore`
   covers the usual formats); build test fixtures inside the tests.
 - **`main` is PR-only**, by branch protection (Settings, Branches) that
-  requires the nine CI checks, admins included. Work on a branch. The
+  requires the eight CI checks, admins included. Work on a branch. The
   `no-commit-to-branch` hook catches a local commit to `main`; it always runs,
   so the pixi `lint` task and CI set `SKIP=no-commit-to-branch`. The required
-  checks are listed by job name (`test-pip (3.11)` and so on): renaming a job,
+  checks are listed by job name (`test-pip (3.12)` and so on): renaming a job,
   or changing the Python matrix, means updating them, or every pull request
   waits on a check that never reports.
 - **Commit messages: UPPERCASE verb prefix** -- `ADD`, `FIX`, `UPDATE`,
@@ -178,7 +177,7 @@ and narrowing it would buy nothing.
 - **Every analysis module has a skill**, `skills/cau-<module>/SKILL.md`. An
   analysis module is any module of the package except those starting with `_`
   and the infrastructure listed in `tests/test_skills.py`
-  (`INFRASTRUCTURE = ("cli", "utils")`).
+  (`INFRASTRUCTURE = ("cli",)`).
 - **An agent is optional.** Add one when using a module means a long
   multi-step job whose intermediate output would flood the conversation (run a
   pipeline, read its logs, summarize). It gets its own name, such as
