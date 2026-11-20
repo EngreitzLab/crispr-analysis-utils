@@ -10,7 +10,6 @@ from . import (
     mudata_builder,
     pairs,
     qc,
-    utils,
 )
 from ._version import __version__
 from .normalization import counts_per_million
@@ -27,5 +26,4 @@ __all__ = [
     "mudata_builder",
     "pairs",
     "qc",
-    "utils",
 ]

@@ -42,6 +42,9 @@ COLUMNS = (
 )
 """The store's columns. The first four are what pyranges needs."""
 
+_GTF_ATTRIBUTES = ("gene_id", "gene_type", "gene_name")
+"""The GENCODE attributes the store is built from, checked before anything else."""
+
 _METADATA_KEY = b"crispr_analysis_utils"
 
 
@@ -131,7 +134,8 @@ def build_store(
     Raises
     ------
     StoreError
-        The GTF holds no gene of those types, or no exons.
+        The GTF lacks a GENCODE attribute (``gene_id``, ``gene_type``,
+        ``gene_name``), or holds no gene of those types, or no exons.
     """
     import pyranges1 as pr
 
@@ -142,6 +146,12 @@ def build_store(
     # duplicate_attr is not optional: a GENCODE row carries several `tag`
     # keys, and without it the reader keeps one and drops most of MANE_Select.
     frame = pr.read_gtf(gtf, duplicate_attr=True)
+    missing = [name for name in _GTF_ATTRIBUTES if name not in frame]
+    if missing:
+        raise StoreError(
+            f"{gtf} has no {', '.join(missing)} attribute, so it is not a GENCODE"
+            " GTF. An Ensembl GTF calls gene_type gene_biotype; use GENCODE's."
+        )
     # Genes of the annotated types keep every feature row; genes of any other
     # type keep one row each, enough to report an overlap without that overlap
     # deciding where a guide sits.
@@ -298,11 +308,19 @@ def _reference_transcripts(frame: pd.DataFrame) -> pd.Series:
 
 
 def _write_parquet(table: pd.DataFrame, path: Path, provenance: dict) -> None:
-    """Write the store, carrying its provenance in the parquet metadata."""
+    """Write the store, carrying its provenance in the parquet metadata.
+
+    Through a temporary file and a rename, so a rebuild that dies halfway
+    leaves the old store whole.
+    """
     import pyarrow as pa
     import pyarrow.parquet as pq
 
     arrow = pa.Table.from_pandas(table, preserve_index=False)
     metadata = dict(arrow.schema.metadata or {})
     metadata[_METADATA_KEY] = json.dumps(provenance).encode("utf-8")
-    pq.write_table(arrow.replace_schema_metadata(metadata), path, compression="zstd")
+    temporary = path.with_name(f".{path.name}.tmp")
+    pq.write_table(
+        arrow.replace_schema_metadata(metadata), temporary, compression="zstd"
+    )
+    temporary.replace(path)

@@ -51,6 +51,21 @@ def check_plain_fasta(path: str | os.PathLike[str], what: str) -> Path:
     return path
 
 
+def bed_header_lines(path: str | os.PathLike[str]) -> int:
+    """How many lines open a BED before its first record.
+
+    Those are the ``#``, ``track`` and ``browser`` lines, in any number and
+    order, as a UCSC download writes them.
+    """
+    lines = 0
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            if not line.startswith(("#", "track", "browser")):
+                break
+            lines += 1
+    return lines
+
+
 def write_json(path: str | os.PathLike[str], data: object) -> None:
     """Write JSON through a temporary file and a rename, so no reader sees half."""
     path = Path(path)

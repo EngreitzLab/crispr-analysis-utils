@@ -77,6 +77,4 @@ nav:
       - Accession: reference/accession.md
       - Normalization:
           - counts_per_million: reference/counts-per-million.md
-      - Utilities:
-          - run_shell_cmd: reference/run-shell-cmd.md
   - Contributing: contributing.md

@@ -22,7 +22,7 @@ import os
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 
-from .iupac import reverse_complement, validate_pams
+from .iupac import reverse_complement, validate_pattern
 from .library import Guide
 from .orientation import (
     AMBIGUOUS,
@@ -57,9 +57,6 @@ class ScanResult:
         the sites that were not.
     n_matches
         Exact spacer matches found, before any were set aside.
-    n_outside_contigs
-        Matches dropped because `contigs` did not list their contig. Always 0:
-        the scan is told which contigs to read.
     n_off_contig_end
         Matches whose PAM would run off the end of their contig.
     n_no_pam
@@ -75,7 +72,6 @@ class ScanResult:
     evidence: dict[int, str | None] = field(default_factory=dict)
     matches: dict[int, int] = field(default_factory=dict)
     n_matches: int = 0
-    n_outside_contigs: int = 0
     n_off_contig_end: int = 0
     n_no_pam: int = 0
     n_sites: int = 0
@@ -84,7 +80,6 @@ class ScanResult:
         """The counts, for qc.tsv and the step's metadata."""
         return {
             "n_matches": self.n_matches,
-            "n_outside_contigs": self.n_outside_contigs,
             "n_off_contig_end": self.n_off_contig_end,
             "n_no_pam": self.n_no_pam,
             "n_sites": self.n_sites,
@@ -153,8 +148,7 @@ def scan_guides(
     """
     from .. import _core
 
-    patterns = validate_pams([pam])
-    primary = patterns[0]
+    primary = validate_pattern(pam)
     if not guides:
         return ScanResult()
     if (

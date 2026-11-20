@@ -46,33 +46,13 @@ def test_complement_agrees_with_the_base_sets():
         assert iupac.complement(iupac.complement(code)) == code
 
 
-def test_count_ambiguous():
-    assert iupac.count_ambiguous("NGG") == 1
-    assert iupac.count_ambiguous("ngg") == 1
-    assert iupac.count_ambiguous("NNGRRT") == 4
-    assert iupac.count_ambiguous("TGG") == 0
-
-
-def test_validate_pams():
-    assert iupac.validate_pams(["ngg", "NAG", "nga"]) == ("NGG", "NAG", "NGA")
-    assert iupac.validate_pams(("NGG",)) == ("NGG",)
+def test_validate_pattern_uppercases():
+    assert iupac.validate_pattern("ngg") == "NGG"
 
 
 @pytest.mark.parametrize(
-    ("pams", "message"),
-    [
-        ([], "At least one"),
-        (["NGG", ""], "must not be empty"),
-        (["NGZ"], "not IUPAC"),
-        (["NGG", "ngg"], "more than once"),
-        (["NGG", "NG"], "same length"),
-    ],
+    ("pattern", "message"), [("", "must not be empty"), ("NGZ", "not IUPAC")]
 )
-def test_validate_pams_rejects(pams, message):
+def test_validate_pattern_rejects(pattern, message):
     with pytest.raises(ValueError, match=message):
-        iupac.validate_pams(pams)
-
-
-def test_validate_pams_rejects_a_bare_string():
-    with pytest.raises(TypeError, match="not a single string"):
-        iupac.validate_pams("NGG")
+        iupac.validate_pattern(pattern)

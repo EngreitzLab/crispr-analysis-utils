@@ -328,7 +328,7 @@ def test_the_columns_are_the_ones_the_data_dictionary_names(guides):
     ("sites", "kwargs", "message"),
     [
         ({0: [site(SPACER_A, 1, mismatches=4)]}, {}, "more than max_mismatches=3"),
-        ({0: [site(SPACER_A, 1, pam_class="NAG")]}, {}, "not one of"),
+        ({0: [site(SPACER_A, 1, pam_class="NAG")]}, {}, "not the PAM pattern NGG"),
         ({}, {"orientation": {0: "forward"}}, "No orientation verdict"),
         ({}, {"max_mismatches": -1}, "non-negative integer"),
     ],

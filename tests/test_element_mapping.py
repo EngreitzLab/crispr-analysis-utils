@@ -128,9 +128,15 @@ def test_a_sixth_column_is_dropped(tmp_path):
 
 @pytest.mark.parametrize(
     "header",
-    ["# a comment", 'track name="elements"', "browser position chr1:1-2000"],
+    [
+        "# a comment",
+        'track name="elements"',
+        "browser position chr1:1-2000",
+        # A UCSC download stacks them.
+        'browser position chr1:1-2000\ntrack name="elements"\n# a comment',
+    ],
 )
-def test_a_comment_track_or_browser_line_is_skipped(tmp_path, header):
+def test_comment_track_and_browser_lines_are_skipped(tmp_path, header):
     frame = read_elements(write_bed(tmp_path / "e.bed", header=header))
     assert frame["element_id"].tolist() == ["E1", "E2", "E3"]
 

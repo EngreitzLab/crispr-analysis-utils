@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .._files import bed_header_lines
 from .db import _unversioned
 
 _BED6 = ("Chromosome", "Start", "End", "gene_symbol", "score", "Strand")
@@ -27,8 +28,8 @@ def read_promoters(path: str | os.PathLike[str]) -> pd.DataFrame:
         several promoters needs one row each. Six columns at least; a seventh
         is read as the gene id, which is what lets a TSS be tied back to the
         store, and an eighth as the transcript id, which is what fills
-        ``promoter_enst``. A first line beginning with ``#`` is a header and
-        is skipped.
+        ``promoter_enst``. Leading ``#``, ``track`` and ``browser`` lines
+        are skipped.
 
     Returns
     -------
@@ -46,14 +47,12 @@ def read_promoters(path: str | os.PathLike[str]) -> pd.DataFrame:
     if not path.is_file():
         raise PromoterError(f"The promoter file {path} does not exist.")
 
-    with open(path, encoding="utf-8") as handle:
-        first = handle.readline()
     try:
         frame = pd.read_csv(
             path,
             sep="\t",
             header=None,
-            skiprows=1 if first.startswith("#") else 0,
+            skiprows=bed_header_lines(path),
             # The ids are text even when a column is blank throughout.
             dtype={0: str, 6: str, 7: str},
         )

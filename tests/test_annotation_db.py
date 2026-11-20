@@ -5,6 +5,8 @@ here is built from `guide_annotation_fixtures`, so no GENCODE is downloaded
 and every coordinate is one a test can state.
 """
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from guide_annotation_fixtures import (
@@ -185,6 +187,29 @@ def test_only_the_reference_transcripts_own_rows_are_reference(store):
 # --- when the GTF cannot answer the question ------------------------------
 
 
+def test_an_ensembl_gtf_is_refused_by_name(gtf, tmp_path):
+    ensembl = tmp_path / "ensembl.gtf"
+    ensembl.write_text(gtf.read_text().replace("gene_type", "gene_biotype"))
+    with pytest.raises(StoreError, match="no gene_type attribute.*gene_biotype"):
+        build_store(ensembl, tmp_path / "store.parquet")
+
+
+def test_a_rebuild_that_dies_leaves_the_old_store_whole(gtf, tmp_path, monkeypatch):
+    import pyarrow.parquet as pq
+
+    out = tmp_path / "store.parquet"
+    built = build_store(gtf, out)
+
+    def dies_halfway(table, where, **kwargs):
+        Path(where).write_bytes(b"PAR1 truncated")
+        raise OSError("killed")
+
+    monkeypatch.setattr(pq, "write_table", dies_halfway)
+    with pytest.raises(OSError, match="killed"):
+        build_store(gtf, out)
+    assert_frame_equal(load_store(out).features, built.features)
+
+
 def test_a_genes_only_gtf_is_refused_for_having_no_exons(tmp_path):
     genes_only = write_genes_only_gtf(tmp_path / "genes.gtf")
     with pytest.raises(StoreError, match="holds no exon rows"):
@@ -306,6 +331,12 @@ def test_id_columns_blank_throughout_are_read_as_missing(tmp_path):
     frame = read_promoters(write_bed(tmp_path / "blank.bed", rows))
     assert frame["ensg"].isna().all()
     assert frame["enst"].isna().all()
+
+
+def test_every_leading_track_browser_or_hash_line_is_skipped(tmp_path):
+    header = [("browser position chr1:1-5000",), ('track name="tss"',), ("#chr",)]
+    stacked = read_promoters(write_bed(tmp_path / "ucsc.bed", [*header, *BED6]))
+    assert_frame_equal(stacked, read_promoters(write_bed(tmp_path / "bare.bed", BED6)))
 
 
 def test_a_leading_hash_line_is_a_header_and_not_a_site(tmp_path):

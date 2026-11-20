@@ -26,7 +26,3 @@ names, such as `guide_alignment.run`. Module by module:
 ## Normalization
 
 - [`counts_per_million`](counts-per-million.md)
-
-## Utilities
-
-- [`run_shell_cmd`](run-shell-cmd.md)
