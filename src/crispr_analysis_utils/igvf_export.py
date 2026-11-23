@@ -446,7 +446,7 @@ def build_table(
     element = chosen.reindex(out.index)
     kind = element.map(info["genomic_element"])
     category = (
-        element.map(info.set_index(info.index)["element_category"])
+        element.map(info["element_category"])
         if "element_category" in info
         else pd.Series(dtype=object)
     )

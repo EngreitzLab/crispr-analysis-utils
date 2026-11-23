@@ -191,6 +191,26 @@ def test_covariates_join_on_the_barcode_when_the_set_holds_an_underscore(
     assert data.obs["lane"].tolist() == ["L1", "L2"]
 
 
+def test_covariates_holding_a_barcode_twice_are_refused(store, tmp_path):
+    rna = read_counts(
+        counts(tmp_path / "r.h5ad", ["c1", "c2"], ["ENSG00000000001.5"], "gene_id")
+    )
+    guide = read_counts(counts(tmp_path / "g.h5ad", ["c2"], ["g1"], "guide_id"))
+    with pytest.raises(
+        BuildError, match=r"repeat in the covariates, starting with \['c1'\]"
+    ):
+        build(
+            rna,
+            guide,
+            gene_table=gene_var(store, rna.var_names),
+            guide_table=guide_var(
+                guide_table(tmp_path / "gt.tsv", ["g1"]), guide.var_names
+            ),
+            measurement_set="lane_1",
+            covariates=pd.DataFrame({"lane": ["L1", "L2"]}, index=["c1", "c1"]),
+        )
+
+
 def test_an_annotation_of_the_wrong_length_is_refused(store, tmp_path):
     rna = read_counts(
         counts(tmp_path / "r.h5ad", ["c1"], ["ENSG00000000001.5"], "gene_id")

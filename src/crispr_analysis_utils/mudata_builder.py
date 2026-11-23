@@ -367,9 +367,18 @@ def build(
     Raises
     ------
     BuildError
-        A matrix and its annotation disagree on shape.
+        A matrix and its annotation disagree on shape, or the covariates
+        hold a barcode more than once.
     """
     import mudata as md
+
+    if covariates is not None:
+        repeated = covariates.index[covariates.index.duplicated()].unique()
+        if len(repeated):
+            raise BuildError(
+                f"Barcodes repeat in the covariates, starting with "
+                f"{list(repeated[:3])} ({len(repeated)} in all). A cell has one row."
+            )
 
     for name, matrix, table in (
         ("gene", rna, gene_table),

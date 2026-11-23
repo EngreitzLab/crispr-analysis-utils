@@ -60,7 +60,7 @@ cau mudata-builder run \
 | `mod['gene'].var` | `symbol`, `gene_type`, `gene_chr`, `gene_start`, `gene_end`; `readout` and `readout_primers` with `--readout-genes` |
 | `mod['guide'].X` | the guide counts, untouched |
 | `mod['guide'].var` | every column of `guide_metadata.tsv` |
-| `obs` | `barcode`, `measurement_set`, every `--channel` value, and any `--covariates` given |
+| `obs` | `barcode`, `measurement_set`, every `--channel` value, and any `--covariates` given (one row per barcode, or the run stops) |
 | `mod['guide'].uns` | `annotation` and `element_mapping`, whole, from `--guide-annotation` and `--element-mapping` |
 | `uns['channel']` | the same `--channel` values, for anything reading the object rather than the table |
 | `obsm['gene']`, `obsm['guide']` | which modality holds each cell |
