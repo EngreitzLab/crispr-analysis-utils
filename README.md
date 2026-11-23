@@ -55,6 +55,7 @@ cpm = cau.counts_per_million(counts)
 | `cau.element_mapping` | Which element of a screen each guide tests, and which guides are controls (also the `cau element-mapping` command) |
 | `cau.igvf_export` | The guide design in the IGVF per-guide metadata format, ready to submit or to feed the CRISPR pipeline (also the `cau igvf-export` command) |
 | `cau.pairs` | The guide-gene pairs a screen tests, discovery and positive control, from the IGVF per-guide table (also the `cau pairs` command) |
+| `cau.skipped_genes` | How many genes a pair's link passes over, and whether those are in the readout panel (also the `cau skipped-genes` command) |
 | `cau.mudata_builder` | A sequenced channel's gene and guide counts as one MuData, annotated and laid out like the IGVF pipeline's object (also the `cau mudata-builder` command) |
 | `cau.inference_input` | QC'd channels with guide calls, joined into one MuData laid out like the IGVF pipeline's inference input, with the pairs attached (also the `cau inference-input` command) |
 

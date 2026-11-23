@@ -13,6 +13,7 @@
 | `cau-element-mapping` | `cau.element_mapping` and the `cau element-mapping` command: mapping guides to a screen's elements, and checking a design's control sets |
 | `cau-guide-annotation` | `cau.guide_annotation` and the `cau guide-annotation` command: building the GENCODE store, placing sites in genes, and reading the output |
 | `cau-pairs` | `cau.pairs` and the `cau pairs` command: the discovery and positive-control pairs a screen tests |
+| `cau-skipped-genes` | `cau.skipped_genes` and the `cau skipped-genes` command: classifying pairs by the genes they skip |
 | `cau-mudata-builder` | `cau.mudata_builder` and the `cau mudata-builder` command: a channel's gene and guide counts as one MuData |
 | `cau-qc` | `cau.qc`: quality-control figures, each with the numbers behind it and a caption |
 | `cau-inference-input` | `cau.inference_input` and the `cau inference-input` command: QC'd channels with guide calls joined into one inference object |

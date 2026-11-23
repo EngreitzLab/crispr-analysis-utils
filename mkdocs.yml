@@ -51,6 +51,7 @@ nav:
       - Element mapping: element-mapping.md
       - IGVF export: igvf-export.md
       - Pairs to test: pairs.md
+      - Skipped genes: skipped-genes.md
       - MuData builder: mudata-builder.md
       - Inference input: inference-input.md
   - Agents and skills: agents-and-skills.md
@@ -73,6 +74,7 @@ nav:
       - Element mapping: reference/element-mapping.md
       - IGVF export: reference/igvf-export.md
       - Pairs: reference/pairs.md
+      - Skipped genes: reference/skipped-genes.md
       - Inference input: reference/inference-input.md
       - Accession: reference/accession.md
       - Normalization:

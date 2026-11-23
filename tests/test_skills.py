@@ -33,6 +33,7 @@ COVERAGE = {
     "cau-element-mapping": ("element_mapping",),
     "cau-igvf-export": ("igvf_export",),
     "cau-pairs": ("pairs",),
+    "cau-skipped-genes": ("skipped_genes",),
     "cau-mudata-builder": ("mudata_builder",),
     "cau-qc": ("qc",),
     "cau-inference-input": ("inference_input",),

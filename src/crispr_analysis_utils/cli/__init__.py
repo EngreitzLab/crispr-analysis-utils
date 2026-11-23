@@ -42,6 +42,10 @@ COMMANDS: dict[str, tuple[str, str]] = {
         "pairs",
         "Build the discovery and positive-control pairs a screen tests.",
     ),
+    "skipped-genes": (
+        "skipped_genes",
+        "Classify every pair by the genes its link passes over.",
+    ),
     "inference-input": (
         "inference_input",
         "Join QC'd channels with guide calls into one inference object.",
